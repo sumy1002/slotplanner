@@ -4,11 +4,11 @@
    ============================================================ */
 
 :root {
-  /* 背景漸層 — SHINee Pearl Aqua Green */
-  --bg: #CFF3EA;
-  --bg-mid: #D6F0F5;
-  --bg-pink: #E6FBF4;
-  --bg-end: #C8F2E3;
+  /* 背景漸層 — 微暖灰白(SHINee 青綠僅作點綴) */
+  --bg: #EEEDEA;
+  --bg-mid: #F4F3F0;
+  --bg-pink: #FBFAF8;
+  --bg-end: #E9E8E4;
 
   /* 玻璃面板 */
   --glass-bg:  rgba(255,255,255,0.40);
@@ -31,11 +31,11 @@
   --danger-brd:  rgba(255,150,150,0.60);
   --danger-text: #8a2020;
 
-  /* 文字 */
-  --text:        #16463a;
-  --text-light:  rgba(30,90,75,0.58);
-  --text-muted:  rgba(30,90,75,0.40);
-  --nav-inactive: rgba(30,90,75,0.50);
+  /* 文字 — 中性微暖黑灰 */
+  --text:        #2b2a27;
+  --text-light:  rgba(70,68,62,0.58);
+  --text-muted:  rgba(70,68,62,0.40);
+  --nav-inactive: rgba(70,68,62,0.52);
 
   /* 輸入框 */
   --input-bg:        rgba(255,255,255,0.58);
@@ -47,7 +47,7 @@
 
   --card-brd: rgba(255,255,255,0.78);
   --content-bg: rgba(255,255,255,0.18);
-  --left-pane-bg: rgba(232,250,244,0.55);
+  --left-pane-bg: rgba(244,243,239,0.60);
 
   /* 語意狀態 */
   --ok-bg:   rgba(200,240,220,0.38);
@@ -64,7 +64,7 @@
   --drop-drag:    rgba(150,225,205,0.30);
   --drop-selected:rgba(200,240,220,0.32);
 
-  --divider: rgba(30,90,75,0.10);
+  --divider: rgba(70,68,62,0.12);
 
   /* 半徑 */
   --r-card:  18px;
@@ -75,16 +75,16 @@
   /* 玻璃陰影 */
   --shadow-lg:
     inset 0 2px 0 rgba(255,255,255,1),
-    inset 0 -1.5px 0 rgba(74,210,180,0.22),
-    0 4px 18px rgba(40,170,140,0.18),
-    0 1px 4px rgba(40,170,140,0.12);
+    inset 0 -1.5px 0 rgba(120,115,105,0.16),
+    0 4px 18px rgba(90,85,75,0.14),
+    0 1px 4px rgba(90,85,75,0.10);
   --shadow-md:
     inset 0 1.5px 0 rgba(255,255,255,1),
-    inset 0 -1px 0 rgba(74,210,180,0.18),
-    0 2px 10px rgba(40,170,140,0.14);
+    inset 0 -1px 0 rgba(120,115,105,0.14),
+    0 2px 10px rgba(90,85,75,0.11);
   --shadow-sm:
     inset 0 1px 0 rgba(255,255,255,0.95),
-    0 1px 4px rgba(40,170,140,0.10);
+    0 1px 4px rgba(90,85,75,0.09);
 }
 
 * { box-sizing: border-box; }
@@ -102,11 +102,11 @@ html, body {
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(circle 700px at -10% -15%, rgba(120,225,200,0.30), transparent 60%),
-    radial-gradient(circle 750px at 95% 75%,   rgba(150,220,235,0.26), transparent 60%),
-    radial-gradient(circle 400px at 35% 20%,   rgba(180,245,225,0.24), transparent 60%),
-    radial-gradient(circle 320px at 5% 65%,    rgba(150,235,210,0.26), transparent 60%),
-    radial-gradient(circle 350px at 75% -5%,   rgba(120,225,200,0.22), transparent 60%);
+    radial-gradient(circle 700px at -10% -15%, rgba(225,222,214,0.40), transparent 60%),
+    radial-gradient(circle 750px at 95% 75%,   rgba(235,233,226,0.38), transparent 60%),
+    radial-gradient(circle 400px at 35% 20%,   rgba(245,244,240,0.40), transparent 60%),
+    radial-gradient(circle 320px at 5% 65%,    rgba(120,225,200,0.10), transparent 60%),
+    radial-gradient(circle 350px at 75% -5%,   rgba(225,222,214,0.36), transparent 60%);
 }
 
 .ring {
@@ -262,10 +262,10 @@ body::before {
 .btn-secondary {
   background: rgba(255,255,255,0.60);
   border: 1px solid rgba(255,255,255,0.88);
-  color: var(--accent-hex);
+  color: var(--text);
   box-shadow: var(--shadow-md);
 }
-.btn-secondary:hover  { background: var(--hover); border-color: rgba(110,215,190,0.72); }
+.btn-secondary:hover  { background: rgba(245,244,240,0.85); border-color: rgba(70,68,62,0.22); }
 .btn-secondary:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
 
 .btn-danger {
@@ -278,9 +278,9 @@ body::before {
 .btn-danger:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.70); }
 
 .btn:disabled {
-  background: rgba(200,195,210,0.38) !important;
-  border-color: rgba(200,195,210,0.48) !important;
-  color: rgba(80,60,120,0.28) !important;
+  background: rgba(210,208,202,0.38) !important;
+  border-color: rgba(210,208,202,0.48) !important;
+  color: rgba(70,68,62,0.28) !important;
   box-shadow: none !important;
   cursor: not-allowed; transform: none !important;
 }
@@ -295,7 +295,7 @@ body::before {
   cursor: pointer;
   transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
 }
-.btn-browse:hover  { background: var(--hover); }
+.btn-browse:hover  { background: rgba(245,244,240,0.85); }
 .btn-browse:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
 
 /* 小膠囊按鈕（toolbar 用） */
@@ -311,11 +311,11 @@ body::before {
   transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
   font-family: inherit;
 }
-.btn-pill:hover  { background: var(--hover); }
+.btn-pill:hover  { background: rgba(245,244,240,0.85); }
 .btn-pill:active { transform: translate(1px, 1px); }
 .btn-pill:disabled {
   background: rgba(255,255,255,0.25) !important;
-  color: rgba(80,60,120,0.28) !important;
+  color: rgba(70,68,62,0.30) !important;
   cursor: not-allowed; transform: none !important;
 }
 .btn-pill.add { background: var(--accent); border-color: var(--accent-brd); }
@@ -346,9 +346,9 @@ body::before {
 }
 .input:read-only { color: var(--text); }
 .input:disabled {
-  background: rgba(200,195,210,0.38);
-  border-color: rgba(180,170,200,0.45);
-  color: rgba(80,60,120,0.32);
+  background: rgba(210,208,202,0.38);
+  border-color: rgba(190,187,180,0.45);
+  color: rgba(70,68,62,0.32);
   box-shadow: none;
 }
 .input-sm { height: 32px; font-size: 12px; padding: 0 10px; }
@@ -432,11 +432,11 @@ body::before {
   height: 100%;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  color: rgba(80,60,120,0.22);
+  color: rgba(70,68,62,0.22);
   user-select: none;
 }
 .placeholder .title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
-.placeholder .sub { font-size: 13px; color: rgba(80,60,120,0.16); }
+.placeholder .sub { font-size: 13px; color: rgba(70,68,62,0.16); }
 
 /* ============================================================
    分隔線 / 區段標題
@@ -617,7 +617,7 @@ body::before {
     rgba(255,255,255,0.40) 100%);
   border: 1px solid rgba(255,255,255,0.80);
   outline: none;
-  box-shadow: inset 0 1px 2px rgba(40,150,125,0.10);
+  box-shadow: inset 0 1px 2px rgba(90,85,75,0.10);
 }
 .weight-slider::-webkit-slider-thumb {
   -webkit-appearance: none;

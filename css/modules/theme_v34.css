@@ -48,17 +48,17 @@
    原本 :root 是亮色(已在 theme.css 定義) — 我們不動它
    只覆寫 dark 模式下需要改變的值 */
 :root[data-theme="dark"] {
-  /* 主背景:深紫(保留品牌調性,不全黑)*/
-  --bg: #10211c;
+  /* 主背景:中性深灰黑(SHINee 青綠僅作點綴)*/
+  --bg: #161719;
 
   /* 玻璃面板:深底 + 偏白邊框
      注意:其他元件已用 rgba(255,255,255,...) 的疊加,在深底上會自然變灰玻璃感 */
   --glass-bg: rgba(255,255,255,0.06);
   --glass-brd: rgba(255,255,255,0.12);
 
-  /* 文字色:反轉 — 主要文字偏白,次要文字偏淡灰 */
-  --text: #e8e2f5;
-  --text-light: rgba(220,210,240,0.55);
+  /* 文字色:反轉 — 主要文字中性白,次要文字中性淺灰 */
+  --text: #e8e9eb;
+  --text-light: rgba(225,228,232,0.55);
 
   /* Accent:微微提亮,在深底上能被看見 */
   --accent: rgba(95,217,189,0.22);
@@ -78,7 +78,7 @@
 
 /* 暗色模式下:body 漸層也跟著變(theme.css 用了固定漸層,我們覆寫)*/
 :root[data-theme="dark"] body {
-  background: linear-gradient(135deg, #10211c 0%, #10241f 60%, #123028 100%) !important;
+  background: linear-gradient(135deg, #161719 0%, #1c1d20 60%, #222326 100%) !important;
   color: var(--text);
 }
 
@@ -113,15 +113,15 @@
 :root[data-theme="dark"] .input::placeholder,
 :root[data-theme="dark"] input::placeholder,
 :root[data-theme="dark"] textarea::placeholder {
-  color: rgba(220,210,240,0.30) !important;
+  color: rgba(225,228,232,0.30) !important;
 }
 
 /* sidebar 在暗色下底色 */
 :root[data-theme="dark"] .sidebar {
-  background: rgba(20,15,30,0.50) !important;
+  background: rgba(20,21,23,0.50) !important;
 }
 :root[data-theme="dark"] .sidebar .nav-btn {
-  color: rgba(220,210,240,0.75);
+  color: rgba(225,228,232,0.75);
 }
 :root[data-theme="dark"] .sidebar .nav-btn:hover {
   background: rgba(255,255,255,0.06);
@@ -134,13 +134,13 @@
 
 /* card-shell 深色版:不要太亮的玻璃 */
 :root[data-theme="dark"] .card-shell {
-  background: rgba(20,15,30,0.35) !important;
+  background: rgba(20,21,23,0.35) !important;
   border-color: rgba(255,255,255,0.08) !important;
 }
 
 /* topbar */
 :root[data-theme="dark"] .topbar {
-  background: rgba(20,15,30,0.30) !important;
+  background: rgba(20,21,23,0.30) !important;
   color: var(--text);
 }
 
@@ -209,7 +209,7 @@
 :root[data-theme="dark"] .cfg-chip {
   background: rgba(255,255,255,0.08) !important;
   border-color: rgba(255,255,255,0.18) !important;
-  color: rgba(220,210,240,0.85);
+  color: rgba(225,228,232,0.85);
 }
 :root[data-theme="dark"] .cfg-chip:hover {
   background: rgba(255,255,255,0.14) !important;
@@ -879,14 +879,14 @@
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-mdt-btn {
-  color: rgba(220,210,240,0.55);
+  color: rgba(225,228,232,0.55);
 }
 :root[data-theme="dark"] .cfg-mdt-btn:hover {
-  color: #e8e2f5;
+  color: #e8e9eb;
 }
 :root[data-theme="dark"] .cfg-mdt-btn.active {
   background: #5fd9bd;
-  color: #10211c;
+  color: #161719;
   box-shadow: 0 1px 2px rgba(95,217,189,0.35);
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct {
@@ -894,11 +894,11 @@
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_row {
   background: rgba(95,217,189,0.85);
-  color: #10211c;
+  color: #161719;
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_col {
   background: rgba(120,180,255,0.85);
-  color: #10211c;
+  color: #161719;
 }
 
 /* ============================================================
@@ -1203,7 +1203,7 @@
 :root[data-theme="dark"] .cfg-matrix-total-chip.active {
   background: #5fd9bd;
   border-color: #5fd9bd;
-  color: #10211c;
+  color: #161719;
 }
 :root[data-theme="dark"] .cfg-matrix-row-menu-popover,
 :root[data-theme="dark"] .cfg-combo-step-copy-popover {
@@ -1261,7 +1261,7 @@
 }
 :root[data-theme="dark"] .cfg-chip-copy.active {
   background: #78b4ff !important;
-  color: #10211c !important;
+  color: #161719 !important;
   border-color: #78b4ff !important;
 }
 :root[data-theme="dark"] .cfg-grid-hint-banner {
@@ -1271,7 +1271,7 @@
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn {
   background: #78b4ff;
-  color: #10211c;
+  color: #161719;
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn:hover {
   background: #5a9ee5;
@@ -1604,14 +1604,14 @@
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-cvt-btn {
-  color: rgba(220,210,240,0.55);
+  color: rgba(225,228,232,0.55);
 }
 :root[data-theme="dark"] .cfg-cvt-btn:hover {
-  color: #e8e2f5;
+  color: #e8e9eb;
 }
 :root[data-theme="dark"] .cfg-cvt-btn.active {
   background: #5fd9bd;
-  color: #10211c;
+  color: #161719;
   box-shadow: 0 1px 2px rgba(95,217,189,0.35);
 }
 :root[data-theme="dark"] .cfg-combo-multi-legend {
@@ -1638,7 +1638,7 @@
 }
 :root[data-theme="dark"] .cfg-combo-multi-active-badge {
   background: #5fd9bd;
-  color: #10211c;
+  color: #161719;
 }
 :root[data-theme="dark"] .cfg-combo-multi-readonly-badge {
   background: rgba(255,255,255,0.10);
@@ -2044,7 +2044,7 @@
 }
 :root[data-theme="dark"] .cfg-matrix-undo-count {
   background: #5fd9bd;
-  color: #10211c;
+  color: #161719;
 }
 
 :root[data-theme="dark"] .cfg-combo-baseline-pin-tag {
@@ -2068,7 +2068,7 @@
 }
 :root[data-theme="dark"] .cfg-combo-baseline-chip.active {
   background: #ffae6a;
-  color: #10211c;
+  color: #161719;
   border-color: #ffae6a;
 }
 :root[data-theme="dark"] .cfg-combo-baseline-reset {
@@ -2109,7 +2109,7 @@
 }
 :root[data-theme="dark"] .cfg-combo-multi-baseline-badge {
   background: #ffae6a;
-  color: #10211c;
+  color: #161719;
 }
 
 :root[data-theme="dark"] .cfg-mode-view-toggle {
@@ -2121,7 +2121,7 @@
 }
 :root[data-theme="dark"] .cfg-mvt-btn.active {
   background: #5fd9bd;
-  color: #10211c;
+  color: #161719;
 }
 
 :root[data-theme="dark"] .cfg-mode-multi-card {
