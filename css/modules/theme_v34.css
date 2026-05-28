@@ -49,7 +49,7 @@
    只覆寫 dark 模式下需要改變的值 */
 :root[data-theme="dark"] {
   /* 主背景:深紫(保留品牌調性,不全黑)*/
-  --bg: #1a1525;
+  --bg: #10211c;
 
   /* 玻璃面板:深底 + 偏白邊框
      注意:其他元件已用 rgba(255,255,255,...) 的疊加,在深底上會自然變灰玻璃感 */
@@ -61,9 +61,9 @@
   --text-light: rgba(220,210,240,0.55);
 
   /* Accent:微微提亮,在深底上能被看見 */
-  --accent: rgba(180,150,255,0.22);
-  --accent-brd: rgba(180,150,255,0.40);
-  --accent-hex: #b399ff;
+  --accent: rgba(95,217,189,0.22);
+  --accent-brd: rgba(95,217,189,0.40);
+  --accent-hex: #5fd9bd;
 
   /* 陰影:深底下陰影改成微亮 glow(不再是黑色暗影)*/
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
@@ -78,7 +78,7 @@
 
 /* 暗色模式下:body 漸層也跟著變(theme.css 用了固定漸層,我們覆寫)*/
 :root[data-theme="dark"] body {
-  background: linear-gradient(135deg, #1a1525 0%, #251a35 60%, #2c1f40 100%) !important;
+  background: linear-gradient(135deg, #10211c 0%, #10241f 60%, #123028 100%) !important;
   color: var(--text);
 }
 
@@ -128,7 +128,7 @@
   color: var(--text);
 }
 :root[data-theme="dark"] .sidebar .nav-btn.active {
-  background: rgba(180,150,255,0.18);
+  background: rgba(95,217,189,0.18);
   color: var(--accent-hex);
 }
 
@@ -173,7 +173,7 @@
 :root[data-theme="dark"] .cfg-payline-v2-item.active,
 :root[data-theme="dark"] .cfg-constraint-v2-item.active,
 :root[data-theme="dark"] .cfg-split-item.active {
-  background: rgba(180,150,255,0.18) !important;
+  background: rgba(95,217,189,0.18) !important;
   border-color: var(--accent-hex) !important;
 }
 
@@ -275,8 +275,8 @@
 /* humanize 卡:暗色下背景再深一點 */
 :root[data-theme="dark"] .cfg-rule-humanize-card {
   background: linear-gradient(135deg,
-    rgba(180,150,255,0.10) 0%,
-    rgba(180,150,255,0.04) 100%) !important;
+    rgba(95,217,189,0.10) 0%,
+    rgba(95,217,189,0.04) 100%) !important;
 }
 :root[data-theme="dark"] .cfg-rule-humanize-card.cfg-rule-humanize-discard {
   background: linear-gradient(135deg,
@@ -310,15 +310,15 @@
   stroke: var(--accent-hex) !important;
 }
 :root[data-theme="dark"] .cfg-payline-mini-cell {
-  fill: rgba(180,150,255,0.20) !important;
-  stroke: rgba(180,150,255,0.35) !important;
+  fill: rgba(95,217,189,0.20) !important;
+  stroke: rgba(95,217,189,0.35) !important;
 }
 :root[data-theme="dark"] .cfg-constraint-mini-cell.state-restricted {
   fill: rgba(255,255,255,0.04) !important;
   stroke: rgba(255,255,255,0.10) !important;
 }
 :root[data-theme="dark"] .cfg-constraint-mini-cell.state-neutral {
-  fill: rgba(180,150,255,0.18) !important;
+  fill: rgba(95,217,189,0.18) !important;
 }
 :root[data-theme="dark"] .cfg-constraint-svg-cell.restricted {
   fill: rgba(255,255,255,0.04) !important;
@@ -545,7 +545,7 @@
   gap: 12px;
   padding: 16px 20px 14px;
   border-bottom: 1px solid var(--glass-brd);
-  background: linear-gradient(135deg, rgba(180,150,255,0.10), rgba(180,150,255,0.02));
+  background: linear-gradient(135deg, rgba(95,217,189,0.10), rgba(95,217,189,0.02));
 }
 .cfg-tpl-diff-icon {
   font-size: 22px;
@@ -644,7 +644,7 @@
   transition: background 0.12s;
 }
 .cfg-tpl-diff-table tbody tr:hover {
-  background: rgba(180,150,255,0.06);
+  background: rgba(95,217,189,0.06);
 }
 .cfg-tpl-diff-table td {
   padding: 6px 8px;
@@ -732,7 +732,7 @@
   color: #1e8c4a;
 }
 .cfg-tpl-diff-summary.is-minor {
-  background: rgba(180,150,255,0.10);
+  background: rgba(95,217,189,0.10);
   border: 1px solid var(--accent-brd);
   color: var(--accent-hex);
 }
@@ -834,7 +834,7 @@
 }
 .cfg-mdt-btn:hover { color: var(--text); }
 .cfg-mdt-btn.active {
-  background: var(--accent-hex, #5a3db0);
+  background: var(--accent-hex, #0f6e56);
   color: #fff;
   box-shadow: 0 1px 2px rgba(90,61,176,0.25);
 }
@@ -885,20 +885,20 @@
   color: #e8e2f5;
 }
 :root[data-theme="dark"] .cfg-mdt-btn.active {
-  background: #b399ff;
-  color: #1a1525;
-  box-shadow: 0 1px 2px rgba(179,153,255,0.35);
+  background: #5fd9bd;
+  color: #10211c;
+  box-shadow: 0 1px 2px rgba(95,217,189,0.35);
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct {
   box-shadow: 0 0 0 1px rgba(26,21,37,0.6);
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_row {
-  background: rgba(179,153,255,0.85);
-  color: #1a1525;
+  background: rgba(95,217,189,0.85);
+  color: #10211c;
 }
 :root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_col {
   background: rgba(120,180,255,0.85);
-  color: #1a1525;
+  color: #10211c;
 }
 
 /* ============================================================
@@ -933,12 +933,12 @@
 }
 .cfg-matrix-total-chip:hover {
   background: rgba(255,255,255,0.65);
-  border-color: var(--accent-hex, #5a3db0);
+  border-color: var(--accent-hex, #0f6e56);
 }
 .cfg-matrix-total-chip:active { transform: scale(0.97); }
 .cfg-matrix-total-chip.active {
-  background: var(--accent-hex, #5a3db0);
-  border-color: var(--accent-hex, #5a3db0);
+  background: var(--accent-hex, #0f6e56);
+  border-color: var(--accent-hex, #0f6e56);
   color: #fff;
 }
 .cfg-matrix-total-chev {
@@ -1023,7 +1023,7 @@
   font-size: 10.5px;
   font-weight: 700;
   background: rgba(90,61,176,0.15);
-  color: var(--accent-hex, #5a3db0);
+  color: var(--accent-hex, #0f6e56);
   border-radius: var(--r-pill);
   white-space: nowrap;
 }
@@ -1084,10 +1084,10 @@
   transition: border-color 0.12s;
 }
 .cfg-matrix-sort-v2-select:hover {
-  border-color: var(--accent-hex, #5a3db0);
+  border-color: var(--accent-hex, #0f6e56);
 }
 .cfg-matrix-sort-v2-select:focus {
-  border-color: var(--accent-hex, #5a3db0);
+  border-color: var(--accent-hex, #0f6e56);
   background: rgba(255,255,255,0.85);
 }
 
@@ -1198,12 +1198,12 @@
 }
 :root[data-theme="dark"] .cfg-matrix-total-chip:hover {
   background: rgba(255,255,255,0.14);
-  border-color: #b399ff;
+  border-color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-matrix-total-chip.active {
-  background: #b399ff;
-  border-color: #b399ff;
-  color: #1a1525;
+  background: #5fd9bd;
+  border-color: #5fd9bd;
+  color: #10211c;
 }
 :root[data-theme="dark"] .cfg-matrix-row-menu-popover,
 :root[data-theme="dark"] .cfg-combo-step-copy-popover {
@@ -1224,8 +1224,8 @@
   background: rgba(255,255,255,0.06);
 }
 :root[data-theme="dark"] .cfg-matrix-symbols-count {
-  background: rgba(179,153,255,0.18);
-  color: #b399ff;
+  background: rgba(95,217,189,0.18);
+  color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-matrix-sync-btn {
   background: rgba(120,180,255,0.15);
@@ -1246,10 +1246,10 @@
 }
 :root[data-theme="dark"] .cfg-matrix-sort-v2-select:hover,
 :root[data-theme="dark"] .cfg-matrix-sort-v2-select:focus {
-  border-color: #b399ff;
+  border-color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-sticky-mode-bar::-webkit-scrollbar-thumb {
-  background: rgba(179,153,255,0.35);
+  background: rgba(95,217,189,0.35);
 }
 :root[data-theme="dark"] .cfg-chip-copy {
   background: rgba(120,180,255,0.15) !important;
@@ -1261,7 +1261,7 @@
 }
 :root[data-theme="dark"] .cfg-chip-copy.active {
   background: #78b4ff !important;
-  color: #1a1525 !important;
+  color: #10211c !important;
   border-color: #78b4ff !important;
 }
 :root[data-theme="dark"] .cfg-grid-hint-banner {
@@ -1271,7 +1271,7 @@
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn {
   background: #78b4ff;
-  color: #1a1525;
+  color: #10211c;
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn:hover {
   background: #5a9ee5;
@@ -1308,7 +1308,7 @@
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--accent-hex, #5a3db0);
+  color: var(--accent-hex, #0f6e56);
   cursor: pointer;
   transition: background 0.12s;
   flex-shrink: 0;
@@ -1349,7 +1349,7 @@
 .cfg-prob-chip-val {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  color: var(--accent-hex, #5a3db0);
+  color: var(--accent-hex, #0f6e56);
   font-size: 10px;
 }
 .cfg-prob-hint {
@@ -1388,19 +1388,19 @@
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-matrix-prob-toggle {
-  background: rgba(179,153,255,0.15);
-  border-color: rgba(179,153,255,0.30);
-  color: #b399ff;
+  background: rgba(95,217,189,0.15);
+  border-color: rgba(95,217,189,0.30);
+  color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-matrix-prob-toggle:hover {
-  background: rgba(179,153,255,0.25);
+  background: rgba(95,217,189,0.25);
 }
 :root[data-theme="dark"] .cfg-prob-chip {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-prob-chip-val {
-  color: #b399ff;
+  color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-matrix-csv-btn {
   background: rgba(120,180,255,0.12);
@@ -1443,7 +1443,7 @@
 }
 .cfg-cvt-btn:hover { color: var(--text); }
 .cfg-cvt-btn.active {
-  background: var(--accent-hex, #5a3db0);
+  background: var(--accent-hex, #0f6e56);
   color: #fff;
   box-shadow: 0 1px 2px rgba(90,61,176,0.25);
 }
@@ -1489,7 +1489,7 @@
   flex-direction: column;
 }
 .cfg-combo-multi-card.is-active {
-  border-color: var(--accent-hex, #5a3db0);
+  border-color: var(--accent-hex, #0f6e56);
   box-shadow: 0 0 0 1.5px rgba(90,61,176,0.25);
 }
 
@@ -1517,7 +1517,7 @@
 .cfg-combo-multi-active-badge {
   margin-left: auto;
   padding: 1px 7px;
-  background: var(--accent-hex, #5a3db0);
+  background: var(--accent-hex, #0f6e56);
   color: #fff;
   border-radius: var(--r-pill);
   font-size: 9.5px;
@@ -1550,7 +1550,7 @@
   padding: 3px 4px;
 }
 .cfg-combo-multi-cell-ro.cfg-combo-multi-cell-base {
-  outline: 1.5px solid var(--accent-hex, #5a3db0);
+  outline: 1.5px solid var(--accent-hex, #0f6e56);
   outline-offset: -1.5px;
 }
 
@@ -1610,9 +1610,9 @@
   color: #e8e2f5;
 }
 :root[data-theme="dark"] .cfg-cvt-btn.active {
-  background: #b399ff;
-  color: #1a1525;
-  box-shadow: 0 1px 2px rgba(179,153,255,0.35);
+  background: #5fd9bd;
+  color: #10211c;
+  box-shadow: 0 1px 2px rgba(95,217,189,0.35);
 }
 :root[data-theme="dark"] .cfg-combo-multi-legend {
   background: rgba(255,255,255,0.04);
@@ -1623,8 +1623,8 @@
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-combo-multi-card.is-active {
-  border-color: #b399ff;
-  box-shadow: 0 0 0 1.5px rgba(179,153,255,0.30);
+  border-color: #5fd9bd;
+  box-shadow: 0 0 0 1.5px rgba(95,217,189,0.30);
 }
 :root[data-theme="dark"] .cfg-combo-multi-card-header {
   background: rgba(255,255,255,0.04);
@@ -1634,18 +1634,18 @@
   background: rgba(255,255,255,0.08);
 }
 :root[data-theme="dark"] .cfg-combo-multi-card.is-active .cfg-combo-multi-card-header {
-  background: rgba(179,153,255,0.15);
+  background: rgba(95,217,189,0.15);
 }
 :root[data-theme="dark"] .cfg-combo-multi-active-badge {
-  background: #b399ff;
-  color: #1a1525;
+  background: #5fd9bd;
+  color: #10211c;
 }
 :root[data-theme="dark"] .cfg-combo-multi-readonly-badge {
   background: rgba(255,255,255,0.10);
   color: var(--text-light);
 }
 :root[data-theme="dark"] .cfg-combo-multi-cell-ro.cfg-combo-multi-cell-base {
-  outline-color: #b399ff;
+  outline-color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-combo-multi-cell-diff.is-up {
   background: rgba(80,200,140,0.18);
@@ -2040,11 +2040,11 @@
 }
 :root[data-theme="dark"] .cfg-matrix-undo-btn:not(:disabled):hover {
   background: rgba(255,255,255,0.10);
-  color: #b399ff;
+  color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-matrix-undo-count {
-  background: #b399ff;
-  color: #1a1525;
+  background: #5fd9bd;
+  color: #10211c;
 }
 
 :root[data-theme="dark"] .cfg-combo-baseline-pin-tag {
@@ -2068,7 +2068,7 @@
 }
 :root[data-theme="dark"] .cfg-combo-baseline-chip.active {
   background: #ffae6a;
-  color: #1a1525;
+  color: #10211c;
   border-color: #ffae6a;
 }
 :root[data-theme="dark"] .cfg-combo-baseline-reset {
@@ -2109,7 +2109,7 @@
 }
 :root[data-theme="dark"] .cfg-combo-multi-baseline-badge {
   background: #ffae6a;
-  color: #1a1525;
+  color: #10211c;
 }
 
 :root[data-theme="dark"] .cfg-mode-view-toggle {
@@ -2120,8 +2120,8 @@
   background: rgba(255,255,255,0.10);
 }
 :root[data-theme="dark"] .cfg-mvt-btn.active {
-  background: #b399ff;
-  color: #1a1525;
+  background: #5fd9bd;
+  color: #10211c;
 }
 
 :root[data-theme="dark"] .cfg-mode-multi-card {
@@ -2129,7 +2129,7 @@
   border-color: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-mode-multi-card.is-active {
-  outline-color: #b399ff;
+  outline-color: #5fd9bd;
 }
 :root[data-theme="dark"] .cfg-mode-multi-card.is-baseline {
   outline-color: #ffae6a;
@@ -2142,7 +2142,7 @@
   background: rgba(255,255,255,0.12);
 }
 :root[data-theme="dark"] .cfg-mode-multi-card.is-active .cfg-mode-multi-card-header {
-  background: rgba(179,153,255,0.15);
+  background: rgba(95,217,189,0.15);
 }
 :root[data-theme="dark"] .cfg-mode-multi-cell-ro {
   border-color: rgba(255,255,255,0.10);
