@@ -1,0 +1,2172 @@
+/* ============================================================
+   theme_v34.css
+   v3.4 累積樣式(從 theme_additions.css 拆出獨立模組)
+
+   涵蓋:
+   - B5  tab 內嵌驗證徽章 + 警告 banner
+   - B6  範本載入 diff preview modal
+   - C12 暗色模式 toggle + 整套 dark theme 變數覆寫
+   - 拆檔以後的維護性改善:這個檔案只放 v3.4+ 樣式
+   ============================================================ */
+
+/* ============================================================
+   C12  暗色模式
+   ============================================================ */
+
+/* 主題 toggle 按鈕(source bar 上)*/
+.cfg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+}
+.cfg-theme-toggle:hover {
+  background: rgba(255,255,255,0.85);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
+.cfg-theme-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.cfg-theme-toggle-label {
+  font-size: 10.5px;
+}
+
+/* 暗色主題:覆寫 :root 變數
+   原本 :root 是亮色(已在 theme.css 定義) — 我們不動它
+   只覆寫 dark 模式下需要改變的值 */
+:root[data-theme="dark"] {
+  /* 主背景:深紫(保留品牌調性,不全黑)*/
+  --bg: #1a1525;
+
+  /* 玻璃面板:深底 + 偏白邊框
+     注意:其他元件已用 rgba(255,255,255,...) 的疊加,在深底上會自然變灰玻璃感 */
+  --glass-bg: rgba(255,255,255,0.06);
+  --glass-brd: rgba(255,255,255,0.12);
+
+  /* 文字色:反轉 — 主要文字偏白,次要文字偏淡灰 */
+  --text: #e8e2f5;
+  --text-light: rgba(220,210,240,0.55);
+
+  /* Accent:微微提亮,在深底上能被看見 */
+  --accent: rgba(180,150,255,0.22);
+  --accent-brd: rgba(180,150,255,0.40);
+  --accent-hex: #b399ff;
+
+  /* 陰影:深底下陰影改成微亮 glow(不再是黑色暗影)*/
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-md: 0 4px 14px rgba(0,0,0,0.40), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-lg: 0 10px 32px rgba(0,0,0,0.50), 0 0 0 1px rgba(255,255,255,0.06);
+
+  /* 危險紅(高亮版,在深底上更明顯)*/
+  --danger: #e57373;
+  --danger-text: #ff8a80;
+  --danger-brd: rgba(229,115,115,0.40);
+}
+
+/* 暗色模式下:body 漸層也跟著變(theme.css 用了固定漸層,我們覆寫)*/
+:root[data-theme="dark"] body {
+  background: linear-gradient(135deg, #1a1525 0%, #251a35 60%, #2c1f40 100%) !important;
+  color: var(--text);
+}
+
+/* 暗色模式下的「半透明白底」元件 — 主動翻轉
+   這些元件原本用了 hardcoded rgba(255,255,255,X) — 在深色下顯得太亮,
+   覆寫成深色玻璃 */
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] input[type="text"],
+:root[data-theme="dark"] input[type="number"],
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: var(--text) !important;
+}
+:root[data-theme="dark"] .input:focus,
+:root[data-theme="dark"] input:focus,
+:root[data-theme="dark"] textarea:focus,
+:root[data-theme="dark"] select:focus {
+  background: rgba(255,255,255,0.10) !important;
+  border-color: var(--accent-hex) !important;
+  outline-color: var(--accent-hex) !important;
+}
+
+/* 數字輸入框 spinner 在深底下被吃掉的問題 */
+:root[data-theme="dark"] input[type="number"]::-webkit-inner-spin-button,
+:root[data-theme="dark"] input[type="number"]::-webkit-outer-spin-button {
+  filter: invert(0.85);
+}
+
+/* placeholder 顏色 */
+:root[data-theme="dark"] .input::placeholder,
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: rgba(220,210,240,0.30) !important;
+}
+
+/* sidebar 在暗色下底色 */
+:root[data-theme="dark"] .sidebar {
+  background: rgba(20,15,30,0.50) !important;
+}
+:root[data-theme="dark"] .sidebar .nav-btn {
+  color: rgba(220,210,240,0.75);
+}
+:root[data-theme="dark"] .sidebar .nav-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+:root[data-theme="dark"] .sidebar .nav-btn.active {
+  background: rgba(180,150,255,0.18);
+  color: var(--accent-hex);
+}
+
+/* card-shell 深色版:不要太亮的玻璃 */
+:root[data-theme="dark"] .card-shell {
+  background: rgba(20,15,30,0.35) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* topbar */
+:root[data-theme="dark"] .topbar {
+  background: rgba(20,15,30,0.30) !important;
+  color: var(--text);
+}
+
+/* 玻璃面板:.cfg-section / .cfg-form-header / 各種卡片底層 */
+:root[data-theme="dark"] .cfg-form-header,
+:root[data-theme="dark"] .cfg-section,
+:root[data-theme="dark"] .cfg-mode-card,
+:root[data-theme="dark"] .cfg-payline-v2-item,
+:root[data-theme="dark"] .cfg-constraint-v2-item,
+:root[data-theme="dark"] .cfg-split-item,
+:root[data-theme="dark"] .cfg-paylines-v2-topbar,
+:root[data-theme="dark"] .cfg-constraints-v2-section,
+:root[data-theme="dark"] .cfg-rule-humanize-card,
+:root[data-theme="dark"] .cfg-tab,
+:root[data-theme="dark"] .cfg-tabs,
+:root[data-theme="dark"] .cfg-content,
+:root[data-theme="dark"] .cfg-tpl-mgr {
+  background: rgba(255,255,255,0.04) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+
+/* hover/active 增強(被選中時更亮)*/
+:root[data-theme="dark"] .cfg-tab:hover,
+:root[data-theme="dark"] .cfg-payline-v2-item:hover,
+:root[data-theme="dark"] .cfg-constraint-v2-item:hover,
+:root[data-theme="dark"] .cfg-split-item:hover {
+  background: rgba(255,255,255,0.08) !important;
+}
+:root[data-theme="dark"] .cfg-tab.active,
+:root[data-theme="dark"] .cfg-payline-v2-item.active,
+:root[data-theme="dark"] .cfg-constraint-v2-item.active,
+:root[data-theme="dark"] .cfg-split-item.active {
+  background: rgba(180,150,255,0.18) !important;
+  border-color: var(--accent-hex) !important;
+}
+
+/* matrix 表格 */
+:root[data-theme="dark"] .cfg-matrix {
+  background: rgba(255,255,255,0.03);
+}
+:root[data-theme="dark"] .cfg-matrix th,
+:root[data-theme="dark"] .cfg-matrix td {
+  border-color: rgba(255,255,255,0.08) !important;
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-matrix th {
+  background: rgba(255,255,255,0.05);
+}
+:root[data-theme="dark"] .cfg-matrix-cell {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+:root[data-theme="dark"] .cfg-matrix-rowhead,
+:root[data-theme="dark"] .cfg-matrix-total,
+:root[data-theme="dark"] .cfg-matrix-corner {
+  background: rgba(255,255,255,0.04) !important;
+}
+
+/* 熱力圖在暗色下:增強透明度,讓紫色更明顯 */
+:root[data-theme="dark"] .cfg-matrix-cell-wrap[style*="rgba(140"] {
+  /* 原始亮色用 rgba(140,110,220,X);暗底下需要更亮,但是用 attribute selector
+     沒辦法精準控制,所以倚賴 JS 端的 reelHeatColor 自己變色 */
+}
+
+/* chip 系列 */
+:root[data-theme="dark"] .cfg-chip {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+  color: rgba(220,210,240,0.85);
+}
+:root[data-theme="dark"] .cfg-chip:hover {
+  background: rgba(255,255,255,0.14) !important;
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-chip.active {
+  background: linear-gradient(135deg, #6a4dc4, #8a6fdf) !important;
+  border-color: var(--accent-hex) !important;
+  color: #fff !important;
+}
+
+/* 各色語義 chip 的暗色版本 */
+:root[data-theme="dark"] .cfg-chip-hard,
+:root[data-theme="dark"] .cfg-chip.cfg-chip-hard {
+  background: rgba(229,115,115,0.22) !important;
+  border-color: var(--danger-brd) !important;
+  color: #ff8a80 !important;
+}
+:root[data-theme="dark"] .cfg-chip-soft,
+:root[data-theme="dark"] .cfg-chip.cfg-chip-soft {
+  background: rgba(220,160,60,0.22) !important;
+  border-color: rgba(220,160,60,0.40) !important;
+  color: #ffd180 !important;
+}
+
+/* 按鈕:btn-pill / cfg-source-export-btn 等大按鈕 */
+:root[data-theme="dark"] .btn-pill,
+:root[data-theme="dark"] .cfg-search-btn {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+  color: var(--text);
+}
+:root[data-theme="dark"] .btn-pill:hover,
+:root[data-theme="dark"] .cfg-search-btn:hover {
+  background: rgba(255,255,255,0.14) !important;
+  border-color: var(--accent-hex) !important;
+  color: var(--accent-hex);
+}
+
+/* 文字:.cfg-form-title / .cfg-form-sub / .cfg-label / .cfg-section-title 等 */
+:root[data-theme="dark"] .cfg-form-title,
+:root[data-theme="dark"] .cfg-section-title,
+:root[data-theme="dark"] .cfg-mode-name-label,
+:root[data-theme="dark"] .cfg-label {
+  color: var(--text) !important;
+}
+:root[data-theme="dark"] .cfg-form-sub,
+:root[data-theme="dark"] .cfg-hint,
+:root[data-theme="dark"] .cfg-tab-sheet,
+:root[data-theme="dark"] .cfg-key {
+  color: var(--text-light) !important;
+}
+
+/* code 區塊 */
+:root[data-theme="dark"] .cfg-debug-pre,
+:root[data-theme="dark"] code,
+:root[data-theme="dark"] kbd {
+  background: rgba(255,255,255,0.06) !important;
+  color: #c2e0ff !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+
+/* humanize 卡:暗色下背景再深一點 */
+:root[data-theme="dark"] .cfg-rule-humanize-card {
+  background: linear-gradient(135deg,
+    rgba(180,150,255,0.10) 0%,
+    rgba(180,150,255,0.04) 100%) !important;
+}
+:root[data-theme="dark"] .cfg-rule-humanize-card.cfg-rule-humanize-discard {
+  background: linear-gradient(135deg,
+    rgba(220,160,60,0.10) 0%,
+    rgba(220,160,60,0.04) 100%) !important;
+}
+:root[data-theme="dark"] .cfg-rule-humanize-card.cfg-constraint-humanize,
+:root[data-theme="dark"] .cfg-constraint-humanize {
+  background: linear-gradient(135deg,
+    rgba(231,76,60,0.10) 0%,
+    rgba(231,76,60,0.04) 100%) !important;
+}
+
+/* layout preset chip 暗色 */
+:root[data-theme="dark"] .cfg-layout-preset-chip {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+  color: var(--text);
+}
+
+/* SVG cell 暗色:背景白→灰,線條保留 */
+:root[data-theme="dark"] .cfg-payline-bg-cell {
+  fill: rgba(255,255,255,0.06) !important;
+  stroke: rgba(255,255,255,0.15) !important;
+}
+:root[data-theme="dark"] .cfg-payline-bg-cell.sub {
+  fill: rgba(255,255,255,0.03) !important;
+}
+:root[data-theme="dark"] .cfg-payline-bg-cell.in-path {
+  fill: var(--accent-hex) !important;
+  stroke: var(--accent-hex) !important;
+}
+:root[data-theme="dark"] .cfg-payline-mini-cell {
+  fill: rgba(180,150,255,0.20) !important;
+  stroke: rgba(180,150,255,0.35) !important;
+}
+:root[data-theme="dark"] .cfg-constraint-mini-cell.state-restricted {
+  fill: rgba(255,255,255,0.04) !important;
+  stroke: rgba(255,255,255,0.10) !important;
+}
+:root[data-theme="dark"] .cfg-constraint-mini-cell.state-neutral {
+  fill: rgba(180,150,255,0.18) !important;
+}
+:root[data-theme="dark"] .cfg-constraint-svg-cell.restricted {
+  fill: rgba(255,255,255,0.04) !important;
+  stroke: rgba(255,255,255,0.12) !important;
+}
+
+/* health popover / modal */
+:root[data-theme="dark"] .cfg-health-popover,
+:root[data-theme="dark"] .cfg-changes-popover,
+:root[data-theme="dark"] .cfg-search-modal,
+:root[data-theme="dark"] .cfg-diff-modal,
+:root[data-theme="dark"] .cfg-tpl-diff-modal,
+:root[data-theme="dark"] .cfg-payline-add-menu,
+:root[data-theme="dark"] .cfg-matrix-col-menu-popover,
+:root[data-theme="dark"] .cfg-rules-add-menu {
+  background: rgba(35,28,50,0.96) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: var(--text);
+}
+
+/* fullpane(SymbolPage 整合區)*/
+:root[data-theme="dark"] .cfg-content-fullpane {
+  background: transparent !important;
+}
+
+/* details summary */
+:root[data-theme="dark"] details summary {
+  color: var(--text);
+}
+:root[data-theme="dark"] details summary:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+/* ============================================================
+   B5  tab 內嵌驗證徽章 + 警告 banner
+   ============================================================ */
+
+/* tab 上的小 issue 徽章(在 cfg-tab 內,搭配 cfg-tab-dirty-dot)*/
+.cfg-tab-issue-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 9.5px;
+  font-weight: 800;
+  margin-left: auto;
+  margin-right: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.cfg-tab-issue-err {
+  background: rgba(231,76,60,0.22);
+  color: var(--danger-text, #c0392b);
+  animation: cfgTabIssuePulse 1.8s ease-in-out infinite;
+}
+.cfg-tab-issue-warn {
+  background: rgba(220,160,60,0.22);
+  color: #b87c10;
+}
+@keyframes cfgTabIssuePulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+:root[data-theme="dark"] .cfg-tab-issue-err {
+  background: rgba(229,115,115,0.30);
+  color: #ff9999;
+}
+:root[data-theme="dark"] .cfg-tab-issue-warn {
+  background: rgba(220,160,60,0.30);
+  color: #ffd180;
+}
+
+/* cfg-content 頂部 sticky banner */
+.cfg-tab-issues-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 0 0 12px;
+  border-radius: var(--r-card);
+  border: 1px solid;
+  font-size: 11.5px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.cfg-tab-issues-banner.is-err {
+  background: linear-gradient(135deg, rgba(231,76,60,0.10), rgba(231,76,60,0.04));
+  border-color: rgba(231,76,60,0.36);
+  color: #8a2820;
+}
+.cfg-tab-issues-banner.is-warn {
+  background: linear-gradient(135deg, rgba(220,160,60,0.10), rgba(220,160,60,0.04));
+  border-color: rgba(220,160,60,0.40);
+  color: #6a4a08;
+}
+:root[data-theme="dark"] .cfg-tab-issues-banner.is-err {
+  background: linear-gradient(135deg, rgba(229,115,115,0.12), rgba(229,115,115,0.04));
+  border-color: rgba(229,115,115,0.40);
+  color: #ff9999;
+}
+:root[data-theme="dark"] .cfg-tab-issues-banner.is-warn {
+  background: linear-gradient(135deg, rgba(220,160,60,0.12), rgba(220,160,60,0.04));
+  border-color: rgba(220,160,60,0.45);
+  color: #ffd180;
+}
+.cfg-tab-issues-icon {
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.cfg-tab-issues-title {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.cfg-tab-issues-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.cfg-tab-issue-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: var(--r-pill);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .cfg-tab-issue-pill {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text);
+}
+.cfg-tab-issue-pill-error {
+  border-color: rgba(231,76,60,0.36);
+}
+.cfg-tab-issue-pill-warn {
+  border-color: rgba(220,160,60,0.40);
+}
+.cfg-tab-issues-more {
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.7;
+  font-weight: 500;
+}
+.cfg-tab-issues-view-all {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.cfg-tab-issues-view-all:hover {
+  background: rgba(255,255,255,0.85);
+  border-color: var(--accent-brd);
+}
+:root[data-theme="dark"] .cfg-tab-issues-view-all {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.20);
+}
+:root[data-theme="dark"] .cfg-tab-issues-view-all:hover {
+  background: rgba(255,255,255,0.16);
+}
+
+/* ============================================================
+   B6  範本載入 diff preview modal
+   ============================================================ */
+.cfg-tpl-diff-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(40,30,60,0.50);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: cfgTplDiffOverlayIn 0.18s ease-out;
+}
+@keyframes cfgTplDiffOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.cfg-tpl-diff-modal {
+  width: min(600px, 92vw);
+  max-height: 86vh;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cfgTplDiffPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cfgTplDiffPop {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.cfg-tpl-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--glass-brd);
+  background: linear-gradient(135deg, rgba(180,150,255,0.10), rgba(180,150,255,0.02));
+}
+.cfg-tpl-diff-icon {
+  font-size: 22px;
+  color: var(--accent-hex);
+  flex-shrink: 0;
+}
+.cfg-tpl-diff-titlewrap {
+  flex: 1;
+  min-width: 0;
+}
+.cfg-tpl-diff-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.cfg-tpl-diff-sub {
+  font-size: 11.5px;
+  color: var(--text-light);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cfg-tpl-diff-close {
+  width: 28px;
+  height: 28px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-btn);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+.cfg-tpl-diff-close:hover {
+  background: rgba(231,76,60,0.15);
+  color: var(--danger-text, #c0392b);
+  border-color: rgba(231,76,60,0.36);
+}
+
+.cfg-tpl-diff-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.cfg-tpl-diff-intro {
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: rgba(220,160,60,0.10);
+  border: 1px solid rgba(220,160,60,0.30);
+  border-left: 3px solid #b87c10;
+  border-radius: var(--r-card);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #6a4a08;
+}
+:root[data-theme="dark"] .cfg-tpl-diff-intro {
+  background: rgba(220,160,60,0.10);
+  color: #ffd180;
+}
+.cfg-tpl-diff-intro code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  padding: 1px 5px;
+  background: rgba(255,255,255,0.55);
+  border-radius: 4px;
+}
+
+.cfg-tpl-diff-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+.cfg-tpl-diff-table th {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-light);
+  border-bottom: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.30);
+}
+.cfg-tpl-diff-th-num,
+.cfg-tpl-diff-th-arrow,
+.cfg-tpl-diff-th-delta {
+  text-align: center !important;
+}
+.cfg-tpl-diff-th-icon {
+  width: 28px;
+}
+.cfg-tpl-diff-table tbody tr {
+  transition: background 0.12s;
+}
+.cfg-tpl-diff-table tbody tr:hover {
+  background: rgba(180,150,255,0.06);
+}
+.cfg-tpl-diff-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.30);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  vertical-align: middle;
+}
+:root[data-theme="dark"] .cfg-tpl-diff-table td {
+  border-color: rgba(255,255,255,0.06);
+}
+.cfg-tpl-diff-icon-cell {
+  font-family: inherit !important;
+  font-size: 14px !important;
+  text-align: center;
+}
+.cfg-tpl-diff-name-cell {
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 500;
+  color: var(--text);
+}
+.cfg-tpl-diff-num-cell {
+  text-align: center;
+  color: var(--text-light);
+  font-weight: 600;
+}
+.cfg-tpl-diff-num-after {
+  color: var(--text);
+  font-weight: 700;
+}
+.cfg-tpl-diff-arrow-cell {
+  text-align: center;
+  color: var(--text-light);
+  font-family: inherit !important;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.cfg-tpl-diff-delta-cell {
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+}
+.cfg-tpl-diff-delta-plus {
+  color: #1e8c4a;
+  background: rgba(39,174,96,0.12);
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+}
+.cfg-tpl-diff-delta-minus {
+  color: var(--danger-text, #c0392b);
+  background: rgba(231,76,60,0.12);
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+}
+.cfg-tpl-diff-delta-zero {
+  color: var(--text-light);
+  opacity: 0.4;
+}
+:root[data-theme="dark"] .cfg-tpl-diff-delta-plus {
+  color: #6dd193;
+  background: rgba(39,174,96,0.20);
+}
+:root[data-theme="dark"] .cfg-tpl-diff-delta-minus {
+  color: #ff9999;
+  background: rgba(229,115,115,0.20);
+}
+
+.cfg-tpl-diff-row-add { background: rgba(39,174,96,0.04); }
+.cfg-tpl-diff-row-sub { background: rgba(231,76,60,0.04); }
+:root[data-theme="dark"] .cfg-tpl-diff-row-add { background: rgba(39,174,96,0.08); }
+:root[data-theme="dark"] .cfg-tpl-diff-row-sub { background: rgba(229,115,115,0.08); }
+
+.cfg-tpl-diff-summary {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-card);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+.cfg-tpl-diff-summary.is-zero {
+  background: rgba(39,174,96,0.10);
+  border: 1px solid rgba(39,174,96,0.30);
+  color: #1e8c4a;
+}
+.cfg-tpl-diff-summary.is-minor {
+  background: rgba(180,150,255,0.10);
+  border: 1px solid var(--accent-brd);
+  color: var(--accent-hex);
+}
+.cfg-tpl-diff-summary.is-significant {
+  background: rgba(220,160,60,0.12);
+  border: 1px solid rgba(220,160,60,0.40);
+  color: #8a5a08;
+}
+:root[data-theme="dark"] .cfg-tpl-diff-summary.is-significant {
+  color: #ffd180;
+}
+
+.cfg-tpl-diff-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.30);
+}
+:root[data-theme="dark"] .cfg-tpl-diff-footer {
+  background: rgba(255,255,255,0.04);
+}
+.cfg-tpl-diff-cancel {
+  padding: 8px 18px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-btn);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+.cfg-tpl-diff-cancel:hover {
+  background: rgba(255,255,255,0.85);
+}
+.cfg-tpl-diff-confirm {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, var(--accent-hex), #7a5fcc);
+  border: 1px solid var(--accent-hex);
+  border-radius: var(--r-btn);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(90,61,176,0.35);
+  transition: all 0.15s;
+}
+.cfg-tpl-diff-confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(90,61,176,0.45);
+}
+.cfg-tpl-diff-confirm:active {
+  transform: translateY(0);
+}
+:root[data-theme="dark"] .cfg-tpl-diff-cancel {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-tpl-diff-cancel:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+/* ============================================================
+   v3.5:權重矩陣顯示模式切換 + cell 百分比 overlay
+   (04 / 05 / 08 共用,輸入仍是絕對權重,百分比只是 cell 內小字)
+   ============================================================ */
+
+/* ── segmented control(放在 sticky-mode-bar 內)── */
+.cfg-matrix-display-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 2px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  gap: 0;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.cfg-mdt-btn {
+  height: 22px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-light);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.cfg-mdt-btn:hover { color: var(--text); }
+.cfg-mdt-btn.active {
+  background: var(--accent-hex, #5a3db0);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(90,61,176,0.25);
+}
+
+/* ── cell 百分比 overlay ── */
+/* 對應 .cfg-matrix-cell-wrap 內,絕對定位在 cell 右下角 */
+.cfg-matrix-cell-wrap {
+  position: relative;
+}
+.cfg-matrix-cell-pct {
+  position: absolute;
+  right: 4px;
+  bottom: 1px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 4px;
+  pointer-events: none;
+  letter-spacing: 0;
+  background: rgba(90,61,176,0.85);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.55);
+}
+/* 區分兩種百分比方向:%橫(行內占比)用紫;%縱(欄內占比)用藍 */
+.cfg-matrix-cell-pct.is-pct_row {
+  background: rgba(90,61,176,0.85);
+}
+.cfg-matrix-cell-pct.is-pct_col {
+  background: rgba(74,147,238,0.88);
+}
+/* 讓 input 在 percent overlay 顯示時下方多一點 padding,避免數字壓到 */
+.cfg-matrix-cell-wrap:has(.cfg-matrix-cell-pct) .cfg-matrix-cell {
+  padding-bottom: 12px;
+  padding-top: 1px;
+}
+
+/* ── 暗色模式覆寫 ── */
+:root[data-theme="dark"] .cfg-matrix-display-toggle {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-mdt-btn {
+  color: rgba(220,210,240,0.55);
+}
+:root[data-theme="dark"] .cfg-mdt-btn:hover {
+  color: #e8e2f5;
+}
+:root[data-theme="dark"] .cfg-mdt-btn.active {
+  background: #b399ff;
+  color: #1a1525;
+  box-shadow: 0 1px 2px rgba(179,153,255,0.35);
+}
+:root[data-theme="dark"] .cfg-matrix-cell-pct {
+  box-shadow: 0 0 0 1px rgba(26,21,37,0.6);
+}
+:root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_row {
+  background: rgba(179,153,255,0.85);
+  color: #1a1525;
+}
+:root[data-theme="dark"] .cfg-matrix-cell-pct.is-pct_col {
+  background: rgba(120,180,255,0.85);
+  color: #1a1525;
+}
+
+/* ============================================================
+   v3.5 第二批 — 矩陣大改造(#3 #5 #6 #9 #10 #11 #12 #13 #16)
+   ============================================================ */
+
+/* ── #5:合計欄 chip 化 ── */
+.cfg-matrix-total-cell {
+  text-align: center;
+  padding: 2px 4px !important;
+}
+.cfg-matrix-row-menu-host {
+  position: relative;
+  display: inline-block;
+}
+.cfg-matrix-total-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.45);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  white-space: nowrap;
+}
+.cfg-matrix-total-chip:hover {
+  background: rgba(255,255,255,0.65);
+  border-color: var(--accent-hex, #5a3db0);
+}
+.cfg-matrix-total-chip:active { transform: scale(0.97); }
+.cfg-matrix-total-chip.active {
+  background: var(--accent-hex, #5a3db0);
+  border-color: var(--accent-hex, #5a3db0);
+  color: #fff;
+}
+.cfg-matrix-total-chev {
+  font-size: 8px;
+  opacity: 0.75;
+  margin-left: 1px;
+}
+.cfg-matrix-row-menu-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 100;
+}
+
+/* ── #6:熱力圖強化 ── */
+.cfg-matrix-cell-wrap.is-top {
+  box-shadow: inset 0 0 0 1.5px rgba(220, 170, 50, 0.85);
+}
+.cfg-matrix-cell-wrap.is-top::before {
+  content: '★';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  font-size: 8px;
+  color: rgba(200, 150, 30, 0.9);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── #9:符號清單折疊式 ── */
+.cfg-matrix-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cfg-matrix-symbols {
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-input);
+  background: rgba(255,255,255,0.25);
+  overflow: hidden;
+}
+.cfg-matrix-symbols[open] {
+  background: rgba(255,255,255,0.45);
+}
+.cfg-matrix-symbols-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+  user-select: none;
+}
+.cfg-matrix-symbols-summary::-webkit-details-marker { display: none; }
+.cfg-matrix-symbols-summary::before {
+  content: '▸';
+  font-size: 10px;
+  color: var(--text-light);
+  transition: transform 0.15s;
+  margin-right: -2px;
+}
+.cfg-matrix-symbols[open] .cfg-matrix-symbols-summary::before {
+  transform: rotate(90deg);
+}
+.cfg-matrix-symbols-icon { font-size: 13px; }
+.cfg-matrix-symbols-label { font-weight: 600; color: var(--text); white-space: nowrap; }
+.cfg-matrix-symbols-sub {
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--text-light);
+}
+.cfg-matrix-symbols-count {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(90,61,176,0.15);
+  color: var(--accent-hex, #5a3db0);
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.cfg-matrix-symbols-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-light);
+  letter-spacing: 0.02em;
+}
+.cfg-matrix-symbols-body {
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--glass-brd);
+}
+.cfg-matrix-sync-btn {
+  align-self: flex-start;
+  background: rgba(95,169,255,0.15);
+  border-color: rgba(95,169,255,0.4);
+  color: #2c6dc4;
+  font-size: 11px;
+}
+.cfg-matrix-sync-btn:hover {
+  background: rgba(95,169,255,0.28);
+}
+
+/* ── #10:排序改 select dropdown ── */
+.cfg-matrix-sort-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 2px 0;
+}
+.cfg-matrix-sort-v2-label {
+  font-size: 11px;
+  color: var(--text-light);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cfg-matrix-sort-v2-select {
+  height: 28px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-input);
+  background: rgba(255,255,255,0.55);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.cfg-matrix-sort-v2-select:hover {
+  border-color: var(--accent-hex, #5a3db0);
+}
+.cfg-matrix-sort-v2-select:focus {
+  border-color: var(--accent-hex, #5a3db0);
+  background: rgba(255,255,255,0.85);
+}
+
+/* ── #12:模式列 overflow scroll(模式很多時不擠掉右側) ── */
+.cfg-sticky-mode-bar {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.cfg-sticky-mode-bar::-webkit-scrollbar { height: 4px; }
+.cfg-sticky-mode-bar::-webkit-scrollbar-thumb {
+  background: rgba(90,61,176,0.25);
+  border-radius: 2px;
+}
+/* 主要操作不被擠走 */
+.cfg-sticky-mode-bar > .cfg-matrix-menu-host,
+.cfg-sticky-mode-bar > .cfg-matrix-display-toggle,
+.cfg-sticky-mode-bar > .cfg-sticky-meta,
+.cfg-sticky-mode-bar > .cfg-combo-step-copy-host {
+  flex-shrink: 0;
+}
+
+/* ── #13:跨爆階段複製 chip popover ── */
+.cfg-combo-step-copy-host {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.cfg-chip-copy {
+  background: rgba(95,169,255,0.18) !important;
+  border-color: rgba(95,169,255,0.45) !important;
+  color: #2c6dc4 !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cfg-chip-copy:hover { background: rgba(95,169,255,0.32) !important; }
+.cfg-chip-copy.active {
+  background: #4a93ee !important;
+  color: #fff !important;
+  border-color: #4a93ee !important;
+}
+.cfg-combo-step-copy-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 100;
+}
+
+/* ── #16:05 跨模式複製提示 banner ── */
+.cfg-grid-hint-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  margin: 0 0 8px;
+  background: linear-gradient(90deg, rgba(95,169,255,0.10) 0%, rgba(95,169,255,0.04) 100%);
+  border: 1px solid rgba(95,169,255,0.30);
+  border-radius: var(--r-card);
+  font-size: 12px;
+  color: var(--text);
+}
+.cfg-grid-hint-icon { font-size: 16px; flex-shrink: 0; }
+.cfg-grid-hint-text { flex: 1; }
+.cfg-grid-hint-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  background: #4a93ee;
+  border: none;
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, transform 0.08s;
+}
+.cfg-grid-hint-btn:hover { background: #3a7fcc; }
+.cfg-grid-hint-btn:active { transform: scale(0.97); }
+.cfg-grid-hint-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 50%;
+  transition: background 0.12s;
+}
+.cfg-grid-hint-close:hover { background: rgba(0,0,0,0.06); }
+
+/* ============================================================
+   暗色模式覆寫(配合上方)
+   ============================================================ */
+:root[data-theme="dark"] .cfg-matrix-total-chip {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-matrix-total-chip:hover {
+  background: rgba(255,255,255,0.14);
+  border-color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-matrix-total-chip.active {
+  background: #b399ff;
+  border-color: #b399ff;
+  color: #1a1525;
+}
+:root[data-theme="dark"] .cfg-matrix-row-menu-popover,
+:root[data-theme="dark"] .cfg-combo-step-copy-popover {
+  background: rgba(40,30,55,0.96);
+  border-color: rgba(255,255,255,0.15);
+}
+:root[data-theme="dark"] .cfg-matrix-cell-wrap.is-top {
+  box-shadow: inset 0 0 0 1.5px rgba(240, 200, 80, 0.85);
+}
+:root[data-theme="dark"] .cfg-matrix-cell-wrap.is-top::before {
+  color: rgba(240, 200, 80, 0.95);
+}
+:root[data-theme="dark"] .cfg-matrix-symbols {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-matrix-symbols[open] {
+  background: rgba(255,255,255,0.06);
+}
+:root[data-theme="dark"] .cfg-matrix-symbols-count {
+  background: rgba(179,153,255,0.18);
+  color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-matrix-sync-btn {
+  background: rgba(120,180,255,0.15);
+  border-color: rgba(120,180,255,0.35);
+  color: #78b4ff;
+}
+:root[data-theme="dark"] .cfg-matrix-sync-btn:hover {
+  background: rgba(120,180,255,0.28);
+}
+:root[data-theme="dark"] .cfg-matrix-sort-v2-select {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-matrix-sort-v2-select option {
+  background: #2a2238;
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-matrix-sort-v2-select:hover,
+:root[data-theme="dark"] .cfg-matrix-sort-v2-select:focus {
+  border-color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-sticky-mode-bar::-webkit-scrollbar-thumb {
+  background: rgba(179,153,255,0.35);
+}
+:root[data-theme="dark"] .cfg-chip-copy {
+  background: rgba(120,180,255,0.15) !important;
+  border-color: rgba(120,180,255,0.35) !important;
+  color: #78b4ff !important;
+}
+:root[data-theme="dark"] .cfg-chip-copy:hover {
+  background: rgba(120,180,255,0.28) !important;
+}
+:root[data-theme="dark"] .cfg-chip-copy.active {
+  background: #78b4ff !important;
+  color: #1a1525 !important;
+  border-color: #78b4ff !important;
+}
+:root[data-theme="dark"] .cfg-grid-hint-banner {
+  background: linear-gradient(90deg, rgba(120,180,255,0.12) 0%, rgba(120,180,255,0.04) 100%);
+  border-color: rgba(120,180,255,0.30);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-grid-hint-btn {
+  background: #78b4ff;
+  color: #1a1525;
+}
+:root[data-theme="dark"] .cfg-grid-hint-btn:hover {
+  background: #5a9ee5;
+}
+:root[data-theme="dark"] .cfg-grid-hint-close:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+/* ============================================================
+   v3.5 第三批 — #7 Undo / #14 占比預覽 / #15 CSV
+   ============================================================ */
+
+/* ── #14:平均占比預覽 bar ── */
+.cfg-matrix-prob-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 12px;
+  margin: 4px 0 8px;
+  background: rgba(255,255,255,0.35);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+}
+.cfg-matrix-prob-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  background: rgba(90,61,176,0.10);
+  border: 1px solid rgba(90,61,176,0.25);
+  border-radius: var(--r-pill);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-hex, #5a3db0);
+  cursor: pointer;
+  transition: background 0.12s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.cfg-matrix-prob-toggle:hover {
+  background: rgba(90,61,176,0.18);
+}
+.cfg-matrix-prob-toggle.collapsed {
+  opacity: 0.6;
+}
+.cfg-prob-chev {
+  font-size: 9px;
+  margin-left: 1px;
+}
+.cfg-matrix-prob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  flex: 1;
+  min-width: 0;
+}
+.cfg-prob-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.cfg-prob-chip-sid {
+  font-weight: 600;
+  color: var(--text);
+}
+.cfg-prob-chip-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: var(--accent-hex, #5a3db0);
+  font-size: 10px;
+}
+.cfg-prob-hint {
+  font-size: 10.5px;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+
+/* ── #15:CSV 匯入匯出按鈕 ── */
+.cfg-matrix-csv-host {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.cfg-matrix-csv-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(95,169,255,0.12);
+  border: 1px solid rgba(95,169,255,0.35);
+  color: #2c6dc4;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, transform 0.08s;
+}
+.cfg-matrix-csv-btn:hover { background: rgba(95,169,255,0.25); }
+.cfg-matrix-csv-btn:active { transform: scale(0.96); }
+
+/* ── 暗色覆寫 ── */
+:root[data-theme="dark"] .cfg-matrix-prob-bar {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-matrix-prob-toggle {
+  background: rgba(179,153,255,0.15);
+  border-color: rgba(179,153,255,0.30);
+  color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-matrix-prob-toggle:hover {
+  background: rgba(179,153,255,0.25);
+}
+:root[data-theme="dark"] .cfg-prob-chip {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-prob-chip-val {
+  color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-matrix-csv-btn {
+  background: rgba(120,180,255,0.12);
+  border-color: rgba(120,180,255,0.30);
+  color: #78b4ff;
+}
+:root[data-theme="dark"] .cfg-matrix-csv-btn:hover {
+  background: rgba(120,180,255,0.22);
+}
+
+/* ============================================================
+   v3.5 第四批 — #4A 並排 / #4B 差異 / #8 統一(完結)
+   ============================================================ */
+
+/* ── #4A + #4B:08 檢視模式 toggle(在 step bar 內)── */
+.cfg-combo-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 2px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  gap: 0;
+  flex-shrink: 0;
+}
+.cfg-cvt-btn {
+  height: 22px;
+  padding: 0 11px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.cfg-cvt-btn:hover { color: var(--text); }
+.cfg-cvt-btn.active {
+  background: var(--accent-hex, #5a3db0);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(90,61,176,0.25);
+}
+
+/* ── #4A 並排 + #4B 差異 視圖容器 ── */
+.cfg-combo-multi-wrap {
+  margin-top: 8px;
+}
+.cfg-combo-multi-legend {
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.35);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  font-size: 11.5px;
+  color: var(--text);
+}
+.cfg-diff-up-token {
+  color: #27ae60;
+  font-weight: 700;
+}
+.cfg-diff-down-token {
+  color: #c0392b;
+  font-weight: 700;
+}
+.cfg-diff-eq-token {
+  color: var(--text-light);
+  font-weight: 700;
+}
+
+.cfg-combo-multi-grid {
+  display: grid;
+  gap: 10px;
+  /* grid-template-columns inline in template */
+}
+
+.cfg-combo-multi-card {
+  background: rgba(255,255,255,0.35);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cfg-combo-multi-card.is-active {
+  border-color: var(--accent-hex, #5a3db0);
+  box-shadow: 0 0 0 1.5px rgba(90,61,176,0.25);
+}
+
+.cfg-combo-multi-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.45);
+  border-bottom: 1px solid var(--glass-brd);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.cfg-combo-multi-card-header:hover {
+  background: rgba(255,255,255,0.65);
+}
+.cfg-combo-multi-card.is-active .cfg-combo-multi-card-header {
+  background: rgba(90,61,176,0.10);
+}
+.cfg-combo-multi-step {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cfg-combo-multi-active-badge {
+  margin-left: auto;
+  padding: 1px 7px;
+  background: var(--accent-hex, #5a3db0);
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.cfg-combo-multi-readonly-badge {
+  margin-left: auto;
+  padding: 1px 7px;
+  background: rgba(0,0,0,0.06);
+  color: var(--text-light);
+  border-radius: var(--r-pill);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.cfg-combo-multi-table {
+  width: 100%;
+}
+.cfg-combo-multi-table.is-readonly .cfg-matrix-cell-rowhead {
+  opacity: 0.8;
+}
+
+/* compare 模式的 read-only cell:跟 input 同 size 但只顯示文字 */
+.cfg-combo-multi-cell-ro {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 3px 4px;
+}
+.cfg-combo-multi-cell-ro.cfg-combo-multi-cell-base {
+  outline: 1.5px solid var(--accent-hex, #5a3db0);
+  outline-offset: -1.5px;
+}
+
+/* diff 模式的 cell */
+.cfg-combo-multi-cell-diff {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 4px;
+  letter-spacing: -0.02em;
+}
+.cfg-combo-multi-cell-diff.is-up {
+  background: rgba(39,174,96,0.18);
+  color: #1f7a44;
+}
+.cfg-combo-multi-cell-diff.is-down {
+  background: rgba(192,57,43,0.18);
+  color: #8e2a20;
+}
+.cfg-combo-multi-cell-diff.is-eq {
+  background: rgba(120,120,140,0.08);
+  color: var(--text-light);
+}
+.cfg-combo-multi-cell-diff.is-na {
+  background: rgba(120,120,140,0.05);
+  color: rgba(120,120,140,0.4);
+}
+
+/* compare/diff 1 step 不夠的提示 */
+.cfg-combo-multi-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  margin-top: 8px;
+  background: rgba(220,160,60,0.10);
+  border: 1px solid rgba(220,160,60,0.30);
+  border-radius: var(--r-card);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.cfg-combo-multi-empty-icon {
+  font-size: 22px;
+  color: #b87c10;
+}
+
+/* ── 暗色覆寫 ── */
+:root[data-theme="dark"] .cfg-combo-view-toggle {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-cvt-btn {
+  color: rgba(220,210,240,0.55);
+}
+:root[data-theme="dark"] .cfg-cvt-btn:hover {
+  color: #e8e2f5;
+}
+:root[data-theme="dark"] .cfg-cvt-btn.active {
+  background: #b399ff;
+  color: #1a1525;
+  box-shadow: 0 1px 2px rgba(179,153,255,0.35);
+}
+:root[data-theme="dark"] .cfg-combo-multi-legend {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-combo-multi-card {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-combo-multi-card.is-active {
+  border-color: #b399ff;
+  box-shadow: 0 0 0 1.5px rgba(179,153,255,0.30);
+}
+:root[data-theme="dark"] .cfg-combo-multi-card-header {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-combo-multi-card-header:hover {
+  background: rgba(255,255,255,0.08);
+}
+:root[data-theme="dark"] .cfg-combo-multi-card.is-active .cfg-combo-multi-card-header {
+  background: rgba(179,153,255,0.15);
+}
+:root[data-theme="dark"] .cfg-combo-multi-active-badge {
+  background: #b399ff;
+  color: #1a1525;
+}
+:root[data-theme="dark"] .cfg-combo-multi-readonly-badge {
+  background: rgba(255,255,255,0.10);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .cfg-combo-multi-cell-ro.cfg-combo-multi-cell-base {
+  outline-color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-combo-multi-cell-diff.is-up {
+  background: rgba(80,200,140,0.18);
+  color: #6cd99a;
+}
+:root[data-theme="dark"] .cfg-combo-multi-cell-diff.is-down {
+  background: rgba(255,120,100,0.18);
+  color: #ff9080;
+}
+:root[data-theme="dark"] .cfg-diff-up-token { color: #6cd99a; }
+:root[data-theme="dark"] .cfg-diff-down-token { color: #ff9080; }
+:root[data-theme="dark"] .cfg-combo-multi-empty {
+  background: rgba(220,160,60,0.12);
+  border-color: rgba(220,160,60,0.30);
+}
+:root[data-theme="dark"] .cfg-combo-multi-empty-icon { color: #e8a040; }
+
+/* ════════════════════════════════════════════════════════════════════
+   v3.6 — 權重 tab 進階強化
+   - Undo/Redo 按鈕(.cfg-matrix-undo-*)
+   - Combo diff baseline picker(.cfg-combo-baseline-*)
+   - Combo step visibility(.cfg-combo-steps-*, .cfg-combo-step-visibility-*)
+   - Reel/Grid 跨模式比較(.cfg-mode-view-toggle / .cfg-mvt-* / .cfg-mode-multi-*)
+   - 全部含暗色覆寫
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── #2:Undo/Redo 按鈕(reel/grid/combo 共用) ── */
+.cfg-matrix-undo-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 2px 4px;
+  background: rgba(255,255,255,0.30);
+  border: 1px solid rgba(255,255,255,0.55);
+  border-radius: var(--r-pill);
+}
+.cfg-matrix-undo-btn {
+  position: relative;
+  height: 28px;
+  min-width: 32px;
+  padding: 0 8px;
+  font-size: 15px;
+  line-height: 1;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, transform 60ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cfg-matrix-undo-btn:not(:disabled):hover {
+  background: rgba(255,255,255,0.55);
+  color: var(--accent-hex);
+}
+.cfg-matrix-undo-btn:not(:disabled):active {
+  transform: scale(0.94);
+}
+.cfg-matrix-undo-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.cfg-matrix-undo-count {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #ffffff;
+  background: var(--accent-hex);
+  border-radius: 9px;
+}
+
+/* ── #3 + #4:combo legend 拆兩行 ── */
+.cfg-combo-multi-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cfg-combo-multi-legend-row {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.cfg-combo-baseline-pin-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #c95810;
+  background: rgba(201,88,16,0.10);
+  border: 1px solid rgba(201,88,16,0.30);
+  border-radius: 8px;
+  vertical-align: 1px;
+}
+
+/* ── #3:diff baseline picker ── */
+.cfg-combo-baseline-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(201,88,16,0.06);
+  border: 1px dashed rgba(201,88,16,0.30);
+  border-radius: var(--r-input);
+}
+.cfg-combo-baseline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c95810;
+  margin-right: 4px;
+}
+.cfg-combo-baseline-chip {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.85);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.cfg-combo-baseline-chip:hover {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(201,88,16,0.50);
+}
+.cfg-combo-baseline-chip.active {
+  background: #c95810;
+  color: #ffffff;
+  border-color: #c95810;
+}
+.cfg-combo-baseline-reset {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #c95810;
+  background: transparent;
+  border: 1px solid rgba(201,88,16,0.40);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  margin-left: 6px;
+}
+.cfg-combo-baseline-reset:hover {
+  background: rgba(201,88,16,0.10);
+}
+
+/* ── #4:step visibility chip 列 ── */
+.cfg-combo-steps-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(95,169,255,0.06);
+  border: 1px dashed rgba(95,169,255,0.30);
+  border-radius: var(--r-input);
+}
+.cfg-combo-steps-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a93ee;
+  margin-right: 4px;
+}
+.cfg-combo-step-visibility-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.85);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.cfg-combo-step-visibility-chip:hover {
+  background: rgba(255,255,255,0.85);
+}
+.cfg-combo-step-visibility-chip.hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  background: rgba(255,255,255,0.20);
+}
+.cfg-combo-steps-show-all {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #4a93ee;
+  background: rgba(95,169,255,0.10);
+  border: 1px solid rgba(95,169,255,0.40);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  margin-left: 4px;
+}
+.cfg-combo-steps-show-all:hover {
+  background: rgba(95,169,255,0.20);
+}
+
+/* diff 模式:基準卡片邊框、徽章 */
+.cfg-combo-multi-card.is-baseline {
+  outline: 2px dashed #c95810;
+  outline-offset: -2px;
+}
+.cfg-combo-multi-baseline-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  background: #c95810;
+  border-radius: 6px;
+  margin-left: 6px;
+}
+
+/* ── #5:reel/grid 跨模式 view toggle(三段)── */
+.cfg-mode-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px;
+  background: rgba(255,255,255,0.30);
+  border: 1px solid rgba(255,255,255,0.55);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.cfg-mvt-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.cfg-mvt-btn:hover {
+  background: rgba(255,255,255,0.55);
+}
+.cfg-mvt-btn.active {
+  background: var(--accent-hex);
+  color: #ffffff;
+}
+
+/* ── #5:reel/grid 跨模式並排卡片(借用 combo-multi 結構)── */
+.cfg-mode-multi-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+.cfg-mode-multi-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cfg-mode-multi-legend-row {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.cfg-mode-multi-grid {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+.cfg-mode-multi-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255,255,255,0.40);
+  border: 1px solid rgba(255,255,255,0.72);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: outline 120ms ease, transform 120ms ease;
+}
+.cfg-mode-multi-card.is-active {
+  outline: 2px solid var(--accent-hex);
+  outline-offset: -1px;
+}
+.cfg-mode-multi-card.is-baseline {
+  outline: 2px dashed #c95810;
+  outline-offset: -2px;
+}
+.cfg-mode-multi-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.55);
+  border-bottom: 1px solid rgba(255,255,255,0.72);
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+.cfg-mode-multi-card-header:hover {
+  background: rgba(255,255,255,0.75);
+}
+.cfg-mode-multi-card.is-active .cfg-mode-multi-card-header {
+  background: rgba(90,61,176,0.08);
+}
+.cfg-mode-multi-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cfg-mode-multi-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.cfg-mode-multi-table.is-readonly {
+  opacity: 0.92;
+}
+.cfg-mode-multi-cell-ro {
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.30);
+  cursor: default;
+}
+.cfg-mode-multi-cell-ro.cfg-mode-multi-cell-base {
+  outline: 1.5px solid #c95810;
+  outline-offset: -1.5px;
+}
+.cfg-mode-multi-cell-diff {
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.30);
+  cursor: default;
+}
+.cfg-mode-multi-cell-diff.is-up {
+  background: rgba(39,174,96,0.18);
+  color: #1f8c4c;
+}
+.cfg-mode-multi-cell-diff.is-down {
+  background: rgba(192,57,43,0.18);
+  color: #a5311f;
+}
+.cfg-mode-multi-cell-diff.is-eq {
+  background: rgba(0,0,0,0.04);
+  color: var(--text-light);
+}
+.cfg-mode-multi-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px;
+  background: rgba(220,160,60,0.08);
+  border: 1px dashed rgba(220,160,60,0.40);
+  border-radius: var(--r-card);
+  color: var(--text);
+}
+.cfg-mode-multi-empty-icon {
+  font-size: 24px;
+  color: #b87c10;
+}
+
+/* ──────────────── 暗色模式覆寫 ──────────────── */
+
+:root[data-theme="dark"] .cfg-matrix-undo-host {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-matrix-undo-btn:not(:disabled):hover {
+  background: rgba(255,255,255,0.10);
+  color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-matrix-undo-count {
+  background: #b399ff;
+  color: #1a1525;
+}
+
+:root[data-theme="dark"] .cfg-combo-baseline-pin-tag {
+  color: #ffae6a;
+  background: rgba(255,174,106,0.10);
+  border-color: rgba(255,174,106,0.30);
+}
+:root[data-theme="dark"] .cfg-combo-baseline-picker {
+  background: rgba(255,174,106,0.06);
+  border-color: rgba(255,174,106,0.25);
+}
+:root[data-theme="dark"] .cfg-combo-baseline-label { color: #ffae6a; }
+:root[data-theme="dark"] .cfg-combo-baseline-chip {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-combo-baseline-chip:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,174,106,0.50);
+}
+:root[data-theme="dark"] .cfg-combo-baseline-chip.active {
+  background: #ffae6a;
+  color: #1a1525;
+  border-color: #ffae6a;
+}
+:root[data-theme="dark"] .cfg-combo-baseline-reset {
+  color: #ffae6a;
+  border-color: rgba(255,174,106,0.40);
+}
+:root[data-theme="dark"] .cfg-combo-baseline-reset:hover {
+  background: rgba(255,174,106,0.10);
+}
+
+:root[data-theme="dark"] .cfg-combo-steps-filter {
+  background: rgba(150,180,255,0.06);
+  border-color: rgba(150,180,255,0.25);
+}
+:root[data-theme="dark"] .cfg-combo-steps-filter-label { color: #96b4ff; }
+:root[data-theme="dark"] .cfg-combo-step-visibility-chip {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-combo-step-visibility-chip:hover {
+  background: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-combo-step-visibility-chip.hidden {
+  background: rgba(255,255,255,0.03);
+}
+:root[data-theme="dark"] .cfg-combo-steps-show-all {
+  color: #96b4ff;
+  background: rgba(150,180,255,0.10);
+  border-color: rgba(150,180,255,0.40);
+}
+:root[data-theme="dark"] .cfg-combo-steps-show-all:hover {
+  background: rgba(150,180,255,0.18);
+}
+
+:root[data-theme="dark"] .cfg-combo-multi-card.is-baseline {
+  outline-color: #ffae6a;
+}
+:root[data-theme="dark"] .cfg-combo-multi-baseline-badge {
+  background: #ffae6a;
+  color: #1a1525;
+}
+
+:root[data-theme="dark"] .cfg-mode-view-toggle {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-mvt-btn:hover {
+  background: rgba(255,255,255,0.10);
+}
+:root[data-theme="dark"] .cfg-mvt-btn.active {
+  background: #b399ff;
+  color: #1a1525;
+}
+
+:root[data-theme="dark"] .cfg-mode-multi-card {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-mode-multi-card.is-active {
+  outline-color: #b399ff;
+}
+:root[data-theme="dark"] .cfg-mode-multi-card.is-baseline {
+  outline-color: #ffae6a;
+}
+:root[data-theme="dark"] .cfg-mode-multi-card-header {
+  background: rgba(255,255,255,0.08);
+  border-bottom-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-mode-multi-card-header:hover {
+  background: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-mode-multi-card.is-active .cfg-mode-multi-card-header {
+  background: rgba(179,153,255,0.15);
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-ro {
+  border-color: rgba(255,255,255,0.10);
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-ro.cfg-mode-multi-cell-base {
+  outline-color: #ffae6a;
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-diff {
+  border-color: rgba(255,255,255,0.10);
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-diff.is-up {
+  background: rgba(80,200,140,0.18);
+  color: #6cd99a;
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-diff.is-down {
+  background: rgba(255,120,100,0.18);
+  color: #ff9080;
+}
+:root[data-theme="dark"] .cfg-mode-multi-cell-diff.is-eq {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .cfg-mode-multi-empty {
+  background: rgba(220,160,60,0.12);
+  border-color: rgba(220,160,60,0.30);
+}
+:root[data-theme="dark"] .cfg-mode-multi-empty-icon { color: #e8a040; }

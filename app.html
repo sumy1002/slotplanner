@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlotPlanner Pro ・ 工具箱</title>
+
+<!-- ── 字體 ── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- ── Pyodide CDN prefetch(閒置時悄悄下載,進入 SimPage 才不必等)── -->
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+
+<!-- ── 全站樣式 ── -->
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/theme_additions.css">
+
+</head>
+
+<body>
+
+<!-- 4 個裝飾圓環 -->
+<div class="ring" style="top:-12vh; left:62vw; width:380px; height:380px;"></div>
+<div class="ring" style="top:60vh;  left:5vw;  width:260px; height:260px;"></div>
+<div class="ring" style="top:52vh;  left:82vw; width:160px; height:160px;"></div>
+<div class="ring" style="top:8vh;   left:38vw; width:120px; height:120px;"></div>
+
+<div id="app" class="app">
+  <div class="card-shell">
+
+    <!-- ============ 側邊欄 ============ -->
+    <aside class="sidebar" :class="{collapsed: sbCollapsed}">
+      <div class="sidebar-title">
+        <span class="logo">✧ 工具箱</span>
+        <button class="collapse-btn" @click="sbCollapsed = !sbCollapsed"
+                :title="sbCollapsed ? '展開側邊欄' : '收合側邊欄'">
+          {{ sbCollapsed ? '›' : '‹' }}
+        </button>
+      </div>
+      <div class="nav-btn" :class="{active: page===0}" @click="goPage(0)">
+        <span>📄</span><span class="nav-label">TXT → XLSX</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-btn" :class="{active: page===3}" @click="goPage(3)">
+        <span>⚙️</span><span class="nav-label">設定檔編輯器</span>
+      </div>
+      <div class="nav-btn" :class="{active: page===4}" @click="goPage(4)">
+        <span>📄</span><span class="nav-label">批次處理</span>
+      </div>
+      <div class="nav-btn" :class="{active: page===5}" @click="goPage(5)">
+        <span>📄</span><span class="nav-label">資料比對</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-btn" :class="{active: page===6}" @click="goPage(6)">
+        <span>🎲</span><span class="nav-label">模擬引擎</span>
+      </div>
+
+      <!-- Pyodide 載入指示器(緊靠模擬引擎下方,因為它才用到) -->
+      <div class="pyodide-indicator" :class="'pyodide-' + pyodideStatus"
+           :title="pyodideStatusTip">
+        <span class="pyodide-icon">{{ pyodideStatusIcon }}</span>
+        <span class="nav-label pyodide-label">{{ pyodideStatusText }}</span>
+      </div>
+    </aside>
+
+    <!-- ============ 右側內容 ============ -->
+    <div class="right">
+
+      <header v-if="page !== 1" class="topbar">
+        <div class="title">{{ titles[page] }}</div>
+      </header>
+
+      <!-- ── 整個 content 區接收拖曳（只有 page 0 時生效） ── -->
+      <main class="content"
+            :class="{'no-pad': page === 1 || page === 3, 'content-drag': isDragging}"
+            @dragenter.prevent="onContentDragEnter"
+            @dragover.prevent="onContentDragOver"
+            @dragleave="onContentDragLeave"
+            @drop.prevent="onContentDrop">
+
+        <!-- ─── 頁面 0: TXT → XLSX ─── -->
+        <div v-if="page===0" :key="0" class="fade-enter">
+
+          <!-- 大拖曳指示覆蓋層（拖曳時顯示） -->
+          <div v-if="isDragging" class="drag-overlay">
+            <div class="drag-overlay-icon">📂</div>
+            <div class="drag-overlay-text">放開以載入 TXT 檔案</div>
+          </div>
+
+          <!-- 原本的 drop zone（點擊用） -->
+          <div class="drop"
+               :class="dropClass"
+               @click="triggerPick">
+            <div class="icon">{{ dropIcon }}</div>
+            <div class="main">{{ dropMain }}</div>
+            <div class="sub">{{ dropSub }}</div>
+          </div>
+          <input ref="fileInput" type="file" accept=".txt" style="display:none" @change="onPickedFile">
+
+          <div style="height:20px"></div>
+
+          <!-- 選擇檔案列 -->
+          <div class="field-label">選擇檔案</div>
+          <div style="display:flex; gap:8px; margin-bottom:20px;">
+            <input class="input" :value="fileInfo ? fileInfo.name : ''"
+                   placeholder="請選擇 TXT 檔案" readonly>
+            <button class="btn-browse" @click="triggerPick" title="選擇檔案">📁</button>
+          </div>
+
+          <!-- 輸出說明卡（取代原本 disabled checkbox 區） -->
+          <div class="field-label">輸出設定</div>
+          <div class="output-info-card" style="margin-bottom:24px;">
+            <div class="output-info-row">
+              <span class="output-info-icon">⬇</span>
+              <div class="output-info-text">
+                <div class="output-info-title">下載到瀏覽器預設資料夾</div>
+                <div class="output-info-sub">檔名沿用原 TXT 名稱，副檔名改為 .xlsx</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 轉換按鈕列 + 篩選按鈕 -->
+          <div style="display:flex; justify-content:center; align-items:center; gap:12px;">
+            <button class="btn btn-filter"
+                    @click="openModal"
+                    :disabled="!fileInfo"
+                    title="篩選輸出內容">
+              <span class="btn-filter-icon">⚙</span>
+              <span>篩選</span>
+              <span v-if="fileInfo" class="filter-badge"
+                    :class="filterSummary.sel < filterSummary.tot ? 'active' : ''">
+                {{ filterSummary.sel }}/{{ filterSummary.tot }}
+              </span>
+            </button>
+
+            <button class="btn btn-primary big" @click="convert"
+                    :disabled="!fileInfo || isConverting">
+              {{ isConverting ? '轉換中…' : '開始轉換' }}
+            </button>
+          </div>
+
+          <div style="height:32px"></div>
+        </div>
+
+        <!-- ─── 頁面 1: Symbol 管理 ─── -->
+        <symbol-page v-else-if="page===1" :key="1"
+                     :registry="registry"
+                     @status="onChildStatus"></symbol-page>
+
+        <!-- ─── 頁面 3: A 設定檔編輯器 ─── -->
+        <config-page v-else-if="page===3" :key="3"
+                     @status="onChildStatus"></config-page>
+
+        <!-- ─── 頁面 6: 模擬引擎 ─── -->
+        <sim-page v-else-if="page===6" :key="6" @navigate="goPage"></sim-page>
+
+        <!-- ─── 頁面 4-5: placeholder ─── -->
+        <div v-else :key="page" class="placeholder fade-enter">
+          <div class="title">{{ titles[page] }}</div>
+          <div class="sub">（功能開發中）</div>
+        </div>
+
+      </main>
+
+      <footer class="statusbar">
+        <div class="status" :class="status.type">
+          <span class="dot"></span>
+          <span>{{ status.msg }}</span>
+        </div>
+      </footer>
+    </div>
+
+  </div><!-- card-shell -->
+
+</div><!-- #app -->
+
+<!-- ════════════════════════════════════════════════════════
+     篩選 Modal — 掛在 body 直接子層，跳脫 card-shell 的
+     backdrop-filter stacking context，position:fixed 才有效
+     ════════════════════════════════════════════════════════ -->
+<div id="filter-modal-root"></div>
+
+<!-- ── 外部依賴：Vue 3 + ExcelJS（defer：不阻塞 HTML 解析）── -->
+<script defer src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<!-- ── 應用程式檔案 ── -->
+<script defer src="js/registry.js"></script>
+<script defer src="js/parser.js"></script>
+<script defer src="js/xlsx.js"></script>
+<script defer src="js/symbol.js"></script>
+<script defer src="js/slotplanner.js"></script>
+
+<!-- filter-modal 必須在 app.js 之前載入，
+     因為 app.js 啟動時就要連上 SP.modalBus -->
+<script defer src="js/filter-modal.js"></script>
+<script defer src="js/aconfig-xlsx.js"></script>
+<script defer src="js/config-editor/helpers.js"></script>
+<script defer src="js/config-editor/template.js"></script>
+<script defer src="js/config-editor/setup.js"></script>
+<script defer src="js/config-editor/index.js"></script>
+<script defer src="js/app.js"></script>
+
+</body>
+</html>

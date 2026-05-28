@@ -1,0 +1,701 @@
+/* ============================================================
+   theme.css — 1:1 對應 theme.py
+   全站樣式 + 設計 token，所有頁面共用
+   ============================================================ */
+
+:root {
+  /* 背景漸層 */
+  --bg: #E8D6F5;
+  --bg-mid: #D6E8F8;
+  --bg-pink: #FFE6F0;
+  --bg-end: #D6F5EC;
+
+  /* 玻璃面板 */
+  --glass-bg:  rgba(255,255,255,0.40);
+  --glass-brd: rgba(255,255,255,0.72);
+  --glass-top: rgba(255,255,255,1.0);
+
+  /* 側邊欄 */
+  --sidebar-bg:  rgba(255,255,255,0.42);
+  --sidebar-brd: rgba(255,255,255,0.70);
+
+  /* Accent — 薰衣草紫 */
+  --accent:     rgba(180,150,255,0.35);
+  --accent-brd: rgba(180,150,255,0.60);
+  --accent-hex: #5a3db0;
+  --hover:      rgba(220,210,255,0.50);
+  --press:      rgba(180,150,255,0.40);
+
+  /* 危險色 */
+  --danger:      rgba(255,200,200,0.42);
+  --danger-brd:  rgba(255,150,150,0.60);
+  --danger-text: #8a2020;
+
+  /* 文字 */
+  --text:        #3a3050;
+  --text-light:  rgba(80,60,120,0.55);
+  --text-muted:  rgba(80,60,120,0.38);
+  --nav-inactive: rgba(80,60,120,0.48);
+
+  /* 輸入框 */
+  --input-bg:        rgba(255,255,255,0.58);
+  --input-brd:       rgba(255,255,255,0.80);
+  --input-focus:     rgba(240,235,255,0.65);
+  --input-focus-brd: rgba(200,180,255,0.70);
+  --input-err-bg:    rgba(255,220,220,0.50);
+  --input-err-brd:   rgba(220,120,120,0.60);
+
+  --card-brd: rgba(255,255,255,0.78);
+  --content-bg: rgba(255,255,255,0.18);
+  --left-pane-bg: rgba(240,236,252,0.55);
+
+  /* 語意狀態 */
+  --ok-bg:   rgba(200,240,220,0.38);
+  --ok-text: #2d6b50;
+  --ok-dot:  rgba(100,200,150,0.85);
+  --err-bg:  rgba(255,200,200,0.38);
+  --err-text:#7a2020;
+  --err-dot: rgba(220,100,100,0.80);
+  --wait-bg: rgba(255,255,255,0.30);
+  --wait-dot:rgba(180,150,255,0.80);
+
+  /* DropZone */
+  --drop-default: rgba(255,255,255,0.28);
+  --drop-drag:    rgba(200,185,255,0.30);
+  --drop-selected:rgba(200,240,220,0.32);
+
+  --divider: rgba(80,60,120,0.10);
+
+  /* 半徑 */
+  --r-card:  18px;
+  --r-btn:   13px;
+  --r-input: 10px;
+  --r-pill:  999px;
+
+  /* 玻璃陰影 */
+  --shadow-lg:
+    inset 0 2px 0 rgba(255,255,255,1),
+    inset 0 -1.5px 0 rgba(180,150,255,0.22),
+    0 4px 18px rgba(160,130,220,0.18),
+    0 1px 4px rgba(160,130,220,0.12);
+  --shadow-md:
+    inset 0 1.5px 0 rgba(255,255,255,1),
+    inset 0 -1px 0 rgba(180,150,255,0.18),
+    0 2px 10px rgba(160,130,220,0.14);
+  --shadow-sm:
+    inset 0 1px 0 rgba(255,255,255,0.95),
+    0 1px 4px rgba(160,130,220,0.10);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 14px; color: var(--text);
+  background:
+    linear-gradient(135deg, var(--bg) 0%, var(--bg-mid) 35%, var(--bg-pink) 65%, var(--bg-end) 100%);
+  overflow: hidden;
+}
+
+/* 漸層光球 */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(circle 700px at -10% -15%, rgba(200,170,255,0.30), transparent 60%),
+    radial-gradient(circle 750px at 95% 75%,   rgba(170,210,255,0.26), transparent 60%),
+    radial-gradient(circle 400px at 35% 20%,   rgba(255,190,215,0.24), transparent 60%),
+    radial-gradient(circle 320px at 5% 65%,    rgba(200,240,220,0.26), transparent 60%),
+    radial-gradient(circle 350px at 75% -5%,   rgba(200,240,220,0.22), transparent 60%);
+}
+
+.ring {
+  position: fixed; border: 1.5px solid rgba(255,255,255,0.55);
+  border-radius: 50%; pointer-events: none; z-index: 0;
+}
+
+/* ============================================================
+   App shell
+   ============================================================ */
+.app {
+  position: relative; z-index: 1;
+  height: 100vh; padding: 16px;
+  display: flex;
+}
+
+.card-shell {
+  flex: 1;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+.sidebar {
+  width: 192px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-brd);
+  padding: 18px 10px 14px;
+  display: flex; flex-direction: column;
+  gap: 2px;
+  transition: width 0.22s ease;
+}
+.sidebar.collapsed { width: 58px; padding: 18px 6px 14px; }
+
+.sidebar-title {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 8px 10px; margin-bottom: 4px;
+}
+.sidebar-title .logo {
+  font-size: 15px; font-weight: 700; color: var(--accent-hex);
+  white-space: nowrap; overflow: hidden;
+}
+.sidebar-title .collapse-btn {
+  margin-left: auto; width: 22px; height: 22px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-light); font-size: 14px;
+  border-radius: 6px; transition: background 0.15s;
+}
+.sidebar-title .collapse-btn:hover { background: rgba(255,255,255,0.50); color: var(--text); }
+
+.sidebar.collapsed .logo,
+.sidebar.collapsed .nav-label { display: none; }
+
+.nav-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12px; font-weight: 500;
+  color: var(--nav-inactive);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.sidebar.collapsed .nav-btn {
+  justify-content: center; padding: 9px 4px;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.50); color: var(--text); }
+.nav-btn.active {
+  background: var(--accent);
+  color: var(--accent-hex);
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+}
+.nav-divider { height: 1px; background: var(--divider); margin: 8px 4px; }
+
+/* ============================================================
+   Right — Topbar / Content / Statusbar
+   ============================================================ */
+.right {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--content-bg);
+  min-width: 0;
+}
+
+.topbar {
+  height: 50px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 22px;
+  background: rgba(255,255,255,0.38);
+  border-bottom: 1px solid var(--glass-brd);
+  flex-shrink: 0;
+}
+.topbar .title {
+  font-size: 14px; font-weight: 700; color: var(--accent-hex);
+  letter-spacing: 0.01em;
+}
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+.statusbar {
+  min-height: 34px;
+  display: flex; align-items: center;
+  padding: 6px 22px;
+  background: rgba(255,255,255,0.22);
+  border-top: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 10px; padding: 4px 12px;
+  font-size: 12px; font-weight: 500;
+  box-shadow: var(--shadow-sm);
+}
+.status .dot { width: 8px; height: 8px; border-radius: 50%; }
+.status.wait { background: var(--wait-bg); color: var(--text); border: 1px solid var(--glass-brd); }
+.status.wait .dot { background: var(--wait-dot); }
+.status.ok   { background: var(--ok-bg); color: var(--ok-text); border: 1px solid rgba(100,200,150,0.55); }
+.status.ok   .dot { background: var(--ok-dot); }
+.status.err  { background: var(--err-bg); color: var(--err-text); border: 1px solid rgba(220,120,120,0.60); }
+.status.err  .dot { background: var(--err-dot); }
+
+.content {
+  flex: 1; overflow-y: auto; padding: 24px 32px;
+  min-height: 0;
+}
+.content.no-pad { padding: 0; }
+
+/* ============================================================
+   通用元件 — 按鈕
+   ============================================================ */
+.btn {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  border-radius: var(--r-btn); padding: 9px 18px;
+  cursor: pointer; outline: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s, box-shadow 0.08s;
+}
+.btn-primary {
+  background: var(--accent); border: 1px solid var(--accent-brd); color: var(--accent-hex);
+  box-shadow: var(--shadow-lg);
+}
+.btn-primary:hover  { background: var(--hover); border-color: rgba(200,180,255,0.72); }
+.btn-primary:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+.btn-primary.big { padding: 12px 28px; font-size: 14px; }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.60);
+  border: 1px solid rgba(255,255,255,0.88);
+  color: var(--accent-hex);
+  box-shadow: var(--shadow-md);
+}
+.btn-secondary:hover  { background: var(--hover); border-color: rgba(200,180,255,0.72); }
+.btn-secondary:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+
+.btn-danger {
+  background: var(--danger);
+  border: 1px solid var(--danger-brd);
+  color: var(--danger-text);
+  box-shadow: var(--shadow-md);
+}
+.btn-danger:hover  { background: rgba(255,180,180,0.52); border-color: rgba(220,100,100,0.70); }
+.btn-danger:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.70); }
+
+.btn:disabled {
+  background: rgba(200,195,210,0.38) !important;
+  border-color: rgba(200,195,210,0.48) !important;
+  color: rgba(80,60,120,0.28) !important;
+  box-shadow: none !important;
+  cursor: not-allowed; transform: none !important;
+}
+
+.btn-browse {
+  width: 44px; height: 42px; padding: 0; font-size: 16px;
+  background: rgba(255,255,255,0.60);
+  border: 1px solid rgba(255,255,255,0.88);
+  color: var(--accent-hex);
+  border-radius: var(--r-btn);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+}
+.btn-browse:hover  { background: var(--hover); }
+.btn-browse:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+
+/* 小膠囊按鈕（toolbar 用） */
+.btn-pill {
+  height: 30px; padding: 0 12px;
+  border-radius: var(--r-btn);
+  background: rgba(255,255,255,0.60);
+  border: 1px solid rgba(255,255,255,0.88);
+  color: var(--accent-hex);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+  font-family: inherit;
+}
+.btn-pill:hover  { background: var(--hover); }
+.btn-pill:active { transform: translate(1px, 1px); }
+.btn-pill:disabled {
+  background: rgba(255,255,255,0.25) !important;
+  color: rgba(80,60,120,0.28) !important;
+  cursor: not-allowed; transform: none !important;
+}
+.btn-pill.add { background: var(--accent); border-color: var(--accent-brd); }
+.btn-pill.del { background: var(--danger); border-color: var(--danger-brd); color: var(--danger-text); }
+
+/* ============================================================
+   輸入框
+   ============================================================ */
+.input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-brd);
+  border-radius: 9px;
+  padding: 0 12px; height: 42px;
+  font-size: 13px; color: var(--text);
+  outline: none; font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+}
+.input:focus {
+  border-color: var(--input-focus-brd);
+  background: var(--input-focus);
+  border-width: 1.5px;
+}
+.input.err {
+  border-color: var(--input-err-brd);
+  background: var(--input-err-bg);
+}
+.input:read-only { color: var(--text); }
+.input:disabled {
+  background: rgba(200,195,210,0.38);
+  border-color: rgba(180,170,200,0.45);
+  color: rgba(80,60,120,0.32);
+  box-shadow: none;
+}
+.input-sm { height: 32px; font-size: 12px; padding: 0 10px; }
+
+.field-label {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin-bottom: 6px;
+}
+.field-label-sm {
+  font-size: 11px; color: var(--text-light);
+  margin-bottom: 4px;
+}
+.field-err {
+  font-size: 10px; color: var(--err-text);
+  margin-top: 3px;
+}
+
+/* ============================================================
+   Checkbox
+   ============================================================ */
+.chk {
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text);
+  user-select: none;
+}
+.chk input { display: none; }
+.chk .box {
+  width: 16px; height: 16px; border-radius: 5px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(255,255,255,0.85);
+  position: relative; flex: 0 0 16px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.chk input:checked + .box {
+  background: rgba(180,150,255,0.45);
+  border-color: rgba(180,150,255,0.70);
+}
+.chk input:checked + .box::after {
+  content: ''; position: absolute;
+  left: 4px; top: 1.5px;
+  width: 4.5px; height: 9px;
+  border: solid white; border-width: 0 2px 2px 0;
+  transform: rotate(42deg);
+}
+.chk.disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ============================================================
+   DropZone
+   ============================================================ */
+.drop {
+  border-radius: var(--r-btn);
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.drop.default {
+  background: var(--drop-default);
+  border: 1.5px dashed rgba(180,150,255,0.40);
+}
+.drop.drag {
+  background: var(--drop-drag);
+  border: 1.5px dashed rgba(180,150,255,0.60);
+}
+.drop.selected {
+  background: var(--drop-selected);
+  border: 1.5px solid rgba(100,200,150,0.55);
+  box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9);
+}
+.drop .icon { font-size: 44px; margin-bottom: 6px; }
+.drop .main { font-size: 14px; font-weight: 700; color: var(--text); }
+.drop.selected .main { color: var(--ok-text); }
+.drop.drag .main { color: var(--press); }
+.drop .sub { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+
+/* ============================================================
+   Placeholder page
+   ============================================================ */
+.placeholder {
+  height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: rgba(80,60,120,0.22);
+  user-select: none;
+}
+.placeholder .title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.placeholder .sub { font-size: 13px; color: rgba(80,60,120,0.16); }
+
+/* ============================================================
+   分隔線 / 區段標題
+   ============================================================ */
+.sep {
+  height: 1px;
+  background: var(--divider);
+  margin: 14px 0;
+}
+.section-title {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.section-title::before {
+  content: '◆'; color: var(--accent-hex);
+}
+
+/* ============================================================
+   Symbol Manager — 雙欄佈局
+   ============================================================ */
+.sym-page {
+  display: flex;
+  height: 100%;
+  background: transparent;
+}
+.sym-left {
+  width: 240px;
+  min-width: 200px;
+  background: var(--left-pane-bg);
+  border-right: 1px solid rgba(255,255,255,0.55);
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+}
+.sym-right {
+  flex: 1;
+  display: flex; flex-direction: column;
+  background: transparent;
+  min-width: 0;
+}
+
+.sym-toolbar {
+  height: 46px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  background: rgba(255,255,255,0.38);
+  border-bottom: 1px solid var(--glass-brd);
+  flex-shrink: 0;
+}
+.sym-toolbar .spacer { flex: 1; }
+
+/* Symbol 列表項 */
+.sym-list {
+  flex: 1; overflow-y: auto;
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sym-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 9px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--card-brd);
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.15s, background 0.15s, transform 0.06s;
+}
+.sym-item:hover {
+  border-color: var(--hover);
+  background: var(--input-focus);
+}
+.sym-item.selected {
+  border-color: var(--accent-brd);
+  background: var(--press);
+  box-shadow: var(--shadow-lg);
+}
+.sym-swatch {
+  width: 34px; height: 34px;
+  border-radius: 7px;
+  border: 1.5px solid var(--card-brd);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  flex-shrink: 0;
+}
+.sym-item-info { flex: 1; min-width: 0; }
+.sym-item-name {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sym-item-meta {
+  font-size: 11px; color: var(--text-light);
+  display: flex; gap: 8px;
+}
+.sym-item-pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--accent-hex); font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sym-statusbar {
+  height: 34px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px;
+  background: rgba(255,255,255,0.22);
+  border-top: 1px solid var(--divider);
+  font-size: 11px; color: var(--text-light);
+  flex-shrink: 0;
+}
+.sym-statusbar .weight-total {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--accent-hex); font-weight: 700;
+}
+
+/* 右側編輯面板 */
+.sym-edit {
+  flex: 1; overflow-y: auto;
+  padding: 18px 22px;
+}
+.sym-empty {
+  height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-light); font-size: 13px;
+}
+
+.sym-edit-section {
+  margin-bottom: 18px;
+}
+.sym-edit-row {
+  display: flex; gap: 14px; margin-left: 4px;
+}
+
+/* Swatch 主預覽 */
+.sym-swatch-preview {
+  width: 60px; height: 60px;
+  border-radius: 10px;
+  border: 1.5px solid var(--card-brd);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Swatch grid */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  width: 145px;
+  flex-shrink: 0;
+}
+.swatch-cell {
+  width: 25px; height: 25px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255,255,255,0.65);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.1s, border-color 0.15s;
+}
+.swatch-cell:hover { transform: scale(1.12); }
+.swatch-cell.selected {
+  border-color: var(--accent-hex);
+  border-width: 2.5px;
+  box-shadow: 0 0 0 2px rgba(180,150,255,0.40), var(--shadow-md);
+}
+
+/* Weight slider */
+.weight-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-left: 4px;
+}
+.weight-slider {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    var(--accent) 0%,
+    var(--accent) var(--val, 50%),
+    rgba(255,255,255,0.40) var(--val, 50%),
+    rgba(255,255,255,0.40) 100%);
+  border: 1px solid rgba(255,255,255,0.80);
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(120,90,180,0.10);
+}
+.weight-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: white;
+  border: 1.5px solid var(--accent-brd);
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(140,110,210,0.30);
+}
+.weight-slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: white;
+  border: 1.5px solid var(--accent-brd);
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(140,110,210,0.30);
+}
+.weight-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--accent-hex); font-weight: 700;
+  min-width: 44px; text-align: right;
+  background: rgba(255,255,255,0.50);
+  border: 1px solid var(--card-brd);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+/* Reel limit checkboxes */
+.reel-limits {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  margin-left: 4px;
+}
+.reel-limits .chk { font-size: 12px; }
+
+/* Hint */
+.hint {
+  font-size: 11px; color: var(--text-light);
+  margin-left: 4px; margin-bottom: 6px;
+}
+
+/* ============================================================
+   動畫
+   ============================================================ */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-enter { animation: rise 0.35s ease both; }
+
+/* ============================================================
+   自訂 Scrollbar
+   ============================================================ */
+.content::-webkit-scrollbar,
+.sym-list::-webkit-scrollbar,
+.sym-edit::-webkit-scrollbar { width: 8px; }
+.content::-webkit-scrollbar-track,
+.sym-list::-webkit-scrollbar-track,
+.sym-edit::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb,
+.sym-list::-webkit-scrollbar-thumb,
+.sym-edit::-webkit-scrollbar-thumb {
+  background: rgba(180,150,255,0.40);
+  border-radius: 4px;
+}
+.content::-webkit-scrollbar-thumb:hover,
+.sym-list::-webkit-scrollbar-thumb:hover,
+.sym-edit::-webkit-scrollbar-thumb:hover { background: rgba(180,150,255,0.60); }
+
+/* ============================================================
+   小工具
+   ============================================================ */
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: rgba(255,255,255,0.45);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--accent-hex);
+}
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }

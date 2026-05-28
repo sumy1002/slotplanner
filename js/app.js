@@ -1,0 +1,447 @@
+// ============================================================
+//  app.js v4
+//  - askDownloadLocation：File System Access API
+//  - 主 app 的 state 永遠用原始群組名當 key
+//  - convert() 時根據 askDownloadLocation 決定下載方式
+// ============================================================
+
+(function () {
+  'use strict';
+
+  const { createApp, ref, computed, reactive, onMounted, provide } = Vue;
+  const SP = window.SlotPlanner;
+
+  const LS_FILTER_KEY = 'slotplanner.filterSettings.v1';
+  const ALL_SHEETS = SP.xlsx.SHEET_ORDER;
+  const ALL_COLS   = SP.xlsx.HEADER;
+
+  const registry = new SP.SymbolRegistry();
+  const initStatus = registry.initOrLoad(5);
+  console.log('[Registry]', initStatus === 'loaded'
+    ? `已從 localStorage 載入 ${registry.symbols().length} 個 symbol`
+    : `已建立預設 ${registry.symbols().length} 個 symbol`);
+
+  const app = createApp({
+    setup() {
+      const page        = ref(0);
+      const sbCollapsed = ref(false);
+      const titles = {
+        0: 'TXT → XLSX 轉換工具', 1: 'Symbol 管理',
+        3: 'A 設定檔編輯器', 4: '批次處理', 5: '資料比對', 6: '模擬引擎'
+      };
+      const status = ref({ type: 'wait', msg: '已就緒' });
+
+      // ── Pyodide 載入狀態(全域顯示在側邊欄)──
+      const pyodideStatus = ref('idle');  // 'idle' | 'loading' | 'ready' | 'error'
+      const pyodideStatusDetail = ref('');
+      const pyodideStatusIcon = computed(() => {
+        switch (pyodideStatus.value) {
+          case 'loading': return '⏳';
+          case 'ready':   return '✓';
+          case 'error':   return '✗';
+          default:        return '○';
+        }
+      });
+      const pyodideStatusText = computed(() => {
+        switch (pyodideStatus.value) {
+          case 'loading': return '載入中';
+          case 'ready':   return 'Pyodide 就緒';
+          case 'error':   return 'Pyodide 失敗';
+          default:        return 'Pyodide';
+        }
+      });
+      const pyodideStatusTip = computed(() => {
+        const detail = pyodideStatusDetail.value ? `\n${pyodideStatusDetail.value}` : '';
+        switch (pyodideStatus.value) {
+          case 'loading': return `Pyodide 載入中(背景下載 ~6MB,完成後模擬引擎即可使用)${detail}`;
+          case 'ready':   return 'Pyodide 已就緒,模擬引擎可立即使用';
+          case 'error':   return `Pyodide 載入失敗 — 將在進入模擬引擎時重試${detail}`;
+          default:        return '尚未啟動';
+        }
+      });
+
+      const fileInput    = ref(null);
+      const fileInfo     = ref(null);
+      const isConverting = ref(false);
+      const parsedCache  = ref(null);
+
+      function setStatus(type, msg) { status.value = { type, msg }; }
+
+      const pageDefaultStatus = {
+        0: { type: 'wait', msg: '已就緒，請選擇 TXT 檔案' },
+        1: { type: 'wait', msg: 'Symbol 管理' },
+        3: { type: 'wait', msg: 'A 設定檔編輯器' },
+        4: { type: 'wait', msg: '功能開發中' },
+        5: { type: 'wait', msg: '功能開發中' },
+        6: { type: 'wait', msg: '模擬引擎就緒' },
+      };
+
+      // ── Pyodide Worker 訂閱與啟動（抽成函數，供 on-demand 呼叫）──
+      let _pyodideWarmupDone = false;
+      function _ensurePyodideWarmup() {
+        if (_pyodideWarmupDone) return;
+        _pyodideWarmupDone = true;
+        try {
+          if (window.SlotPlanner && window.SlotPlanner.workerService) {
+            const ws = window.SlotPlanner.workerService;
+            ws.subscribe((data) => {
+              if (data.type === 'ready') {
+                pyodideStatus.value = 'ready';
+              } else if (data.type === 'status' && pyodideStatus.value !== 'ready') {
+                pyodideStatus.value = 'loading';
+                pyodideStatusDetail.value = data.msg || '';
+              } else if (data.type === 'error' && pyodideStatus.value !== 'ready') {
+                pyodideStatus.value = 'error';
+                pyodideStatusDetail.value = data.msg || '未知錯誤';
+              }
+            });
+            pyodideStatus.value = ws.isPyReady() ? 'ready' : 'loading';
+            ws.ensureWorker();
+            console.log('[app] Pyodide worker 啟動（on-demand）');
+          }
+        } catch (e) {
+          pyodideStatus.value = 'error';
+          pyodideStatusDetail.value = e.message || String(e);
+          console.warn('[app] Pyodide 啟動失敗:', e);
+        }
+      }
+
+      function goPage(i) {
+        // v3 變更:page 2(盤面設計)已整合進設定檔編輯器,自動遷移
+        if (i === 2) i = 3;
+        page.value = i;
+        if (i === 0 && fileInfo.value) setStatus('wait', `已選擇：${fileInfo.value.name}`);
+        else status.value = { ...pageDefaultStatus[i] };
+        // 切到模擬引擎時才啟動 Pyodide（避免佔用初始載入頻寬）
+        if (i === 6) _ensurePyodideWarmup();
+      }
+
+      function onChildStatus(s) { status.value = { ...s }; }
+
+      // ── 拖曳 ──
+      const isDragging = ref(false);
+      let dragCounter = 0;
+      function onContentDragEnter(e) {
+        if (page.value !== 0) return;
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        dragCounter++; isDragging.value = true;
+      }
+      function onContentDragOver(e) { if (page.value === 0) e.preventDefault(); }
+      function onContentDragLeave() {
+        if (page.value !== 0) return;
+        dragCounter--;
+        if (dragCounter <= 0) { dragCounter = 0; isDragging.value = false; }
+      }
+      function onContentDrop(e) {
+        if (page.value !== 0) return;
+        e.preventDefault(); dragCounter = 0; isDragging.value = false;
+        const f = e.dataTransfer?.files?.[0];
+        if (f) handleFile(f);
+      }
+
+      const dropClass = computed(() => isDragging.value ? 'drag' : fileInfo.value ? 'selected' : 'default');
+      const dropIcon  = computed(() => isDragging.value ? '📂' : fileInfo.value ? '🗂️' : '📁');
+      const dropMain  = computed(() => {
+        if (isDragging.value) return '放開以選擇檔案';
+        if (fileInfo.value)   return `✔ 已選擇：${fileInfo.value.name}`;
+        return '拖曳 TXT 檔案到這裡';
+      });
+      const dropSub = computed(() => {
+        if (isDragging.value) return '僅接受 .txt 檔案';
+        if (fileInfo.value)   return '點擊或拖曳以重新選擇';
+        return '或點擊選擇檔案';
+      });
+
+      function triggerPick() { fileInput.value?.click(); }
+      function onPickedFile(e) {
+        const f = e.target.files?.[0];
+        if (f) handleFile(f);
+        e.target.value = '';
+      }
+
+      async function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith('.txt')) { setStatus('err', '請選擇 TXT 檔案'); return; }
+        if (file.size === 0) { setStatus('err', '檔案是空的，請確認內容'); return; }
+        try {
+          const buf = await file.arrayBuffer();
+          const content = SP.parser.decodeText(buf);
+          fileInfo.value = { name: file.name, size: file.size, content };
+          parsedCache.value = SP.parser.parse(content);
+          buildFilterState(parsedCache.value.sheets, false);
+          // 換 TXT 重置排序
+          ALL_SHEETS.forEach(sh => {
+            groupOrder[sh] = SP.parser.extractSmartGroups(parsedCache.value.sheets[sh] || []).map(g => g.name);
+            subOrder[sh] = {};
+          });
+          setStatus('wait', `已選擇：${file.name}（${(file.size / 1024).toFixed(1)} KB）`);
+        } catch (err) {
+          setStatus('err', `讀取檔案失敗：${err.message}`);
+        }
+      }
+
+      // ── 篩選設定 ──
+      const colsOn  = reactive({});
+      const groupOn = reactive({});
+      const subOn   = reactive({});
+      const askDownloadLocation = ref(false);
+
+      // 排序（session 級，換 TXT 重置；不存 localStorage）
+      const groupOrder = reactive({});
+      const subOrder   = reactive({});
+
+      function initColSettings() {
+        ALL_COLS.forEach(c => { colsOn[c] = true; });
+        colsOn['分子'] = false; colsOn['分母'] = false;
+        try {
+          const raw = localStorage.getItem(LS_FILTER_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved.cols) Object.keys(saved.cols).forEach(k => {
+              if (k in colsOn) colsOn[k] = !!saved.cols[k];
+            });
+            if (typeof saved.askDownloadLocation === 'boolean') {
+              askDownloadLocation.value = saved.askDownloadLocation;
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      // 用「原始群組名」(extractGroups) 初始化 state
+      function buildFilterState(sheets, keepGroups) {
+        ALL_SHEETS.forEach(sh => {
+          if (!groupOn[sh]) groupOn[sh] = {};
+          if (!subOn[sh])   subOn[sh]   = {};
+          const groups = SP.parser.extractGroups(sheets[sh] || []);
+          if (!keepGroups) { groupOn[sh] = {}; subOn[sh] = {}; }
+          groups.forEach(g => {
+            if (!(g.name in groupOn[sh])) groupOn[sh][g.name] = true;
+            if (!subOn[sh][g.name]) subOn[sh][g.name] = {};
+            g.rows.forEach((_, ri) => { if (!(ri in subOn[sh][g.name])) subOn[sh][g.name][ri] = true; });
+          });
+        });
+      }
+
+      function saveSettingsToLS() {
+        try {
+          localStorage.setItem(LS_FILTER_KEY, JSON.stringify({
+            cols: { ...colsOn },
+            askDownloadLocation: askDownloadLocation.value,
+          }));
+        } catch (e) { /* ignore */ }
+      }
+
+      // 篩選按鈕徽章用
+      const filterSummary = computed(() => {
+        if (!parsedCache.value) return { sel: 0, tot: 0 };
+        let sel = 0, tot = 0;
+        ALL_SHEETS.forEach(sh => {
+          const rows = parsedCache.value.sheets[sh] || [];
+          if (sh === '整體') {
+            const cnt = rows.filter(r => r.name && r.name.trim()).length;
+            tot += cnt; sel += cnt; return;
+          }
+          SP.parser.extractGroups(rows).forEach(g => {
+            const gOn = groupOn[sh]?.[g.name] !== false;
+            g.rows.forEach((_, ri) => {
+              tot++;
+              if (gOn && subOn[sh]?.[g.name]?.[ri] !== false) sel++;
+            });
+          });
+        });
+        return { sel, tot };
+      });
+
+      function buildFilterCfg() {
+        const cfg = {};
+        ALL_SHEETS.forEach(sh => {
+          cfg[sh] = {};
+          if (sh === '整體') {
+            SP.parser.extractGroups(parsedCache.value?.sheets[sh] || []).forEach(g => {
+              const subs = {};
+              g.rows.forEach((_, ri) => { subs[ri] = true; });
+              cfg[sh][g.name] = { groupOn: true, subOn: subs };
+            });
+            return;
+          }
+          SP.parser.extractGroups(parsedCache.value?.sheets[sh] || []).forEach(g => {
+            const subs = {};
+            g.rows.forEach((_, ri) => { subs[ri] = subOn[sh]?.[g.name]?.[ri] !== false; });
+            cfg[sh][g.name] = { groupOn: groupOn[sh]?.[g.name] !== false, subOn: subs };
+          });
+        });
+        return cfg;
+      }
+
+      // 排序資訊（給 xlsx 用）
+      function buildOrderCfg() {
+        return {
+          groupOrder: JSON.parse(JSON.stringify(groupOrder)),
+          subOrder:   JSON.parse(JSON.stringify(subOrder)),
+        };
+      }
+
+      function buildColsSet() {
+        const s = new Set();
+        ALL_COLS.forEach(c => { if (colsOn[c]) s.add(c); });
+        return s;
+      }
+
+      // ── Modal 溝通 ──
+      function openModal() {
+        if (!parsedCache.value || !SP.modalBus) return;
+        SP.modalBus.emit('open', {
+          parsedCache:  parsedCache.value,
+          colsOn:       { ...colsOn },
+          groupOn:      JSON.parse(JSON.stringify(groupOn)),
+          subOn:        JSON.parse(JSON.stringify(subOn)),
+          askDownloadLocation: askDownloadLocation.value,
+          isConverting: isConverting.value,
+          groupOrder:   JSON.parse(JSON.stringify(groupOrder)),
+          subOrder:     JSON.parse(JSON.stringify(subOrder)),
+        });
+      }
+
+      function setupBusListeners() {
+        if (!SP.modalBus) return;
+        SP.modalBus.on('stateSync', ({ colsOn: c, groupOn: g, subOn: s, askDownloadLocation: a, groupOrder: go, subOrder: so }) => {
+          ALL_COLS.forEach(col => { colsOn[col] = c[col] !== false; });
+          ALL_SHEETS.forEach(sh => {
+            if (!groupOn[sh]) groupOn[sh] = {};
+            if (!subOn[sh])   subOn[sh]   = {};
+            groupOn[sh] = { ...(g[sh] || {}) };
+            subOn[sh]   = {};
+            Object.keys(s[sh] || {}).forEach(gname => {
+              subOn[sh][gname] = { ...(s[sh][gname] || {}) };
+            });
+            if (go && go[sh]) groupOrder[sh] = [...go[sh]];
+            if (so && so[sh]) subOrder[sh] = { ...so[sh] };
+          });
+          if (typeof a === 'boolean') askDownloadLocation.value = a;
+          saveSettingsToLS();
+        });
+        SP.modalBus.on('convert', () => { convert(); });
+      }
+
+      // ── 下載：兩種模式 ──
+      async function doDownload(blob, filename) {
+        // 模式 A：File System Access API
+        if (askDownloadLocation.value && 'showSaveFilePicker' in window) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{
+                description: 'Excel 檔案',
+                accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
+              }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return true;
+          } catch (err) {
+            // 使用者取消 → 不算錯
+            if (err.name === 'AbortError') return false;
+            console.warn('FS Access 失敗，回退到預設下載：', err);
+            // 繼續走預設下載
+          }
+        }
+        // 模式 B：預設下載
+        triggerDownload(blob, filename);
+        return true;
+      }
+
+      function triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // ── 轉換 ──
+      async function convert() {
+        if (!fileInfo.value || isConverting.value) return;
+        isConverting.value = true;
+        SP.modalBus?.emit('convertingChange', true);
+        setStatus('wait', '解析中…');
+        await new Promise(r => setTimeout(r, 30));
+
+        try {
+          const { headerBlocks, sheets } = parsedCache.value || SP.parser.parse(fileInfo.value.content);
+          const hasSheets = Object.keys(sheets).length > 0;
+          const hasHeader = headerBlocks.length > 0;
+
+          if (!hasSheets && !hasHeader) {
+            setStatus('err', '轉換失敗，請確認檔案格式');
+            isConverting.value = false; SP.modalBus?.emit('convertingChange', false); return;
+          }
+          if (!hasSheets && hasHeader) {
+            const ok = confirm('檔案解析後沒有找到任何數值資料列，只有標題區塊會被輸出到 XLSX。\n\n確定要繼續嗎？');
+            if (!ok) {
+              setStatus('wait', '已取消轉換');
+              isConverting.value = false; SP.modalBus?.emit('convertingChange', false); return;
+            }
+          }
+
+          setStatus('wait', '產生 XLSX 中…');
+          await new Promise(r => setTimeout(r, 30));
+
+          const wb = await SP.xlsx.buildXlsx(headerBlocks, sheets, buildColsSet(), buildFilterCfg(), buildOrderCfg());
+          const buffer = await wb.xlsx.writeBuffer();
+          const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const filename = fileInfo.value.name.replace(/\.txt$/i, '') + '.xlsx';
+
+          setStatus('wait', '下載中…');
+          const ok = await doDownload(blob, filename);
+          if (!ok) {
+            setStatus('wait', '已取消下載');
+            isConverting.value = false; SP.modalBus?.emit('convertingChange', false); return;
+          }
+
+          // 轉換完成後自動儲存設定
+          saveSettingsToLS();
+
+          const sheetNames = SP.xlsx.SHEET_ORDER.filter(s => sheets[s]);
+          const { sel, tot } = filterSummary.value;
+          setStatus('ok',
+            `✔ 轉換完成（${sheetNames.length || 1} 個工作表：${sheetNames.join(' / ') || '整體'}）` +
+            (tot - sel > 0 ? `，已略過 ${tot - sel} 項` : '')
+          );
+        } catch (err) {
+          console.error(err);
+          setStatus('err', `轉換失敗：${err.message}`);
+        } finally {
+          isConverting.value = false;
+          SP.modalBus?.emit('convertingChange', false);
+        }
+      }
+
+      provide('registry', registry);
+
+      onMounted(() => {
+        initColSettings();
+        setupBusListeners();
+        setStatus('wait', initStatus === 'loaded'
+          ? `已從 localStorage 載入 ${registry.symbols().length} 個 symbol`
+          : '已就緒，請選擇 TXT 檔案');
+      });
+
+      return {
+        page, sbCollapsed, titles, status,
+        pyodideStatus, pyodideStatusIcon, pyodideStatusText, pyodideStatusTip,
+        fileInput, fileInfo, isConverting,
+        isDragging, dropClass, dropIcon, dropMain, dropSub,
+        triggerPick, onPickedFile,
+        onContentDragEnter, onContentDragOver, onContentDragLeave, onContentDrop,
+        convert, goPage, onChildStatus, registry,
+        filterSummary, openModal,
+        askDownloadLocation,
+      };
+    },
+  });
+
+  app.component('symbol-page', SP.SymbolPage);
+  app.component('config-page', SP.ConfigPage);
+  app.component('sim-page',    SP.SimPage);
+  app.mount('#app');
+})();
