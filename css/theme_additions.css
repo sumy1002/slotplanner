@@ -5,8 +5,16 @@
    v3.6 變更:
    - theme_v34.css 仍 @import(暗色模式是全站功能)
    - theme_v37.css 改為 lazy-load(只有進 SimPage 才需要,見 slotplanner.js)
+
+   v4.0 變更:
+   - 新增 modules/scrollbar.css(全站 iOS scrollbar)
+   - 新增 modules/glass-overrides.css(收斂 hardcoded 白底 + 暗色補齊)
+   - 新增 modules/sim-page.css(從 slotplanner.js 抽出的 SimPage 樣式)
    ============================================================ */
+@import url('modules/scrollbar.css');
 @import url('modules/theme_v34.css');
+@import url('modules/glass-overrides.css');
+@import url('modules/sim-page.css');
 
 /* ============================================================
    theme.css 新增區塊 — v2
@@ -449,16 +457,7 @@
 .fm-footer-info b { color: var(--text); font-weight: 700; }
 .fm-footer-btns  { display: flex; gap: 6px; }
 
-/* scrollbar 一致 */
-.fm-list::-webkit-scrollbar,
-.fm-sub-list::-webkit-scrollbar { width: 6px; }
-.fm-list::-webkit-scrollbar-track,
-.fm-sub-list::-webkit-scrollbar-track { background: transparent; }
-.fm-list::-webkit-scrollbar-thumb,
-.fm-sub-list::-webkit-scrollbar-thumb {
-  background: rgba(180,150,255,0.35);
-  border-radius: 3px;
-}
+/* scrollbar:由 modules/scrollbar.css 全域接管,此處不再單獨設定 */
 
 /* ── 整體說明面板 ── */
 .fm-zhengti-notice {
@@ -749,11 +748,7 @@
   flex-direction: column;
   gap: 12px;
 }
-.reel-left-scroll::-webkit-scrollbar { width: 6px; }
-.reel-left-scroll::-webkit-scrollbar-track { background: transparent; }
-.reel-left-scroll::-webkit-scrollbar-thumb {
-  background: rgba(180,150,255,0.35); border-radius: 3px;
-}
+/* scrollbar:由 modules/scrollbar.css 全域接管 */
 
 /* 左側分區 */
 .reel-section {
@@ -935,11 +930,7 @@
   padding: 20px 24px;
   min-height: 0;
 }
-.reel-board-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
-.reel-board-wrap::-webkit-scrollbar-track { background: transparent; }
-.reel-board-wrap::-webkit-scrollbar-thumb {
-  background: rgba(180,150,255,0.35); border-radius: 4px;
-}
+/* scrollbar:由 modules/scrollbar.css 全域接管 */
 
 /* ── 盤面 grid ── */
 .reel-board {

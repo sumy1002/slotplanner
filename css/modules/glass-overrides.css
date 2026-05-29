@@ -1,0 +1,333 @@
+/* ============================================================
+   glass-overrides.css — v4.0
+   
+   目的:
+   1. 把 theme_additions.css 散布的 160+ 處 hardcoded 白底
+      在暗色模式下統一翻轉成深色玻璃(不必逐個 class 改)
+   2. 給通用 panel / chip / card 補上 iOS 風玻璃質感
+      (saturate blur + inset highlight + 鏡面)
+   3. 修補散落的視覺不一致(border、圓角、focus 等)
+   
+   原則:盡量靠 class 名模式批量處理,避免在原檔逐處覆寫
+   ============================================================ */
+
+/* ============================================================
+   1. 通用玻璃面板 class(主動加在 component 上的)
+   ============================================================ */
+.glass-panel {
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  box-shadow: var(--shadow-md);
+}
+.glass-panel-raised {
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
+  box-shadow: var(--shadow-md), var(--inset-glass);
+}
+.glass-panel-flat {
+  background: var(--glass-1);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============================================================
+   2. config-editor / sym / sim 區塊常見元件玻璃化
+   針對「白底 + 邊框」常見組合,加上 backdrop-filter
+   ============================================================ */
+
+/* 範本 modal / 範本 item / 卡片類元件 — 補強質感 */
+.cfg-tpl-item,
+.cfg-tpl-panel,
+.output-info-card,
+.cfg-empty-state,
+.cfg-bins-preview,
+.cfg-symbol-chips,
+.cfg-payline-preview,
+.fm-badge,
+.cfg-bins-tick-label {
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
+}
+
+/* ============================================================
+   3. iOS 厚玻璃 — Modal / Overlay 統一處理
+   ============================================================ */
+.modal-backdrop,
+.cfg-tpl-diff-backdrop {
+  /* 加重模糊,讓底層內容變奶油色 */
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+}
+
+.filter-modal,
+.cfg-tpl-diff-modal,
+.cfg-rule-inline-editor,
+.cfg-payline-tpl-popover,
+.cfg-symbol-floating-edit,
+.cfg-matrix-col-menu {
+  /* 內部不需要再加自己的 backdrop(避免 nested blur 卡頓),
+     只強化邊緣 + inset 高光 */
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,1),
+    inset 0 -0.5px 0 rgba(0,0,0,0.05),
+    0 16px 48px rgba(60,55,45,0.18),
+    0 4px 12px rgba(60,55,45,0.08) !important;
+  border-radius: var(--r-xl) !important;
+}
+
+/* ============================================================
+   4. iOS 風 focus ring — 全站統一
+   ============================================================ */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none !important;
+  box-shadow:
+    0 0 0 4px rgba(74,210,180,0.22),
+    var(--shadow-sm) !important;
+}
+/* 危險按鈕用紅色 ring */
+.btn-danger:focus-visible,
+.cfg-chip-danger:focus-visible {
+  box-shadow:
+    0 0 0 4px rgba(220,120,120,0.25),
+    var(--shadow-sm) !important;
+}
+
+/* ============================================================
+   5. 通用 hover / active 彈跳(iOS spring 感)
+   保留各檔自己的 transition,只在沒寫 transform 的地方補
+   ============================================================ */
+.btn-pill:not(:disabled):active,
+.cfg-chip:not(.active):active,
+.col-chip:active,
+.sym-type-chip:active,
+.fm-btn:active,
+.cfg-tpl-action:active,
+.cfg-stepper-btn:not(:disabled):active,
+.cfg-theme-toggle:active,
+.cfg-tpl-close:active {
+  transform: scale(0.95);
+  transition-duration: 80ms;
+}
+
+/* ============================================================
+   6. iOS 風 select 玻璃化(收斂瀏覽器預設外觀)
+   ============================================================ */
+select:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 0 32px 0 12px;
+  height: 32px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M3.5 5.5L7 9l3.5-3.5' stroke='%232b2a27' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
+  background-color: var(--glass-4);
+}
+
+/* ============================================================
+   7. 文字選取顏色(iOS 風青綠)
+   ============================================================ */
+::selection {
+  background: rgba(74,210,180,0.40);
+  color: var(--text);
+}
+::-moz-selection {
+  background: rgba(74,210,180,0.40);
+  color: var(--text);
+}
+
+/* ============================================================
+   8. 暗色模式 — 一次性翻轉白底元件
+   策略:列出 theme_additions.css 用了 rgba(255,255,255,X) 的主要 class,
+   把它們在暗色下統一改為深玻璃(rgba(255,255,255,0.06~0.10))
+   ============================================================ */
+:root[data-theme="dark"] .output-info-card,
+:root[data-theme="dark"] .filter-modal,
+:root[data-theme="dark"] .fm-badge,
+:root[data-theme="dark"] .fm-item,
+:root[data-theme="dark"] .fm-sub-row,
+:root[data-theme="dark"] .fm-zhengti-notice,
+:root[data-theme="dark"] .cfg-tpl-item,
+:root[data-theme="dark"] .cfg-tpl-panel,
+:root[data-theme="dark"] .cfg-tpl-action,
+:root[data-theme="dark"] .cfg-tpl-load,
+:root[data-theme="dark"] .cfg-tpl-close,
+:root[data-theme="dark"] .cfg-tpl-name-input,
+:root[data-theme="dark"] .cfg-tpl-desc-input,
+:root[data-theme="dark"] .cfg-bins-preview,
+:root[data-theme="dark"] .cfg-bins-tick-label,
+:root[data-theme="dark"] .cfg-empty-state,
+:root[data-theme="dark"] .cfg-payline-preview,
+:root[data-theme="dark"] .cfg-payline-svg-wrap,
+:root[data-theme="dark"] .cfg-symbol-chips,
+:root[data-theme="dark"] .cfg-chip-sm,
+:root[data-theme="dark"] .cfg-chip,
+:root[data-theme="dark"] .col-chip,
+:root[data-theme="dark"] .sym-type-chip,
+:root[data-theme="dark"] .reel-mode-btn,
+:root[data-theme="dark"] .cfg-action-chip,
+:root[data-theme="dark"] .cfg-rule-card,
+:root[data-theme="dark"] .cfg-rule-humanize-card,
+:root[data-theme="dark"] .cfg-discard-card,
+:root[data-theme="dark"] .cfg-constraints-v2-card,
+:root[data-theme="dark"] .cfg-matrix-col-menu,
+:root[data-theme="dark"] .cfg-matrix-sel-bar,
+:root[data-theme="dark"] .cfg-stepper,
+:root[data-theme="dark"] .cfg-stepper-val,
+:root[data-theme="dark"] .cfg-inspector-pinned-chip {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* 文字色:暗色下若元件原本指定深色文字,翻成淺色 */
+:root[data-theme="dark"] .output-info-card,
+:root[data-theme="dark"] .cfg-tpl-item,
+:root[data-theme="dark"] .fm-item,
+:root[data-theme="dark"] .cfg-rule-humanize-card,
+:root[data-theme="dark"] .cfg-discard-card,
+:root[data-theme="dark"] .cfg-constraints-v2-card {
+  color: var(--text);
+}
+
+/* hover 加深 */
+:root[data-theme="dark"] .cfg-tpl-item:hover,
+:root[data-theme="dark"] .fm-item:hover,
+:root[data-theme="dark"] .fm-sub-row:hover,
+:root[data-theme="dark"] .cfg-tpl-action:hover,
+:root[data-theme="dark"] .reel-mode-btn:hover {
+  background: rgba(255,255,255,0.12) !important;
+  border-color: rgba(255,255,255,0.20) !important;
+}
+
+/* filter modal 在暗色下要更深一點,跟 backdrop 拉出對比 */
+:root[data-theme="dark"] .filter-modal,
+:root[data-theme="dark"] .cfg-tpl-diff-modal {
+  background: rgba(30,30,34,0.85) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 16px 48px rgba(0,0,0,0.6),
+    0 4px 12px rgba(0,0,0,0.4) !important;
+}
+
+/* 暗色下 trace 區塊(SimPage 用) */
+:root[data-theme="dark"] .sim-trace-act,
+:root[data-theme="dark"] .sim-trace-hint {
+  background: rgba(220,180,100,0.10) !important;
+  border-color: rgba(220,180,100,0.25) !important;
+  color: #e0c080 !important;
+}
+
+/* ============================================================
+   9. 浮動下拉 / popover 統一陰影
+   ============================================================ */
+.cfg-matrix-col-menu,
+.cfg-symbol-floating-edit,
+.cfg-payline-tpl-popover,
+.cfg-combo-step-copy-popover,
+.cfg-rule-templates-popover,
+.cfg-inspector-popover {
+  background: var(--glass-5);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,1),
+    0 12px 40px rgba(60,55,45,0.18),
+    0 3px 10px rgba(60,55,45,0.10);
+  backdrop-filter: var(--blur-thick);
+  -webkit-backdrop-filter: var(--blur-thick);
+}
+:root[data-theme="dark"] .cfg-matrix-col-menu,
+:root[data-theme="dark"] .cfg-symbol-floating-edit,
+:root[data-theme="dark"] .cfg-payline-tpl-popover,
+:root[data-theme="dark"] .cfg-combo-step-copy-popover,
+:root[data-theme="dark"] .cfg-rule-templates-popover,
+:root[data-theme="dark"] .cfg-inspector-popover {
+  background: rgba(32,32,36,0.92);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 12px 40px rgba(0,0,0,0.5);
+}
+
+/* ============================================================
+   10. tooltip / hint / badge — 統一玻璃化
+   ============================================================ */
+[role="tooltip"],
+.cfg-hint-tooltip,
+.cfg-tab-issue-badge,
+.cfg-symbol-badge {
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
+}
+
+/* ============================================================
+   11. 共用元件補強:cfg-stepper(被通用元件規格化)
+   ============================================================ */
+.cfg-stepper {
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  box-shadow: var(--inset-glass);
+  transition: background var(--t-fast);
+}
+.cfg-stepper:hover {
+  background: var(--glass-4);
+}
+.cfg-stepper-btn {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  transition: color var(--t-fast), transform 120ms var(--ease-ios);
+  -webkit-tap-highlight-color: transparent;
+}
+.cfg-stepper-btn:not(:disabled):hover {
+  color: var(--accent-hex);
+}
+
+/* ============================================================
+   12. iOS 26 風 — 內部 panel 內陰影微弧光
+   給 content 區與 sym-edit 加一個微妙的內部頂端高光
+   ============================================================ */
+.content::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.6) 50%,
+    transparent 100%);
+  pointer-events: none;
+  margin-bottom: -1px;
+  z-index: 10;
+}
+
+/* ============================================================
+   13. 修補散布的硬編碼 border-radius(收斂到 token)
+   只挑最突兀的(2/3/4px) 改成 var(--r-xs) 太細的保留
+   這部分太分散,改靠原檔自然繼承,這裡不強制
+   ============================================================ */
+

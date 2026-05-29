@@ -1,0 +1,80 @@
+/* ============================================================
+   scrollbar.css — v4.0 全站 iOS 玻璃風 scrollbar
+   
+   設計原則:
+   - 統一寬度 10px(水平也統一 10px)
+   - thumb 用半透明灰,hover 變深
+   - track 完全透明,讓底下玻璃透出
+   - 用 background-clip: padding-box 製造「邊距」效果,
+     讓 thumb 看起來像浮在 track 上的玻璃膠囊
+   - Firefox 用 scrollbar-width: thin + scrollbar-color
+   - 暗色模式自動翻轉(用 :root[data-theme="dark"])
+   
+   覆蓋方式:* selector 全域套用,
+   原本各檔的特殊 ::-webkit-scrollbar 規則我已從原檔移除,
+   避免特異性混戰
+   ============================================================ */
+
+/* ── Webkit / Blink ── */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(120,115,105,0.22);
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background var(--t-fast);
+  min-height: 32px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(120,115,105,0.42);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:active {
+  background: rgba(120,115,105,0.58);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Firefox ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120,115,105,0.28) transparent;
+}
+
+/* ── 暗色模式 ── */
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.16);
+  background-clip: padding-box;
+}
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.32);
+  background-clip: padding-box;
+}
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:active {
+  background: rgba(255,255,255,0.45);
+  background-clip: padding-box;
+}
+:root[data-theme="dark"] * {
+  scrollbar-color: rgba(255,255,255,0.20) transparent;
+}
+
+/* ── 特例:極窄 scrollbar(sticky bar 用)── */
+.scrollbar-tight::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-tight::-webkit-scrollbar-thumb {
+  border-width: 1px;
+}
+
+/* ── 特例:隱藏 scrollbar(整列拖拉用)── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }

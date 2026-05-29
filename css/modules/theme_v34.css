@@ -46,40 +46,99 @@
 
 /* 暗色主題:覆寫 :root 變數
    原本 :root 是亮色(已在 theme.css 定義) — 我們不動它
-   只覆寫 dark 模式下需要改變的值 */
+   只覆寫 dark 模式下需要改變的值
+   
+   v4.0:對齊新 token 體系(glass-1..5),仍保持青綠 accent */
 :root[data-theme="dark"] {
-  /* 主背景:中性深灰黑(SHINee 青綠僅作點綴)*/
-  --bg: #161719;
+  /* 主背景:深灰黑帶一絲暖色 */
+  --bg: #18171c;
+  --bg-mid: #1c1b22;
+  --bg-pink: #1a1a20;
+  --bg-end: #15151a;
 
-  /* 玻璃面板:深底 + 偏白邊框
-     注意:其他元件已用 rgba(255,255,255,...) 的疊加,在深底上會自然變灰玻璃感 */
-  --glass-bg: rgba(255,255,255,0.06);
-  --glass-brd: rgba(255,255,255,0.12);
+  /* 玻璃層級(暗模式)— 把白色透明改為微亮白,在深底上自然呈灰玻璃 */
+  --glass-1: rgba(255,255,255,0.04);
+  --glass-2: rgba(255,255,255,0.08);
+  --glass-3: rgba(255,255,255,0.12);
+  --glass-4: rgba(255,255,255,0.18);
+  --glass-5: rgba(40,40,46,0.92);
+  --glass-edge: rgba(255,255,255,0.14);
+  
+  /* 舊 alias 也更新 */
+  --glass-bg: var(--glass-2);
+  --glass-brd: var(--glass-edge);
 
-  /* 文字色:反轉 — 主要文字中性白,次要文字中性淺灰 */
+  /* 側邊欄 */
+  --sidebar-bg: var(--glass-2);
+  --sidebar-brd: var(--glass-edge);
+
+  /* 文字色:反轉 */
   --text: #e8e9eb;
   --text-light: rgba(225,228,232,0.55);
+  --text-muted: rgba(225,228,232,0.38);
+  --nav-inactive: rgba(225,228,232,0.50);
 
-  /* Accent:微微提亮,在深底上能被看見 */
+  /* Accent:在深底上提亮的青綠 */
   --accent: rgba(95,217,189,0.22);
-  --accent-brd: rgba(95,217,189,0.40);
+  --accent-brd: rgba(95,217,189,0.42);
   --accent-hex: #5fd9bd;
+  --hover: rgba(95,217,189,0.30);
+  --press: rgba(95,217,189,0.36);
 
-  /* 陰影:深底下陰影改成微亮 glow(不再是黑色暗影)*/
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
-  --shadow-md: 0 4px 14px rgba(0,0,0,0.40), 0 0 0 1px rgba(255,255,255,0.05);
-  --shadow-lg: 0 10px 32px rgba(0,0,0,0.50), 0 0 0 1px rgba(255,255,255,0.06);
+  /* 輸入框 */
+  --input-bg: var(--glass-2);
+  --input-brd: var(--glass-edge);
+  --input-focus: rgba(95,217,189,0.10);
+  --input-focus-brd: rgba(95,217,189,0.55);
 
-  /* 危險紅(高亮版,在深底上更明顯)*/
-  --danger: #e57373;
-  --danger-text: #ff8a80;
-  --danger-brd: rgba(229,115,115,0.40);
+  --card-brd: var(--glass-edge);
+  --content-bg: rgba(255,255,255,0.02);
+  --left-pane-bg: rgba(255,255,255,0.04);
+
+  /* 陰影:深底下用深陰影 + 微亮 ring(取代亮色的 inset highlight)*/
+  --shadow-sm:
+    0 1px 3px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  --shadow-md:
+    0 4px 14px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-lg:
+    0 10px 32px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+  --shadow-xl:
+    0 24px 60px rgba(0,0,0,0.65),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  --inset-glass:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 -1px 0 rgba(0,0,0,0.20);
+  --inset-btn:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.20);
+
+  /* 焦點 ring:暗色用青綠光暈 */
+  --focus-ring: 0 0 0 4px rgba(95,217,189,0.30);
+
+  /* 危險紅 */
+  --danger: rgba(229,115,115,0.32);
+  --danger-text: #ff9080;
+  --danger-brd: rgba(229,115,115,0.45);
+
+  /* 分隔線 */
+  --divider: rgba(255,255,255,0.08);
 }
 
-/* 暗色模式下:body 漸層也跟著變(theme.css 用了固定漸層,我們覆寫)*/
+/* 暗色背景漸層 — 帶輕微柔色光暈,呼應亮色的「玻璃透出顏色」感 */
 :root[data-theme="dark"] body {
-  background: linear-gradient(135deg, #161719 0%, #1c1d20 60%, #222326 100%) !important;
+  background: linear-gradient(135deg, #18171c 0%, #1c1b22 60%, #15151a 100%) !important;
   color: var(--text);
+}
+:root[data-theme="dark"] body::before {
+  background:
+    radial-gradient(circle 720px at -8% -12%, rgba(95,217,189,0.10), transparent 55%),
+    radial-gradient(circle 780px at 96% 72%,  rgba(120,90,180,0.10), transparent 60%),
+    radial-gradient(circle 420px at 38% 22%,  rgba(220,160,100,0.06), transparent 60%),
+    radial-gradient(circle 340px at 6% 68%,   rgba(74,160,210,0.08),  transparent 60%) !important;
 }
 
 /* 暗色模式下的「半透明白底」元件 — 主動翻轉
@@ -100,7 +159,14 @@
 :root[data-theme="dark"] select:focus {
   background: rgba(255,255,255,0.10) !important;
   border-color: var(--accent-hex) !important;
-  outline-color: var(--accent-hex) !important;
+  outline: none !important;
+  box-shadow: var(--focus-ring), var(--shadow-sm) !important;
+}
+
+/* 暗色下 select 箭頭改白色(不然在深底看不到) */
+:root[data-theme="dark"] select.input,
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M3.5 5.5L7 9l3.5-3.5' stroke='%23e8e9eb' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") !important;
 }
 
 /* 數字輸入框 spinner 在深底下被吃掉的問題 */
@@ -1096,13 +1162,10 @@
   flex-wrap: nowrap !important;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
 }
-.cfg-sticky-mode-bar::-webkit-scrollbar { height: 4px; }
-.cfg-sticky-mode-bar::-webkit-scrollbar-thumb {
-  background: rgba(90,61,176,0.25);
-  border-radius: 2px;
-}
+/* 水平 sticky bar 用較細 scrollbar */
+.cfg-sticky-mode-bar::-webkit-scrollbar { height: 6px; }
+/* thumb 顏色:沿用全域 scrollbar.css 規則,不再單獨指定 */
 /* 主要操作不被擠走 */
 .cfg-sticky-mode-bar > .cfg-matrix-menu-host,
 .cfg-sticky-mode-bar > .cfg-matrix-display-toggle,
@@ -1248,9 +1311,7 @@
 :root[data-theme="dark"] .cfg-matrix-sort-v2-select:focus {
   border-color: #5fd9bd;
 }
-:root[data-theme="dark"] .cfg-sticky-mode-bar::-webkit-scrollbar-thumb {
-  background: rgba(95,217,189,0.35);
-}
+/* :root[data-theme="dark"] .cfg-sticky-mode-bar scrollbar 由 modules/scrollbar.css 全域接管 */
 :root[data-theme="dark"] .cfg-chip-copy {
   background: rgba(120,180,255,0.15) !important;
   border-color: rgba(120,180,255,0.35) !important;

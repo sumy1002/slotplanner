@@ -1,0 +1,1315 @@
+/* ============================================================
+   sim-page.css — v4.0
+   
+   從 slotplanner.js 內嵌 _STYLE 字串抽出,改為靜態 CSS 檔
+   
+   來源:slotplanner.js 第 2279~3148 行(v3.6)
+   目的:
+   - 符合 v3.4「CSS 拆檔」原則
+   - 修補:原版 19 處 hardcoded 白底,在暗色模式破功 → 加暗色覆寫
+   - 配合 v4.0 玻璃 token 體系(saturate blur + inset highlight)
+   
+   注意:JS 端 slotplanner.js 已移除 _STYLE 注入邏輯
+   ============================================================ */
+
+.sim-page { display:flex; flex-direction:column; gap:18px; padding:8px 0; }
+.sim-header { }
+.sim-title { font-size:1.25rem; font-weight:700; color:var(--accent-hex); }
+.sim-subtitle { font-size:0.82rem; color:var(--text-light); margin-top:3px; }
+
+/* ── 來源切換 tabs ── */
+.sim-source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sim-source-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 18px;
+  background: var(--glass-bg);
+  border: 2px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.16s, border-color 0.16s, transform 0.06s;
+  outline: none;
+}
+.sim-source-tab:hover {
+  background: var(--hover);
+}
+.sim-source-tab.active {
+  background: rgba(140,110,220,0.18);
+  border-color: var(--accent-brd);
+  box-shadow: var(--shadow-sm);
+}
+.sim-source-tab:active { transform: translate(1px, 1px); }
+.sim-source-icon { font-size: 1.4rem; }
+.sim-source-label { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+.sim-source-tab.active .sim-source-label { color: var(--accent-hex); }
+.sim-source-hint { font-size: 0.74rem; color: var(--text-light); }
+
+/* ── editor 來源面板 ── */
+.sim-editor-source {
+  background: var(--glass-bg);
+  border: 2px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  padding: 16px 18px;
+}
+.sim-editor-source.has-data {
+  border-color: rgba(140,110,220,0.45);
+  background: rgba(140,110,220,0.08);
+}
+.sim-editor-empty {
+  text-align: center;
+  padding: 20px 10px;
+}
+.sim-editor-empty-icon { font-size: 2rem; margin-bottom: 6px; }
+.sim-editor-empty-text {
+  font-size: 0.86rem;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.sim-link {
+  color: var(--accent-hex);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  font-weight: 600;
+}
+.sim-link:hover { text-decoration-style: solid; }
+
+.sim-editor-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sim-editor-summary-icon { font-size: 1.2rem; }
+.sim-editor-summary-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+.sim-refresh-btn {
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sim-refresh-btn:hover {
+  background: var(--accent);
+  color: var(--accent-hex);
+}
+.sim-editor-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+.sim-editor-summary-cell {
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.sim-editor-summary-num {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent-hex);
+  line-height: 1.2;
+}
+.sim-editor-summary-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+.sim-upload-area {
+  border: 2px dashed var(--glass-brd);
+  border-radius: var(--r-card);
+  background: var(--glass-bg);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.sim-upload-area:hover, .sim-upload-area.drag-over {
+  background: var(--hover);
+  border-color: var(--accent-brd);
+}
+.sim-upload-area.has-file { border-style: solid; border-color: var(--accent-brd); }
+.sim-upload-icon { font-size: 2rem; margin-bottom: 8px; }
+.sim-upload-main { font-size:0.95rem; font-weight:600; color:var(--text); }
+.sim-upload-sub  { font-size:0.78rem; color:var(--text-light); margin-top:4px; }
+.sim-change-hint { opacity:0.6; }
+
+.sim-status-block { display:flex; flex-direction:column; gap:6px; }
+.sim-status-msg { font-size:0.88rem; font-weight:500; padding:6px 10px;
+  border-radius:8px; background:var(--glass-bg); }
+.sim-status-msg.ok   { color:var(--ok-text);  background:var(--ok-bg); }
+.sim-status-msg.err  { color:var(--err-text); background:var(--err-bg); }
+.sim-status-msg.info { color:var(--accent-hex); }
+
+.sim-progress-bar {
+  height:8px; border-radius:4px;
+  background:rgba(180,150,255,0.18);
+  overflow:hidden;
+}
+.sim-progress-fill {
+  height:100%; border-radius:4px;
+  background:linear-gradient(90deg, var(--accent-hex), #a07af0);
+  transition: width 0.3s ease;
+}
+.sim-progress-label { font-size:0.8rem; color:var(--text-light); }
+
+.sim-log-block { background:var(--glass-bg); border-radius:var(--r-card); overflow:hidden; }
+.sim-log-toggle {
+  padding:8px 14px; font-size:0.82rem; font-weight:600;
+  color:var(--accent-hex); cursor:pointer;
+  display:flex; align-items:center; gap:8px;
+}
+.sim-log-toggle:hover { background:var(--hover); }
+.sim-log-count { font-size:0.75rem; opacity:0.6; }
+.sim-log-body {
+  max-height:200px; overflow-y:auto;
+  padding:6px 14px 10px; border-top:1px solid var(--glass-brd);
+}
+.sim-log-line {
+  font-family:'JetBrains Mono', monospace;
+  font-size:0.75rem; color:var(--text); line-height:1.6;
+  white-space:pre-wrap; word-break:break-all;
+}
+.sim-log-line.warn { color:var(--danger-text); }
+
+.sim-summary-grid {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:12px;
+}
+.sim-stat-card {
+  background:var(--glass-bg); border:1px solid var(--glass-brd);
+  border-radius:var(--r-card); padding:14px 16px; text-align:center;
+}
+.sim-stat-val {
+  font-size:1.35rem; font-weight:700; color:var(--text); line-height:1.2;
+}
+.sim-stat-val.val-accent { color:var(--accent-hex); }
+.sim-stat-val.val-warn   { color:#c0392b; }
+.sim-stat-label { font-size:0.75rem; color:var(--text-light); margin-top:4px; }
+
+.sim-btn-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+
+.sim-pyodide-notice {
+  font-size:0.8rem; color:var(--text-light);
+  display:flex; align-items:center; gap:8px;
+}
+.dot-pulse {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--accent-hex);
+  animation: dotPulse 1.2s infinite;
+}
+@keyframes dotPulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%     { opacity:0.4; transform:scale(0.7); }
+}
+@media(max-width:600px) { .sim-summary-grid { grid-template-columns:repeat(2,1fr); } }
+
+/* ── B 文件詳細預覽 panel ── */
+.sim-preview-block {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.sim-preview-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.sim-preview-toggle:hover { background: rgba(140,110,220,0.08); }
+.sim-preview-caret {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent-hex);
+}
+.sim-preview-body {
+  padding: 4px 16px 16px;
+  border-top: 1px dashed var(--glass-brd);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sim-preview-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sim-preview-section {}
+.sim-preview-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-hex);
+  margin: 12px 0 6px;
+  letter-spacing: 0.02em;
+}
+
+.sim-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  background: rgba(255,255,255,0.40);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sim-preview-table th {
+  background: rgba(140,110,220,0.18);
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 10.5px;
+  color: var(--accent-hex);
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--glass-brd);
+}
+.sim-preview-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.55);
+  color: var(--text);
+}
+.sim-preview-table tr:last-child td { border-bottom: none; }
+.sim-preview-table tr:hover td { background: rgba(255,255,255,0.55); }
+.sim-preview-table th.num,
+.sim-preview-table td.num {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sim-preview-table td.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+}
+.sim-preview-table td.val-accent { color: var(--accent-hex); font-weight: 700; }
+.sim-preview-table td.val-warn   { color: #c0392b; font-weight: 700; }
+.sim-preview-table-compact td,
+.sim-preview-table-compact th { padding: 4px 8px; }
+
+.sim-preview-table th.bar-col,
+.sim-preview-table td.bar-col { width: 30%; min-width: 80px; }
+.sim-bar-wrap {
+  width: 100%;
+  height: 10px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--glass-brd);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.sim-bar {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(140,110,220,0.45), rgba(140,110,220,0.85));
+  transition: width 0.3s;
+}
+.sim-bar-orange { background: linear-gradient(90deg, rgba(255,150,100,0.45), rgba(255,150,100,0.85)); }
+.sim-bar-green  { background: linear-gradient(90deg, rgba(120,200,120,0.45), rgba(80,180,80,0.85)); }
+
+.sim-preview-hint {
+  font-size: 10.5px;
+  color: var(--text-light);
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.30);
+  border-radius: 6px;
+}
+
+/* ════════════════════════════════════════════
+   任務 4:SimPage 比較模式
+   ════════════════════════════════════════════ */
+.sim-source-tabs-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.sim-source-tab-compare.active {
+  background: rgba(255,170,80,0.18);
+  border-color: rgba(255,140,60,0.55);
+}
+.sim-source-tab-compare.active .sim-source-label {
+  color: #c95810;
+}
+
+/* ── 比較模式設定面板 ── */
+.sim-compare-source {
+  background: rgba(255,180,100,0.06);
+  border: 2px solid rgba(255,150,80,0.30);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sim-compare-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--glass-brd);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.sim-compare-head-icon { font-size: 16px; flex-shrink: 0; }
+.sim-compare-head-text { flex: 1; }
+.sim-compare-head-text strong { color: #c95810; }
+
+.sim-compare-need-templates {
+  text-align: center;
+  padding: 20px 12px;
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.sim-compare-empty-icon { font-size: 2rem; margin-bottom: 6px; opacity: 0.6; }
+
+/* A / VS / B 三欄選擇 */
+.sim-compare-form {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.sim-compare-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--glass-brd);
+  border-radius: 10px;
+}
+.sim-compare-side-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-hex);
+  letter-spacing: 0.04em;
+}
+.sim-compare-select {
+  font-size: 12px;
+  padding: 6px 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.sim-compare-side-desc {
+  font-size: 10.5px;
+  color: var(--text-light);
+  font-style: italic;
+  line-height: 1.4;
+}
+.sim-compare-vs {
+  align-self: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #c95810;
+  padding: 8px;
+  letter-spacing: 0.1em;
+}
+.sim-compare-refresh-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 同範本比較提示 */
+.sim-same-template-hint {
+  padding: 10px 14px;
+  background: linear-gradient(90deg, rgba(255,200,100,0.15), rgba(255,180,100,0.08));
+  border-left: 3px solid #f39c12;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.sim-same-template-hint strong { color: #c97a00; }
+
+/* ── 比較結果並排表 ── */
+.sim-compare-result {
+  background: var(--glass-bg);
+  border: 2px solid rgba(255,150,80,0.40);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-md);
+}
+.sim-compare-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--glass-brd);
+}
+.sim-compare-result-icon { font-size: 1.2rem; }
+.sim-compare-result-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c95810;
+  flex: 1;
+}
+.sim-screenshot-btn {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,140,60,0.45);
+  border-radius: var(--r-pill);
+  color: #c95810;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, transform 0.06s;
+}
+.sim-screenshot-btn:hover { background: rgba(255,170,80,0.20); }
+.sim-screenshot-btn:active { transform: translate(1px, 1px); }
+.sim-screenshot-btn:disabled { opacity: 0.55; cursor: wait; }
+.sim-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.sim-compare-table th {
+  background: rgba(255,150,80,0.15);
+  padding: 7px 12px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  color: #c95810;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--glass-brd);
+}
+.sim-compare-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.55);
+}
+.sim-compare-table tr:last-child td { border-bottom: none; }
+.sim-compare-table tr:hover td { background: rgba(255,255,255,0.55); }
+.sim-compare-table th.num,
+.sim-compare-table td.num {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+.sim-compare-table td.val-good { color: #2e7d32; font-weight: 700; }
+.sim-compare-table td.val-bad  { color: #c0392b; font-weight: 700; }
+.sim-compare-pct {
+  font-size: 10px;
+  color: var(--text-light);
+  margin-left: 2px;
+}
+
+/* 響應式 */
+@media (max-width: 700px) {
+  .sim-source-tabs-3 { grid-template-columns: 1fr; }
+  .sim-compare-form { grid-template-columns: 1fr; }
+  .sim-compare-vs { padding: 4px; }
+}
+
+/* ── 比較模式 B 並排預覽(任務 1 補強)── */
+.sim-compare-preview-toggle {
+  margin-top: 14px;
+  border-top: 1px dashed var(--glass-brd);
+  border-radius: 0;
+  width: calc(100% + 32px);
+  margin-left: -16px;
+  margin-right: -16px;
+  padding: 10px 16px;
+  background: rgba(255,180,100,0.06);
+}
+.sim-compare-preview-toggle:hover { background: rgba(255,150,80,0.15); }
+.sim-compare-preview-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sim-cmp-table th.cmp-th-a,
+.sim-cmp-table td.cmp-cell-a {
+  background: rgba(255,180,100,0.10);
+}
+.sim-cmp-table th.cmp-th-b,
+.sim-cmp-table td.cmp-cell-b {
+  background: rgba(140,110,220,0.08);
+}
+.sim-cmp-table th.cmp-th-a { color: #c95810; }
+.sim-cmp-table th.cmp-th-b { color: var(--accent-hex); }
+.sim-cmp-table tr:hover td.cmp-cell-a { background: rgba(255,180,100,0.20); }
+.sim-cmp-table tr:hover td.cmp-cell-b { background: rgba(140,110,220,0.18); }
+
+/* ── 歷史記錄 panel(任務 3)── */
+.sim-history-block {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.sim-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.sim-history-toggle:hover { background: rgba(140,110,220,0.08); }
+.sim-history-count {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.45);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.sim-history-caret {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent-hex);
+}
+.sim-history-body {
+  padding: 4px 14px 14px;
+  border-top: 1px dashed var(--glass-brd);
+}
+.sim-history-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.35);
+  border-radius: 8px;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+.sim-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 4px;
+}
+.sim-history-hint {
+  font-size: 10.5px;
+  color: var(--text-light);
+}
+.sim-history-clear {
+  font-family: inherit;
+  font-size: 10.5px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 12px;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sim-history-clear:hover {
+  background: rgba(220,80,80,0.20);
+  border-color: #c0392b;
+  color: #c0392b;
+}
+.sim-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.sim-history-item:hover { background: rgba(255,255,255,0.85); }
+.sim-history-info { flex: 1; min-width: 0; }
+.sim-history-row1 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.sim-history-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+.sim-history-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sim-history-time {
+  font-size: 10px;
+  color: var(--text-light);
+  font-family: 'JetBrains Mono', monospace;
+}
+.sim-history-row2 {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-left: 24px;
+}
+.sim-history-stat {
+  display: inline-block;
+  margin-right: 12px;
+}
+.sim-history-stat strong {
+  color: var(--accent-hex);
+  font-family: 'JetBrains Mono', monospace;
+}
+.sim-history-buttons {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sim-history-btn {
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.65);
+  border: 1px solid var(--glass-brd);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.sim-history-btn:hover {
+  background: var(--accent);
+  color: var(--accent-hex);
+  border-color: var(--accent-brd);
+}
+.sim-history-btn.cfg-tpl-delete:hover {
+  background: rgba(220,80,80,0.25);
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+/* ── 規則執行軌跡面板 ── */
+.sim-trace-section {
+  padding-bottom: 10px;
+}
+.sim-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 8px;
+}
+.sim-trace-summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sim-trace-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 50px;
+  font-size: 10.5px;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}
+.sim-trace-pill-label { color: var(--text-light); }
+.sim-trace-pill-val { font-weight: 700; color: var(--text); }
+.sim-trace-pill-good { background: rgba(150,255,180,0.20); border-color: rgba(100,180,120,0.40); }
+.sim-trace-pill-good .sim-trace-pill-val { color: #2a7340; }
+.sim-trace-pill-warn { background: rgba(255,200,200,0.25); border-color: rgba(200,80,80,0.40); }
+.sim-trace-pill-warn .sim-trace-pill-val { color: #8a2020; }
+.sim-trace-pill-accent { background: rgba(180,150,255,0.22); border-color: rgba(180,150,255,0.60); }
+.sim-trace-pill-accent .sim-trace-pill-val { color: var(--accent-hex); }
+
+.sim-trace-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.30);
+  border: 1px dashed var(--glass-brd);
+  border-radius: 10px;
+}
+.sim-trace-toolbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 4px 0 2px;
+}
+.sim-trace-toolbar-spacer { flex: 1; min-width: 8px; }
+.sim-trace-chip {
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 50px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text);
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.sim-trace-chip:hover {
+  background: rgba(180,150,255,0.20);
+  border-color: rgba(180,150,255,0.50);
+}
+.sim-trace-chip.active {
+  background: rgba(180,150,255,0.35);
+  border-color: rgba(180,150,255,0.70);
+  color: var(--accent-hex);
+  font-weight: 600;
+}
+.sim-trace-chip-warn.active {
+  background: rgba(255,180,180,0.35);
+  border-color: rgba(220,80,80,0.55);
+  color: #8a2020;
+}
+
+.sim-trace-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.30);
+  border: 1px dashed var(--glass-brd);
+  border-radius: 10px;
+}
+
+.sim-trace-table tr.sim-trace-row-dead td {
+  opacity: 0.6;
+  background: rgba(255,235,235,0.20);
+}
+.sim-trace-table tr.sim-trace-row-disabled td {
+  opacity: 0.4;
+  text-decoration: line-through;
+  text-decoration-color: rgba(120,80,80,0.4);
+}
+
+.sim-trace-flag {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+.sim-trace-flag-disabled { color: #8a2020; }
+.sim-trace-flag-dead {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #c0392b;
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: 2px;
+}
+
+.sim-trace-desc {
+  font-size: 10px;
+  color: var(--text-light);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 400;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.sim-trace-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+.sim-trace-act {
+  display: inline-block;
+  padding: 0 5px;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(255,235,200,0.50);
+  border: 1px solid rgba(220,180,100,0.45);
+  border-radius: 50px;
+  color: #8a5a20;
+}
+
+.sim-trace-hint {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: rgba(255,235,200,0.30);
+  border: 1px dashed rgba(220,180,100,0.45);
+  border-radius: 8px;
+}
+.sim-trace-hint a {
+  color: var(--accent-hex);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sim-trace-hint a:hover { color: #3a2080; }
+
+
+/* ============================================================
+   暗色模式覆寫(v4.0 補)
+   ============================================================ */
+:root[data-theme="dark"] .sim-source-tab {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .sim-source-tab:hover {
+  background: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .sim-source-tab.active {
+  background: rgba(95,217,189,0.15);
+  border-color: rgba(95,217,189,0.40);
+}
+:root[data-theme="dark"] .sim-editor-source,
+:root[data-theme="dark"] .sim-editor-summary-cell,
+:root[data-theme="dark"] .sim-upload-area,
+:root[data-theme="dark"] .sim-stat-card,
+:root[data-theme="dark"] .sim-preview-block,
+:root[data-theme="dark"] .sim-compare-block,
+:root[data-theme="dark"] .sim-history-block,
+:root[data-theme="dark"] .sim-history-item,
+:root[data-theme="dark"] .sim-history-clear,
+:root[data-theme="dark"] .sim-log-block,
+:root[data-theme="dark"] .sim-tpl-list,
+:root[data-theme="dark"] .sim-refresh-btn {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+:root[data-theme="dark"] .sim-history-item:hover,
+:root[data-theme="dark"] .sim-refresh-btn:hover,
+:root[data-theme="dark"] .sim-source-tab:hover {
+  background: rgba(255,255,255,0.12) !important;
+  border-color: rgba(255,255,255,0.20) !important;
+}
+
+/* 預覽 / 比較 table */
+:root[data-theme="dark"] .sim-preview-table th,
+:root[data-theme="dark"] .sim-compare-table th {
+  background: rgba(255,255,255,0.08) !important;
+  color: var(--text);
+}
+:root[data-theme="dark"] .sim-preview-table tr:hover td,
+:root[data-theme="dark"] .sim-compare-table tr:hover td {
+  background: rgba(255,255,255,0.06) !important;
+}
+:root[data-theme="dark"] .sim-preview-table td,
+:root[data-theme="dark"] .sim-compare-table td {
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* compare A/B 對色:在暗色下提亮 */
+:root[data-theme="dark"] .sim-cmp-cell-a {
+  background: rgba(255,170,100,0.14) !important;
+}
+:root[data-theme="dark"] .sim-cmp-cell-b {
+  background: rgba(179,153,255,0.16) !important;
+}
+
+/* statbar / pyodide notice */
+:root[data-theme="dark"] .sim-status-msg.ok {
+  background: rgba(95,217,189,0.15) !important;
+  color: #6dd1a8 !important;
+}
+:root[data-theme="dark"] .sim-status-msg.err {
+  background: rgba(229,115,115,0.15) !important;
+  color: #ff9080 !important;
+}
+:root[data-theme="dark"] .sim-history-count {
+  background: rgba(255,255,255,0.08) !important;
+}
+:root[data-theme="dark"] .sim-history-empty {
+  background: rgba(255,255,255,0.04) !important;
+  color: var(--text-light) !important;
+}
+
+/* hover 通用 */
+:root[data-theme="dark"] .sim-preview-toggle:hover,
+:root[data-theme="dark"] .sim-history-toggle:hover,
+:root[data-theme="dark"] .sim-log-toggle:hover {
+  background: rgba(179,153,255,0.10) !important;
+}
+
+/* ============================================================
+   v4.0 玻璃質感補強
+   ============================================================ */
+.sim-source-tab,
+.sim-editor-source,
+.sim-stat-card,
+.sim-preview-block,
+.sim-compare-block,
+.sim-history-block,
+.sim-log-block {
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-ios), box-shadow var(--t-fast);
+}
+.sim-source-tab:hover,
+.sim-history-item:hover {
+  transform: translateY(-0.5px);
+}
+.sim-source-tab:active {
+  transform: scale(0.98) !important;
+  transition-duration: 80ms;
+}
+
+
+/* ============================================================
+   以下為原 theme_v37.css 內容(v3.7 符號 RTP 貢獻整合)
+   v4.0 合併到 sim-page.css,不再 lazy-load
+   ============================================================ */
+/* ════════════════════════════════════════════════════════════════════
+   v3.7 — SimPage 符號 RTP 貢獻整合
+   - 符號列表加 RTP 貢獻 column(.sim-rtp-cell + .sim-rtp-mini-bar)
+   - 可點 row(.sim-symfreq-row.is-selected)
+   - Detail panel(.sim-symbol-detail-panel)
+     - single 模式:6-cell grid
+     - compare 模式:A / B / Δ 三欄
+   - 含暗色覆寫
+   ════════════════════════════════════════════════════════════════════ */
+
+/* 提示文字(放在 title 旁邊) */
+.sim-symfreq-hint {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-light);
+  background: rgba(95,169,255,0.10);
+  border: 1px solid rgba(95,169,255,0.25);
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  vertical-align: 1px;
+}
+
+/* 可點符號 row */
+.sim-symfreq-table .sim-symfreq-row {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.sim-symfreq-table .sim-symfreq-row:hover td {
+  background: rgba(90,61,176,0.05);
+}
+.sim-symfreq-table .sim-symfreq-row.is-selected td {
+  background: rgba(90,61,176,0.12);
+  font-weight: 600;
+}
+.sim-symfreq-table .sim-symfreq-row.is-selected td:first-child {
+  border-left: 3px solid var(--accent-hex);
+  padding-left: calc(0.5em - 3px);
+}
+
+/* RTP 貢獻 cell(數值上面 + mini bar 下面) */
+.sim-rtp-cell {
+  position: relative;
+  min-width: 90px;
+}
+.sim-rtp-cell strong {
+  display: block;
+  color: var(--accent-hex);
+  font-weight: 700;
+}
+.sim-rtp-mini-bar {
+  height: 4px;
+  margin-top: 3px;
+  background: rgba(0,0,0,0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.sim-rtp-mini-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-hex), #b399ff);
+  border-radius: 2px;
+}
+
+/* ── Detail Panel ── */
+.sim-symbol-detail-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(90,61,176,0.06), rgba(179,153,255,0.06));
+  border: 1px solid rgba(90,61,176,0.20);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-sm);
+  animation: simSymDetailIn 220ms ease;
+}
+@keyframes simSymDetailIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sim-symbol-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(90,61,176,0.15);
+}
+.sim-symbol-detail-id {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-hex);
+  padding: 3px 10px;
+  background: rgba(90,61,176,0.10);
+  border-radius: var(--r-pill);
+}
+.sim-symbol-detail-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sim-symbol-detail-type {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-light);
+  padding: 2px 8px;
+  background: rgba(255,255,255,0.55);
+  border-radius: var(--r-pill);
+}
+.sim-symbol-detail-close {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.85);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sim-symbol-detail-close:hover {
+  background: #c0392b;
+  color: #ffffff;
+  border-color: #c0392b;
+}
+
+/* Single 模式:6-cell grid */
+.sim-symbol-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.sim-symbol-detail-cell {
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.72);
+  border-radius: var(--r-input);
+  min-width: 0;
+}
+.sim-symbol-detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.sim-symbol-detail-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.sim-symbol-detail-value-accent {
+  color: var(--accent-hex);
+}
+.sim-symbol-detail-sub {
+  font-size: 10px;
+  color: var(--text-light);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+/* Compare 模式:三欄 (A / B / Δ) */
+.sim-symbol-detail-panel-compare {
+  /* 與 single 共用基底,但內部 grid 不同 */
+}
+.sim-symbol-detail-compare-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sim-symbol-detail-compare-wrap .sim-symbol-detail-side-diff {
+  /* 第三欄(若有)橫跨整列底部 */
+  grid-column: 1 / -1;
+}
+.sim-symbol-detail-side {
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.72);
+  border-radius: var(--r-input);
+}
+.sim-symbol-detail-side-a {
+  border-left: 3px solid #c95810;  /* 比較模式的 A 色 */
+}
+.sim-symbol-detail-side-b {
+  border-left: 3px solid var(--accent-hex);  /* B 色 */
+}
+.sim-symbol-detail-side-diff {
+  background: rgba(95,169,255,0.06);
+  border-color: rgba(95,169,255,0.30);
+  border-left: 3px solid #4a93ee;
+}
+.sim-symbol-detail-side-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.sim-symbol-detail-side-a .sim-symbol-detail-side-label { color: #c95810; }
+.sim-symbol-detail-side-b .sim-symbol-detail-side-label { color: var(--accent-hex); }
+.sim-symbol-detail-side-diff .sim-symbol-detail-side-label { color: #4a93ee; }
+.sim-symbol-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 12px;
+  border-bottom: 1px dashed rgba(0,0,0,0.06);
+}
+.sim-symbol-detail-row:last-child { border-bottom: none; }
+.sim-symbol-detail-row span {
+  color: var(--text-light);
+}
+.sim-symbol-detail-row strong {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.sim-symbol-detail-empty {
+  padding: 14px 0;
+  font-size: 12px;
+  color: var(--text-light);
+  text-align: center;
+  font-style: italic;
+}
+/* Δ 增減顏色 */
+.sim-diff-up   { color: #27ae60 !important; }
+.sim-diff-down { color: #c0392b !important; }
+.sim-diff-eq   { color: var(--text-light) !important; }
+
+/* ──────────────── 暗色模式覆寫 ──────────────── */
+:root[data-theme="dark"] .sim-symfreq-hint {
+  color: var(--text-light);
+  background: rgba(150,180,255,0.10);
+  border-color: rgba(150,180,255,0.25);
+}
+:root[data-theme="dark"] .sim-symfreq-table .sim-symfreq-row:hover td {
+  background: rgba(179,153,255,0.08);
+}
+:root[data-theme="dark"] .sim-symfreq-table .sim-symfreq-row.is-selected td {
+  background: rgba(179,153,255,0.15);
+}
+:root[data-theme="dark"] .sim-symfreq-table .sim-symfreq-row.is-selected td:first-child {
+  border-left-color: #b399ff;
+}
+:root[data-theme="dark"] .sim-rtp-cell strong {
+  color: #b399ff;
+}
+:root[data-theme="dark"] .sim-rtp-mini-bar {
+  background: rgba(255,255,255,0.06);
+}
+:root[data-theme="dark"] .sim-rtp-mini-fill {
+  background: linear-gradient(90deg, #b399ff, #d4c0ff);
+}
+:root[data-theme="dark"] .sim-symbol-detail-panel {
+  background: linear-gradient(135deg, rgba(179,153,255,0.08), rgba(179,153,255,0.04));
+  border-color: rgba(179,153,255,0.30);
+}
+:root[data-theme="dark"] .sim-symbol-detail-header {
+  border-bottom-color: rgba(179,153,255,0.20);
+}
+:root[data-theme="dark"] .sim-symbol-detail-id {
+  color: #b399ff;
+  background: rgba(179,153,255,0.15);
+}
+:root[data-theme="dark"] .sim-symbol-detail-type {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .sim-symbol-detail-close {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .sim-symbol-detail-close:hover {
+  background: #c0392b;
+  color: #ffffff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-cell,
+:root[data-theme="dark"] .sim-symbol-detail-side {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-a {
+  border-left-color: #ffae6a;
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-a .sim-symbol-detail-side-label {
+  color: #ffae6a;
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-b {
+  border-left-color: #b399ff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-b .sim-symbol-detail-side-label {
+  color: #b399ff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-diff {
+  background: rgba(150,180,255,0.06);
+  border-color: rgba(150,180,255,0.30);
+  border-left-color: #96b4ff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-side-diff .sim-symbol-detail-side-label {
+  color: #96b4ff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-value-accent {
+  color: #b399ff;
+}
+:root[data-theme="dark"] .sim-symbol-detail-row {
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+:root[data-theme="dark"] .sim-diff-up   { color: #6cd99a !important; }
+:root[data-theme="dark"] .sim-diff-down { color: #ff9080 !important; }

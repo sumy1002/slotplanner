@@ -1,90 +1,151 @@
 /* ============================================================
-   theme.css — 1:1 對應 theme.py
-   全站樣式 + 設計 token，所有頁面共用
+   theme.css — v4.0 iOS Liquid Glass
+   全站樣式 + 設計 token (白灰玻璃 / 背景帶柔色光暈)
+   
+   重點變更 v4.0:
+   - 新增「玻璃層級系統」(--glass-1..5)
+   - 新增「模糊階梯」(--blur-thin/md/thick/overlay,含 saturate)
+   - 新增「iOS inset highlight」(--inset-glass)
+   - 圓角收斂為 5 階(--r-xs..xl)+ pill
+   - Motion token(--t-fast/base/slow,iOS spring 曲線)
+   - 舊 token 全部保留並 alias,既有頁面零 break
    ============================================================ */
 
 :root {
-  /* 背景漸層 — 微暖灰白(SHINee 青綠僅作點綴) */
-  --bg: #EEEDEA;
+  /* ── 背景漸層 — 帶柔和色彩光暈的白灰 ── */
+  --bg:     #EEEDEA;
   --bg-mid: #F4F3F0;
-  --bg-pink: #FBFAF8;
+  --bg-pink:#FBFAF8;
   --bg-end: #E9E8E4;
 
-  /* 玻璃面板 */
-  --glass-bg:  rgba(255,255,255,0.40);
-  --glass-brd: rgba(255,255,255,0.72);
+  /* ── 玻璃層級系統(亮模式)── */
+  /* 統一這 6 個層級,取代散布的 20+ 種透明度 */
+  --glass-1: rgba(255,255,255,0.32);   /* 底層 panel / 弱玻璃 */
+  --glass-2: rgba(255,255,255,0.48);   /* 一般 card */
+  --glass-3: rgba(255,255,255,0.62);   /* 互動元素 idle */
+  --glass-4: rgba(255,255,255,0.82);   /* hover/focus */
+  --glass-5: rgba(255,255,255,0.94);   /* modal 內容 */
+  --glass-edge: rgba(255,255,255,0.85); /* 邊框/高光 */
+
+  /* 舊 token alias(向後相容)*/
+  --glass-bg:  var(--glass-2);
+  --glass-brd: var(--glass-edge);
   --glass-top: rgba(255,255,255,1.0);
 
-  /* 側邊欄 */
-  --sidebar-bg:  rgba(255,255,255,0.42);
-  --sidebar-brd: rgba(255,255,255,0.70);
+  /* ── 側邊欄 ── */
+  --sidebar-bg:  var(--glass-2);
+  --sidebar-brd: var(--glass-edge);
 
-  /* Accent — SHINee 珍珠青綠 */
-  --accent:     rgba(74,210,180,0.34);
-  --accent-brd: rgba(74,210,180,0.60);
+  /* ── Accent — 克制的青綠(玻璃化主軸,色彩讓背景光暈來給)── */
+  --accent:     rgba(74,210,180,0.32);
+  --accent-brd: rgba(74,210,180,0.56);
   --accent-hex: #0f6e56;
-  --hover:      rgba(150,225,205,0.48);
+  --hover:      rgba(150,225,205,0.46);
   --press:      rgba(74,210,180,0.40);
 
-  /* 危險色 */
+  /* ── 危險色 ── */
   --danger:      rgba(255,200,200,0.42);
   --danger-brd:  rgba(255,150,150,0.60);
   --danger-text: #8a2020;
 
-  /* 文字 — 中性微暖黑灰 */
+  /* ── 文字 ── */
   --text:        #2b2a27;
   --text-light:  rgba(70,68,62,0.58);
   --text-muted:  rgba(70,68,62,0.40);
-  --nav-inactive: rgba(70,68,62,0.52);
+  --nav-inactive:rgba(70,68,62,0.52);
 
-  /* 輸入框 */
-  --input-bg:        rgba(255,255,255,0.58);
-  --input-brd:       rgba(255,255,255,0.80);
+  /* ── 輸入框 ── */
+  --input-bg:        var(--glass-3);
+  --input-brd:       var(--glass-edge);
   --input-focus:     rgba(225,250,244,0.65);
   --input-focus-brd: rgba(110,215,190,0.70);
   --input-err-bg:    rgba(255,220,220,0.50);
   --input-err-brd:   rgba(220,120,120,0.60);
 
-  --card-brd: rgba(255,255,255,0.78);
-  --content-bg: rgba(255,255,255,0.18);
-  --left-pane-bg: rgba(244,243,239,0.60);
+  --card-brd:    var(--glass-edge);
+  --content-bg:  rgba(255,255,255,0.18);
+  --left-pane-bg:rgba(244,243,239,0.55);
 
-  /* 語意狀態 */
+  /* ── 語意狀態 ── */
   --ok-bg:   rgba(200,240,220,0.38);
   --ok-text: #2d6b50;
   --ok-dot:  rgba(100,200,150,0.85);
   --err-bg:  rgba(255,200,200,0.38);
   --err-text:#7a2020;
   --err-dot: rgba(220,100,100,0.80);
-  --wait-bg: rgba(255,255,255,0.30);
+  --wait-bg: var(--glass-1);
   --wait-dot:rgba(74,210,180,0.80);
 
-  /* DropZone */
+  /* ── DropZone ── */
   --drop-default: rgba(255,255,255,0.28);
   --drop-drag:    rgba(150,225,205,0.30);
   --drop-selected:rgba(200,240,220,0.32);
 
   --divider: rgba(70,68,62,0.12);
 
-  /* 半徑 */
-  --r-card:  18px;
-  --r-btn:   13px;
-  --r-input: 10px;
-  --r-pill:  999px;
+  /* ── 圓角階梯(收斂到 5 階)── */
+  --r-xs:   6px;   /* chip/badge */
+  --r-sm:  10px;   /* input/小按鈕 */
+  --r-md:  14px;   /* 按鈕、tab */
+  --r-lg:  20px;   /* card / panel */
+  --r-xl:  24px;   /* modal */
+  --r-pill: 999px;
 
-  /* 玻璃陰影 */
-  --shadow-lg:
-    inset 0 2px 0 rgba(255,255,255,1),
-    inset 0 -1.5px 0 rgba(120,115,105,0.16),
-    0 4px 18px rgba(90,85,75,0.14),
-    0 1px 4px rgba(90,85,75,0.10);
-  --shadow-md:
-    inset 0 1.5px 0 rgba(255,255,255,1),
-    inset 0 -1px 0 rgba(120,115,105,0.14),
-    0 2px 10px rgba(90,85,75,0.11);
+  /* 舊 token alias */
+  --r-card:  var(--r-lg);
+  --r-btn:   var(--r-md);
+  --r-input: var(--r-sm);
+
+  /* ── iOS 26 風 模糊階梯(blur + saturate)── */
+  /* 注意:saturate(180%) 是 iOS 玻璃的靈魂,讓底色穿透時更鮮 */
+  --blur-thin:    blur(12px) saturate(180%);
+  --blur-md:      blur(24px) saturate(180%);
+  --blur-thick:   blur(40px) saturate(190%);
+  --blur-overlay: blur(56px) saturate(200%);
+
+  /* ── iOS inset highlight 系統 ── */
+  /* glass-inset:面板/卡片用,上緣亮帶 + 1px 內框 + 下緣微反射 */
+  --inset-glass:
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.04);
+  /* btn-inset:按鈕用,上緣高光更明顯,下緣壓深感 */
+  --inset-btn:
+    inset 0 1px 0 rgba(255,255,255,0.92),
+    inset 0 -1px 0 rgba(0,0,0,0.06);
+
+  /* ── 玻璃陰影 ── */
   --shadow-sm:
-    inset 0 1px 0 rgba(255,255,255,0.95),
-    0 1px 4px rgba(90,85,75,0.09);
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    0 1px 3px rgba(60,55,45,0.06),
+    0 0 0 0.5px rgba(255,255,255,0.4);
+  --shadow-md:
+    inset 0 1px 0 rgba(255,255,255,0.90),
+    inset 0 -0.5px 0 rgba(0,0,0,0.04),
+    0 3px 12px rgba(60,55,45,0.08),
+    0 1px 3px rgba(60,55,45,0.05);
+  --shadow-lg:
+    inset 0 1.5px 0 rgba(255,255,255,0.95),
+    inset 0 -1px 0 rgba(0,0,0,0.05),
+    0 8px 28px rgba(60,55,45,0.12),
+    0 2px 6px rgba(60,55,45,0.06);
+  --shadow-xl:
+    inset 0 1.5px 0 rgba(255,255,255,1),
+    inset 0 -1px 0 rgba(0,0,0,0.06),
+    0 20px 60px rgba(60,55,45,0.18),
+    0 4px 12px rgba(60,55,45,0.10);
+
+  /* ── Motion(iOS spring 曲線)── */
+  /* cubic-bezier(0.32, 0.72, 0, 1) 是 iOS 標準緩動 */
+  --ease-ios:    cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 彈跳 */
+  --t-fast: 140ms var(--ease-ios);
+  --t-base: 240ms var(--ease-ios);
+  --t-slow: 380ms var(--ease-ios);
+  --t-pop:  340ms var(--ease-spring);
+
+  /* ── focus ring(全站統一)── */
+  --focus-ring: 0 0 0 4px rgba(74,210,180,0.22);
 }
 
 * { box-sizing: border-box; }
@@ -96,17 +157,32 @@ html, body {
   background:
     linear-gradient(135deg, var(--bg) 0%, var(--bg-mid) 35%, var(--bg-pink) 65%, var(--bg-end) 100%);
   overflow: hidden;
+  /* iOS 觸控反饋去掉 */
+  -webkit-tap-highlight-color: transparent;
+  /* 字型平滑 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* 漸層光球 */
+/* ============================================================
+   背景柔色光暈 — 加強版,讓玻璃透出時有顏色穿透感
+   ============================================================ */
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(circle 700px at -10% -15%, rgba(225,222,214,0.40), transparent 60%),
-    radial-gradient(circle 750px at 95% 75%,   rgba(235,233,226,0.38), transparent 60%),
-    radial-gradient(circle 400px at 35% 20%,   rgba(245,244,240,0.40), transparent 60%),
-    radial-gradient(circle 320px at 5% 65%,    rgba(120,225,200,0.10), transparent 60%),
-    radial-gradient(circle 350px at 75% -5%,   rgba(225,222,214,0.36), transparent 60%);
+    radial-gradient(circle 720px at -8% -12%,  rgba(180,220,210,0.45), transparent 55%),
+    radial-gradient(circle 780px at 96% 72%,   rgba(220,200,235,0.42), transparent 60%),
+    radial-gradient(circle 420px at 38% 22%,   rgba(255,225,210,0.38), transparent 60%),
+    radial-gradient(circle 340px at 6% 68%,    rgba(140,220,200,0.28), transparent 60%),
+    radial-gradient(circle 380px at 78% -8%,   rgba(230,215,200,0.40), transparent 60%),
+    radial-gradient(circle 280px at 52% 90%,   rgba(200,225,240,0.32), transparent 60%);
+  /* 微微飄動 */
+  animation: bgFloat 32s ease-in-out infinite alternate;
+}
+@keyframes bgFloat {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-12px, 8px, 0) scale(1.04); }
 }
 
 .ring {
@@ -115,7 +191,7 @@ body::before {
 }
 
 /* ============================================================
-   App shell
+   App shell — iOS 26 厚玻璃
    ============================================================ */
 .app {
   position: relative; z-index: 1;
@@ -125,14 +201,27 @@ body::before {
 
 .card-shell {
   flex: 1;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-brd);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  position: relative;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: var(--blur-thick);
+  -webkit-backdrop-filter: var(--blur-thick);
   display: flex;
   overflow: hidden;
+}
+/* card-shell 頂部 1px 鏡面高光帶 */
+.card-shell::before {
+  content: '';
+  position: absolute; top: 0; left: 14%; right: 14%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.95) 50%,
+    transparent 100%);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* ============================================================
@@ -141,11 +230,13 @@ body::before {
 .sidebar {
   width: 192px;
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-brd);
+  border-right: 0.5px solid var(--sidebar-brd);
   padding: 18px 10px 14px;
   display: flex; flex-direction: column;
   gap: 2px;
-  transition: width 0.22s ease;
+  transition: width var(--t-base);
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
 }
 .sidebar.collapsed { width: 58px; padding: 18px 6px 14px; }
 
@@ -161,9 +252,9 @@ body::before {
   margin-left: auto; width: 22px; height: 22px;
   background: transparent; border: none; cursor: pointer;
   color: var(--text-light); font-size: 14px;
-  border-radius: 6px; transition: background 0.15s;
+  border-radius: var(--r-xs); transition: background var(--t-fast), color var(--t-fast);
 }
-.sidebar-title .collapse-btn:hover { background: rgba(255,255,255,0.50); color: var(--text); }
+.sidebar-title .collapse-btn:hover { background: var(--glass-3); color: var(--text); }
 
 .sidebar.collapsed .logo,
 .sidebar.collapsed .nav-label { display: none; }
@@ -171,22 +262,24 @@ body::before {
 .nav-btn {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--r-sm);
   font-size: 12px; font-weight: 500;
   color: var(--nav-inactive);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
   white-space: nowrap;
+  position: relative;
 }
 .sidebar.collapsed .nav-btn {
   justify-content: center; padding: 9px 4px;
 }
-.nav-btn:hover { background: rgba(255,255,255,0.50); color: var(--text); }
+.nav-btn:hover { background: var(--glass-3); color: var(--text); }
+.nav-btn:active { transform: scale(0.97); }
 .nav-btn.active {
   background: var(--accent);
   color: var(--accent-hex);
   font-weight: 700;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--inset-btn), 0 2px 8px rgba(74,210,180,0.18);
 }
 .nav-divider { height: 1px; background: var(--divider); margin: 8px 4px; }
 
@@ -203,9 +296,11 @@ body::before {
   height: 50px;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 22px;
-  background: rgba(255,255,255,0.38);
-  border-bottom: 1px solid var(--glass-brd);
+  background: var(--glass-2);
+  border-bottom: 0.5px solid var(--glass-edge);
   flex-shrink: 0;
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
 }
 .topbar .title {
   font-size: 14px; font-weight: 700; color: var(--accent-hex);
@@ -218,64 +313,122 @@ body::before {
   display: flex; align-items: center;
   padding: 6px 22px;
   background: rgba(255,255,255,0.22);
-  border-top: 1px solid var(--divider);
+  border-top: 0.5px solid var(--divider);
   flex-shrink: 0;
 }
 
 .status {
   display: inline-flex; align-items: center; gap: 8px;
-  border-radius: 10px; padding: 4px 12px;
+  border-radius: var(--r-sm); padding: 4px 12px;
   font-size: 12px; font-weight: 500;
   box-shadow: var(--shadow-sm);
 }
 .status .dot { width: 8px; height: 8px; border-radius: 50%; }
-.status.wait { background: var(--wait-bg); color: var(--text); border: 1px solid var(--glass-brd); }
+.status.wait { background: var(--wait-bg); color: var(--text); border: 0.5px solid var(--glass-edge); }
 .status.wait .dot { background: var(--wait-dot); }
-.status.ok   { background: var(--ok-bg); color: var(--ok-text); border: 1px solid rgba(100,200,150,0.55); }
+.status.ok   { background: var(--ok-bg); color: var(--ok-text); border: 0.5px solid rgba(100,200,150,0.55); }
 .status.ok   .dot { background: var(--ok-dot); }
-.status.err  { background: var(--err-bg); color: var(--err-text); border: 1px solid rgba(220,120,120,0.60); }
+.status.err  { background: var(--err-bg); color: var(--err-text); border: 0.5px solid rgba(220,120,120,0.60); }
 .status.err  .dot { background: var(--err-dot); }
 
 .content {
   flex: 1; overflow-y: auto; padding: 24px 32px;
   min-height: 0;
+  position: relative;
 }
 .content.no-pad { padding: 0; }
 
 /* ============================================================
-   通用元件 — 按鈕
+   通用元件 — 玻璃按鈕家族 .btn-glass (iOS 風)
+   舊 class (.btn / .btn-pill / .btn-browse) 透過 alias 套用
+   ============================================================ */
+.btn-glass {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 0 16px; height: 36px;
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-ios), box-shadow var(--t-fast);
+  outline: none;
+  user-select: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-glass:hover {
+  background: var(--glass-4);
+  border-color: rgba(255,255,255,0.95);
+  transform: translateY(-0.5px);
+  box-shadow: var(--shadow-md);
+}
+.btn-glass:active {
+  transform: scale(0.96);
+  transition-duration: 80ms;
+  box-shadow: var(--shadow-sm);
+}
+.btn-glass:focus-visible {
+  box-shadow: var(--focus-ring), var(--shadow-md);
+}
+.btn-glass:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+/* size 變體 */
+.btn-glass.is-sm  { height: 28px; font-size: 11.5px; padding: 0 12px; border-radius: var(--r-sm); }
+.btn-glass.is-lg  { height: 44px; font-size: 14px;   padding: 0 22px; }
+.btn-glass.is-pill{ border-radius: var(--r-pill); }
+.btn-glass.is-icon{ width: 36px; padding: 0; }
+/* tone 變體 */
+.btn-glass.is-primary { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); }
+.btn-glass.is-primary:hover { background: var(--hover); }
+.btn-glass.is-danger  { background: var(--danger); border-color: var(--danger-brd); color: var(--danger-text); }
+.btn-glass.is-ghost   { background: transparent; box-shadow: none; border-color: transparent; }
+.btn-glass.is-ghost:hover { background: var(--glass-3); border-color: var(--glass-edge); }
+
+/* ============================================================
+   舊按鈕類 — alias 到 btn-glass 行為(template 零改動)
    ============================================================ */
 .btn {
   font-family: inherit; font-size: 13px; font-weight: 600;
-  border-radius: var(--r-btn); padding: 9px 18px;
+  border-radius: var(--r-md); padding: 9px 18px;
   cursor: pointer; outline: none;
-  transition: background 0.15s, border-color 0.15s, transform 0.08s, box-shadow 0.08s;
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-ios), box-shadow var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-primary {
-  background: var(--accent); border: 1px solid var(--accent-brd); color: var(--accent-hex);
-  box-shadow: var(--shadow-lg);
+  background: var(--accent); border: 0.5px solid var(--accent-brd); color: var(--accent-hex);
+  box-shadow: var(--shadow-md);
 }
-.btn-primary:hover  { background: var(--hover); border-color: rgba(110,215,190,0.72); }
-.btn-primary:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+.btn-primary:hover  { background: var(--hover); border-color: rgba(110,215,190,0.72); transform: translateY(-0.5px); box-shadow: var(--shadow-lg); }
+.btn-primary:active { transform: scale(0.96); box-shadow: var(--shadow-sm); }
+.btn-primary:focus-visible { box-shadow: var(--focus-ring), var(--shadow-md); }
 .btn-primary.big { padding: 12px 28px; font-size: 14px; }
 
 .btn-secondary {
-  background: rgba(255,255,255,0.60);
-  border: 1px solid rgba(255,255,255,0.88);
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
   color: var(--text);
   box-shadow: var(--shadow-md);
 }
-.btn-secondary:hover  { background: rgba(245,244,240,0.85); border-color: rgba(70,68,62,0.22); }
-.btn-secondary:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+.btn-secondary:hover  { background: var(--glass-4); transform: translateY(-0.5px); box-shadow: var(--shadow-lg); }
+.btn-secondary:active { transform: scale(0.96); box-shadow: var(--shadow-sm); }
+.btn-secondary:focus-visible { box-shadow: var(--focus-ring), var(--shadow-md); }
 
 .btn-danger {
   background: var(--danger);
-  border: 1px solid var(--danger-brd);
+  border: 0.5px solid var(--danger-brd);
   color: var(--danger-text);
   box-shadow: var(--shadow-md);
 }
-.btn-danger:hover  { background: rgba(255,180,180,0.52); border-color: rgba(220,100,100,0.70); }
-.btn-danger:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.70); }
+.btn-danger:hover  { background: rgba(255,180,180,0.55); border-color: rgba(220,100,100,0.70); transform: translateY(-0.5px); }
+.btn-danger:active { transform: scale(0.96); }
+.btn-danger:focus-visible { box-shadow: 0 0 0 4px rgba(220,120,120,0.25), var(--shadow-md); }
 
 .btn:disabled {
   background: rgba(210,208,202,0.38) !important;
@@ -287,32 +440,35 @@ body::before {
 
 .btn-browse {
   width: 44px; height: 42px; padding: 0; font-size: 16px;
-  background: rgba(255,255,255,0.60);
-  border: 1px solid rgba(255,255,255,0.88);
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
   color: var(--accent-hex);
-  border-radius: var(--r-btn);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-md);
   cursor: pointer;
-  transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+  transition: background var(--t-fast), transform 120ms var(--ease-ios), box-shadow var(--t-fast);
 }
-.btn-browse:hover  { background: rgba(245,244,240,0.85); }
-.btn-browse:active { transform: translate(1px, 1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.80); }
+.btn-browse:hover  { background: var(--glass-4); transform: translateY(-0.5px); box-shadow: var(--shadow-lg); }
+.btn-browse:active { transform: scale(0.96); box-shadow: var(--shadow-sm); }
 
-/* 小膠囊按鈕（toolbar 用） */
+/* 小膠囊按鈕 */
 .btn-pill {
   height: 30px; padding: 0 12px;
-  border-radius: var(--r-btn);
-  background: rgba(255,255,255,0.60);
-  border: 1px solid rgba(255,255,255,0.88);
+  border-radius: var(--r-md);
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
   color: var(--accent-hex);
   font-size: 12px; font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
   box-shadow: var(--shadow-sm);
-  transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+  transition: background var(--t-fast), transform 120ms var(--ease-ios), box-shadow var(--t-fast);
   font-family: inherit;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn-pill:hover  { background: rgba(245,244,240,0.85); }
-.btn-pill:active { transform: translate(1px, 1px); }
+.btn-pill:hover  { background: var(--glass-4); transform: translateY(-0.5px); }
+.btn-pill:active { transform: scale(0.95); }
+.btn-pill:focus-visible { box-shadow: var(--focus-ring), var(--shadow-sm); }
 .btn-pill:disabled {
   background: rgba(255,255,255,0.25) !important;
   color: rgba(70,68,62,0.30) !important;
@@ -326,19 +482,21 @@ body::before {
    ============================================================ */
 .input {
   background: var(--input-bg);
-  border: 1px solid var(--input-brd);
-  border-radius: 9px;
+  border: 0.5px solid var(--input-brd);
+  border-radius: var(--r-sm);
   padding: 0 12px; height: 42px;
   font-size: 13px; color: var(--text);
   outline: none; font-family: inherit;
   box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
   width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .input:focus {
   border-color: var(--input-focus-brd);
   background: var(--input-focus);
-  border-width: 1.5px;
+  box-shadow: var(--focus-ring), var(--shadow-sm);
 }
 .input.err {
   border-color: var(--input-err-brd);
@@ -352,6 +510,16 @@ body::before {
   box-shadow: none;
 }
 .input-sm { height: 32px; font-size: 12px; padding: 0 10px; }
+
+/* select 玻璃化(統一箭頭)*/
+select.input,
+.input[type="select"] {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M3.5 5.5L7 9l3.5-3.5' stroke='%232b2a27' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
 
 .field-label {
   font-size: 13px; font-weight: 700; color: var(--text);
@@ -373,18 +541,23 @@ body::before {
   display: inline-flex; align-items: center; gap: 8px;
   cursor: pointer; font-size: 13px; color: var(--text);
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .chk input { display: none; }
 .chk .box {
   width: 16px; height: 16px; border-radius: 5px;
-  background: rgba(255,255,255,0.62);
-  border: 1px solid rgba(255,255,255,0.85);
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
   position: relative; flex: 0 0 16px;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-spring);
+  box-shadow: var(--inset-glass);
 }
+.chk:hover .box { transform: scale(1.08); }
 .chk input:checked + .box {
-  background: rgba(74,210,180,0.45);
-  border-color: rgba(74,210,180,0.70);
+  background: rgba(74,210,180,0.55);
+  border-color: rgba(74,210,180,0.80);
+  box-shadow: var(--inset-btn), 0 1px 3px rgba(74,210,180,0.30);
 }
 .chk input:checked + .box::after {
   content: ''; position: absolute;
@@ -392,6 +565,12 @@ body::before {
   width: 4.5px; height: 9px;
   border: solid white; border-width: 0 2px 2px 0;
   transform: rotate(42deg);
+  animation: chkPop 280ms var(--ease-spring);
+}
+@keyframes chkPop {
+  0%   { transform: rotate(42deg) scale(0); opacity: 0; }
+  60%  { transform: rotate(42deg) scale(1.2); opacity: 1; }
+  100% { transform: rotate(42deg) scale(1); opacity: 1; }
 }
 .chk.disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -399,11 +578,12 @@ body::before {
    DropZone
    ============================================================ */
 .drop {
-  border-radius: var(--r-btn);
+  border-radius: var(--r-md);
   padding: 28px;
   text-align: center;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-ios);
   user-select: none;
 }
 .drop.default {
@@ -413,11 +593,12 @@ body::before {
 .drop.drag {
   background: var(--drop-drag);
   border: 1.5px dashed rgba(74,210,180,0.60);
+  transform: scale(1.01);
 }
 .drop.selected {
   background: var(--drop-selected);
   border: 1.5px solid rgba(100,200,150,0.55);
-  box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9);
+  box-shadow: var(--inset-glass);
 }
 .drop .icon { font-size: 44px; margin-bottom: 6px; }
 .drop .main { font-size: 14px; font-weight: 700; color: var(--text); }
@@ -467,9 +648,11 @@ body::before {
   width: 240px;
   min-width: 200px;
   background: var(--left-pane-bg);
-  border-right: 1px solid rgba(255,255,255,0.55);
+  border-right: 0.5px solid var(--glass-edge);
   display: flex; flex-direction: column;
   flex-shrink: 0;
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
 }
 .sym-right {
   flex: 1;
@@ -482,8 +665,8 @@ body::before {
   height: 46px;
   display: flex; align-items: center; gap: 6px;
   padding: 0 10px;
-  background: rgba(255,255,255,0.38);
-  border-bottom: 1px solid var(--glass-brd);
+  background: var(--glass-2);
+  border-bottom: 0.5px solid var(--glass-edge);
   flex-shrink: 0;
 }
 .sym-toolbar .spacer { flex: 1; }
@@ -497,25 +680,27 @@ body::before {
 .sym-item {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 9px;
-  background: var(--input-bg);
-  border: 1.5px solid var(--card-brd);
-  border-radius: 10px;
+  background: var(--glass-3);
+  border: 0.5px solid var(--card-brd);
+  border-radius: var(--r-sm);
   cursor: pointer;
-  box-shadow: var(--shadow-md);
-  transition: border-color 0.15s, background 0.15s, transform 0.06s;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--t-fast), background var(--t-fast),
+              transform 120ms var(--ease-ios);
 }
 .sym-item:hover {
   border-color: var(--hover);
-  background: var(--input-focus);
+  background: var(--glass-4);
+  transform: translateY(-0.5px);
 }
 .sym-item.selected {
   border-color: var(--accent-brd);
   background: var(--press);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--inset-btn), 0 2px 8px rgba(74,210,180,0.18);
 }
 .sym-swatch {
   width: 34px; height: 34px;
-  border-radius: 7px;
+  border-radius: var(--r-xs);
   border: 1.5px solid var(--card-brd);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700;
@@ -541,7 +726,7 @@ body::before {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 12px;
   background: rgba(255,255,255,0.22);
-  border-top: 1px solid var(--divider);
+  border-top: 0.5px solid var(--divider);
   font-size: 11px; color: var(--text-light);
   flex-shrink: 0;
 }
@@ -571,11 +756,12 @@ body::before {
 /* Swatch 主預覽 */
 .sym-swatch-preview {
   width: 60px; height: 60px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   border: 1.5px solid var(--card-brd);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 700;
   flex-shrink: 0;
+  box-shadow: var(--inset-glass);
 }
 
 /* Swatch grid */
@@ -588,13 +774,13 @@ body::before {
 }
 .swatch-cell {
   width: 25px; height: 25px;
-  border-radius: 6px;
+  border-radius: var(--r-xs);
   border: 1.5px solid rgba(255,255,255,0.65);
   cursor: pointer;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.1s, border-color 0.15s;
+  transition: transform 120ms var(--ease-spring), border-color var(--t-fast);
 }
-.swatch-cell:hover { transform: scale(1.12); }
+.swatch-cell:hover { transform: scale(1.15); }
 .swatch-cell.selected {
   border-color: var(--accent-hex);
   border-width: 2.5px;
@@ -615,7 +801,7 @@ body::before {
     var(--accent) var(--val, 50%),
     rgba(255,255,255,0.40) var(--val, 50%),
     rgba(255,255,255,0.40) 100%);
-  border: 1px solid rgba(255,255,255,0.80);
+  border: 0.5px solid var(--glass-edge);
   outline: none;
   box-shadow: inset 0 1px 2px rgba(90,85,75,0.10);
 }
@@ -627,7 +813,10 @@ body::before {
   border: 1.5px solid var(--accent-brd);
   cursor: grab;
   box-shadow: 0 2px 6px rgba(40,160,135,0.30);
+  transition: transform 120ms var(--ease-spring);
 }
+.weight-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.weight-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(0.95); }
 .weight-slider::-moz-range-thumb {
   width: 18px; height: 18px;
   border-radius: 50%;
@@ -640,9 +829,9 @@ body::before {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px; color: var(--accent-hex); font-weight: 700;
   min-width: 44px; text-align: right;
-  background: rgba(255,255,255,0.50);
-  border: 1px solid var(--card-brd);
-  border-radius: 6px;
+  background: var(--glass-3);
+  border: 0.5px solid var(--card-brd);
+  border-radius: var(--r-xs);
   padding: 3px 8px;
 }
 
@@ -663,29 +852,21 @@ body::before {
    動畫
    ============================================================ */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-enter { animation: rise 0.35s ease both; }
+.fade-enter { animation: rise 380ms var(--ease-ios) both; }
+
+@keyframes pop {
+  0%   { transform: scale(0.92); opacity: 0; }
+  60%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 
 /* ============================================================
-   自訂 Scrollbar
+   全域 Scrollbar — iOS 玻璃風(細節在 modules/scrollbar.css)
+   留這裡的選擇性 override 已被 modules/scrollbar.css 接手
    ============================================================ */
-.content::-webkit-scrollbar,
-.sym-list::-webkit-scrollbar,
-.sym-edit::-webkit-scrollbar { width: 8px; }
-.content::-webkit-scrollbar-track,
-.sym-list::-webkit-scrollbar-track,
-.sym-edit::-webkit-scrollbar-track { background: transparent; }
-.content::-webkit-scrollbar-thumb,
-.sym-list::-webkit-scrollbar-thumb,
-.sym-edit::-webkit-scrollbar-thumb {
-  background: rgba(74,210,180,0.40);
-  border-radius: 4px;
-}
-.content::-webkit-scrollbar-thumb:hover,
-.sym-list::-webkit-scrollbar-thumb:hover,
-.sym-edit::-webkit-scrollbar-thumb:hover { background: rgba(74,210,180,0.60); }
 
 /* ============================================================
    小工具
@@ -693,9 +874,21 @@ body::before {
 code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  background: rgba(255,255,255,0.45);
+  background: var(--glass-3);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   color: var(--accent-hex);
 }
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+/* ============================================================
+   降低動畫(系統偏好)
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  body::before { animation: none !important; }
+}
