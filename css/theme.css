@@ -12,23 +12,21 @@
    ============================================================ */
 
 :root {
-  /* ── 背景漸層 — v4.1 鮮藍液態玻璃底(玻璃透出顏色)── */
-  /* 飽和藍青漸層,透過 card-shell 的 40px blur 在面板下化為柔色光,
-     gutter(殼外 16px)則直接呈現鮮豔藍。 */
-  --bg:     #4fa6e8;   /* 亮天空藍青 */
-  --bg-mid: #3f82e2;   /* 主藍 */
-  --bg-pink:#5d7ff0;   /* 偏紫藍(legacy 命名,值已重新定義) */
-  --bg-end: #3258c6;   /* 深靛藍 */
+  /* ── 背景漸層 — v4.2 霧藍 × 陶土橘(低飽和撞色)── */
+  /* 冷霧藍往暖陶土橘漸變,透過 card-shell 厚 blur 在面板下化為柔色光。 */
+  --bg:     #b8c6d2;   /* 霧藍 */
+  --bg-mid: #a8b8c8;   /* 中霧藍 */
+  --bg-pink:#c8b4a0;   /* 陶土過渡(legacy 命名保留) */
+  --bg-end: #ccb4a0;   /* 陶土橘 */
 
   /* ── 玻璃層級系統(亮模式)── */
-  /* 統一這 6 個層級,取代散布的 20+ 種透明度
-     v4.1:底層三階略降白度,讓鮮藍底色透出更明顯 */
-  --glass-1: rgba(255,255,255,0.26);   /* 底層 panel / 弱玻璃 */
-  --glass-2: rgba(255,255,255,0.42);   /* 一般 card */
-  --glass-3: rgba(255,255,255,0.56);   /* 互動元素 idle */
-  --glass-4: rgba(255,255,255,0.80);   /* hover/focus */
-  --glass-5: rgba(255,255,255,0.94);   /* modal 內容 */
-  --glass-edge: rgba(255,255,255,0.88); /* 邊框/高光 */
+  /* v4.2 霧藍底色較淺,玻璃白度略提高讓面板清晰浮現 */
+  --glass-1: rgba(255,255,255,0.32);   /* 底層 panel / 弱玻璃 */
+  --glass-2: rgba(255,255,255,0.48);   /* 一般 card */
+  --glass-3: rgba(255,255,255,0.62);   /* 互動元素 idle */
+  --glass-4: rgba(255,255,255,0.84);   /* hover/focus */
+  --glass-5: rgba(255,255,255,0.95);   /* modal 內容 */
+  --glass-edge: rgba(255,255,255,0.90); /* 邊框/高光 */
 
   /* 舊 token alias(向後相容)*/
   --glass-bg:  var(--glass-2);
@@ -39,12 +37,12 @@
   --sidebar-bg:  var(--glass-2);
   --sidebar-brd: var(--glass-edge);
 
-  /* ── Accent — 克制的青綠(玻璃化主軸,色彩讓背景光暈來給)── */
-  --accent:     rgba(74,210,180,0.32);
-  --accent-brd: rgba(74,210,180,0.56);
-  --accent-hex: #0f6e56;
-  --hover:      rgba(150,225,205,0.46);
-  --press:      rgba(74,210,180,0.40);
+  /* ── Accent — 陶土橘(撞色主軸,呼應背景右側光暈)── */
+  --accent:     rgba(190,130,105,0.28);
+  --accent-brd: rgba(190,130,105,0.55);
+  --accent-hex: #7a3c20;   /* 深陶土,文字用 */
+  --hover:      rgba(210,155,125,0.40);
+  --press:      rgba(190,130,105,0.38);
 
   /* ── 危險色 ── */
   --danger:      rgba(255,200,200,0.42);
@@ -52,39 +50,39 @@
   --danger-text: #8a2020;
 
   /* ── 文字 ── */
-  --text:        #2b2a27;
-  --text-light:  rgba(70,68,62,0.58);
-  --text-muted:  rgba(70,68,62,0.40);
-  --nav-inactive:rgba(70,68,62,0.52);
+  --text:        #1e2830;   /* 深藍灰,冷調 */
+  --text-light:  rgba(30,40,48,0.55);
+  --text-muted:  rgba(30,40,48,0.38);
+  --nav-inactive:rgba(30,40,48,0.48);
 
   /* ── 輸入框 ── */
   --input-bg:        var(--glass-3);
   --input-brd:       var(--glass-edge);
-  --input-focus:     rgba(225,250,244,0.65);
-  --input-focus-brd: rgba(110,215,190,0.70);
+  --input-focus:     rgba(240,225,215,0.70);
+  --input-focus-brd: rgba(190,130,105,0.62);
   --input-err-bg:    rgba(255,220,220,0.50);
   --input-err-brd:   rgba(220,120,120,0.60);
 
   --card-brd:    var(--glass-edge);
-  --content-bg:  rgba(255,255,255,0.18);
-  --left-pane-bg:rgba(244,243,239,0.55);
+  --content-bg:  rgba(255,255,255,0.22);
+  --left-pane-bg:rgba(210,220,228,0.45);
 
   /* ── 語意狀態 ── */
-  --ok-bg:   rgba(200,240,220,0.38);
-  --ok-text: #2d6b50;
-  --ok-dot:  rgba(100,200,150,0.85);
+  --ok-bg:   rgba(180,215,195,0.38);
+  --ok-text: #1e5a3a;
+  --ok-dot:  rgba(80,175,125,0.85);
   --err-bg:  rgba(255,200,200,0.38);
   --err-text:#7a2020;
   --err-dot: rgba(220,100,100,0.80);
   --wait-bg: var(--glass-1);
-  --wait-dot:rgba(74,210,180,0.80);
+  --wait-dot:rgba(190,130,105,0.80);
 
   /* ── DropZone ── */
-  --drop-default: rgba(255,255,255,0.28);
-  --drop-drag:    rgba(150,225,205,0.30);
-  --drop-selected:rgba(200,240,220,0.32);
+  --drop-default: rgba(255,255,255,0.32);
+  --drop-drag:    rgba(210,155,125,0.28);
+  --drop-selected:rgba(190,215,200,0.32);
 
-  --divider: rgba(70,68,62,0.12);
+  --divider: rgba(30,40,48,0.10);
 
   /* ── 圓角階梯(收斂到 5 階)── */
   --r-xs:   6px;   /* chip/badge */
@@ -148,7 +146,7 @@
   --t-pop:  340ms var(--ease-spring);
 
   /* ── focus ring(全站統一)── */
-  --focus-ring: 0 0 0 4px rgba(74,210,180,0.22);
+  --focus-ring: 0 0 0 4px rgba(190,130,105,0.22);
 
   /* ── v4.1 鏡面光帶(斜向掃過玻璃的高光)── */
   /* 大面玻璃用(card-shell / modal / 大卡片);各面以 opacity 調強弱。
@@ -181,20 +179,19 @@ html, body {
 }
 
 /* ============================================================
-   背景柔色光暈 — v4.1 鮮豔 bokeh 光球
-   飽和的青/藍/紫/桃光球,透過 card-shell 厚 blur 在面板下化為
-   iOS 風的色彩穿透。gutter 直接看到鮮豔光球。
+   背景柔色光暈 — v4.2 霧藍 × 陶土橘 低飽和光球
+   冷藍光球 + 暖陶土橘光球,透過 card-shell 厚 blur 在面板下
+   化為柔和色彩穿透。低飽和,耐看不刺眼。
    ============================================================ */
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(circle 760px at -6% -10%,  rgba(90,220,235,0.55),  transparent 56%),
-    radial-gradient(circle 820px at 98% 74%,   rgba(150,120,245,0.50), transparent 60%),
-    radial-gradient(circle 440px at 36% 20%,   rgba(120,180,255,0.45), transparent 60%),
-    radial-gradient(circle 380px at 8% 70%,    rgba(70,210,225,0.42),  transparent 60%),
-    radial-gradient(circle 420px at 80% -6%,   rgba(255,180,200,0.38), transparent 60%),
-    radial-gradient(circle 320px at 54% 92%,   rgba(120,150,250,0.40), transparent 60%);
-  /* 微微飄動 */
+    radial-gradient(circle 700px at -5% -8%,   rgba(140,175,205,0.60),  transparent 58%),
+    radial-gradient(circle 600px at 96% 80%,   rgba(195,145,115,0.52),  transparent 58%),
+    radial-gradient(circle 420px at 38% 18%,   rgba(155,190,215,0.45),  transparent 60%),
+    radial-gradient(circle 380px at 10% 72%,   rgba(120,155,185,0.40),  transparent 60%),
+    radial-gradient(circle 400px at 78% -5%,   rgba(210,165,135,0.42),  transparent 60%),
+    radial-gradient(circle 300px at 58% 94%,   rgba(185,135,110,0.38),  transparent 60%);
   animation: bgFloat 32s ease-in-out infinite alternate;
 }
 @keyframes bgFloat {
@@ -724,7 +721,7 @@ select.input,
 .sym-item.selected {
   border-color: var(--accent-brd);
   background: var(--press);
-  box-shadow: var(--inset-btn), 0 2px 8px rgba(74,210,180,0.18);
+  box-shadow: var(--inset-btn), 0 2px 8px rgba(190,130,105,0.20);
 }
 .sym-swatch {
   width: 34px; height: 34px;
@@ -812,7 +809,7 @@ select.input,
 .swatch-cell.selected {
   border-color: var(--accent-hex);
   border-width: 2.5px;
-  box-shadow: 0 0 0 2px rgba(74,210,180,0.40), var(--shadow-md);
+  box-shadow: 0 0 0 2px rgba(190,130,105,0.38), var(--shadow-md);
 }
 
 /* Weight slider */
@@ -840,7 +837,7 @@ select.input,
   background: white;
   border: 1.5px solid var(--accent-brd);
   cursor: grab;
-  box-shadow: 0 2px 6px rgba(40,160,135,0.30);
+  box-shadow: 0 2px 6px rgba(190,130,105,0.32);
   transition: transform 120ms var(--ease-spring);
 }
 .weight-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
@@ -851,7 +848,7 @@ select.input,
   background: white;
   border: 1.5px solid var(--accent-brd);
   cursor: grab;
-  box-shadow: 0 2px 6px rgba(40,160,135,0.30);
+  box-shadow: 0 2px 6px rgba(190,130,105,0.32);
 }
 .weight-val {
   font-family: 'JetBrains Mono', monospace;
