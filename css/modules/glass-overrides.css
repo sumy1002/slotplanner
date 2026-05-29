@@ -366,3 +366,144 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   opacity: 0.35;
 }
 
+
+/* ============================================================
+   15. Test Inspector — 對齊陶土橘主題 + 完整暗色覆寫
+   原本用 rgba(180,150,255,...) 紫色系,統一改為陶土橘
+   ============================================================ */
+
+/* 亮色:header 改用陶土橘調 */
+.cfg-inspector-header {
+  background: linear-gradient(to right, rgba(190,130,105,0.12), rgba(190,130,105,0.05));
+  border-bottom-color: rgba(190,130,105,0.25);
+}
+.cfg-inspector-header:hover {
+  background: linear-gradient(to right, rgba(190,130,105,0.20), rgba(190,130,105,0.08));
+}
+
+/* ctx toggle 改用陶土橘調 */
+.cfg-inspector-ctx-toggle {
+  background: var(--accent);
+  border-color: var(--accent-brd);
+  color: var(--text);
+}
+.cfg-inspector-ctx-toggle:hover {
+  background: var(--hover);
+}
+
+/* trace-row 預設改為玻璃白,與新系統一致 */
+.cfg-inspector-trace-row {
+  background: var(--glass-3);
+  border-color: rgba(190,130,105,0.08);
+}
+
+/* ── 暗色覆寫 ── */
+:root[data-theme="dark"] .cfg-inspector-dock {
+  background: rgba(24,24,30,0.97);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow:
+    0 14px 40px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+}
+:root[data-theme="dark"] .cfg-inspector-header {
+  background: linear-gradient(to right,
+    rgba(210,155,120,0.18), rgba(210,155,120,0.06));
+  border-bottom-color: rgba(210,155,120,0.28);
+}
+:root[data-theme="dark"] .cfg-inspector-header:hover {
+  background: linear-gradient(to right,
+    rgba(210,155,120,0.26), rgba(210,155,120,0.10));
+}
+:root[data-theme="dark"] .cfg-inspector-ctx-toggle {
+  background: rgba(210,155,120,0.10);
+  border-color: rgba(210,155,120,0.22);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-inspector-ctx-toggle:hover {
+  background: rgba(210,155,120,0.18);
+}
+:root[data-theme="dark"] .cfg-inspector-trace-row {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-inspector-trace-row.is-true {
+  background: rgba(80,185,110,0.12);
+  border-color: rgba(80,185,110,0.26);
+}
+:root[data-theme="dark"] .cfg-inspector-trace-row.is-false {
+  background: rgba(220,75,60,0.10);
+  border-color: rgba(220,75,60,0.24);
+}
+:root[data-theme="dark"] .cfg-inspector-result.is-true {
+  background: rgba(80,185,110,0.14);
+  border-color: rgba(80,185,110,0.36);
+  color: #7dd89a;
+}
+:root[data-theme="dark"] .cfg-inspector-result.is-false {
+  background: rgba(220,75,60,0.12);
+  border-color: rgba(220,75,60,0.36);
+  color: #ff9080;
+}
+:root[data-theme="dark"] .cfg-inspector-result.is-empty {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.12);
+}
+:root[data-theme="dark"] .cfg-inspector-result.is-error {
+  background: rgba(220,160,60,0.12);
+  border-color: rgba(220,160,60,0.36);
+  color: #ffc060;
+}
+:root[data-theme="dark"] .cfg-inspector-trace-row.is-true .cfg-inspector-trace-result { color: #7dd89a; }
+:root[data-theme="dark"] .cfg-inspector-trace-row.is-false .cfg-inspector-trace-result { color: #ff9080; }
+:root[data-theme="dark"] .cfg-inspector-trace-expr,
+:root[data-theme="dark"] .cfg-inspector-result-label { color: var(--text); }
+:root[data-theme="dark"] .cfg-inspector-body { background: transparent; }
+
+/* ============================================================
+   16. 側邊欄底部亮暗切換按鈕
+   ============================================================ */
+.sidebar-theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 10px;
+  background: var(--glass-1);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  text-align: left;
+  transition: background var(--t-fast), color var(--t-fast);
+  user-select: none;
+}
+.sidebar-theme-btn:hover {
+  background: var(--glass-3);
+  color: var(--text);
+}
+.sidebar-theme-btn:active {
+  transform: scale(0.97);
+}
+/* collapsed 時只顯示 icon,隱藏文字 */
+.sidebar.collapsed .sidebar-theme-btn {
+  justify-content: center;
+  padding: 7px 0;
+}
+.sidebar.collapsed .sidebar-theme-btn .nav-label {
+  display: none;
+}
+
+:root[data-theme="dark"] .sidebar-theme-btn {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.10);
+  color: rgba(210,220,228,0.55);
+}
+:root[data-theme="dark"] .sidebar-theme-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}

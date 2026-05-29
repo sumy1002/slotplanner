@@ -64,6 +64,13 @@
         <span class="pyodide-icon">{{ pyodideStatusIcon }}</span>
         <span class="nav-label pyodide-label">{{ pyodideStatusText }}</span>
       </div>
+
+      <!-- 側邊欄底部:亮暗切換 -->
+      <div style="flex:1"></div>
+      <button class="sidebar-theme-btn" @click="cycleTheme" :title="'目前:' + themeLabel">
+        <span>{{ themeIcon }}</span>
+        <span class="nav-label">{{ themeLabel }}</span>
+      </button>
     </aside>
 
     <!-- ============ 右側內容 ============ -->

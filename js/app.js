@@ -418,9 +418,40 @@
 
       provide('registry', registry);
 
+      // ── 亮暗切換(app 層級,全站有效)──
+      const LS_THEME_KEY = 'slotplanner.uiTheme.v1';
+      const themeMode = ref(localStorage.getItem(LS_THEME_KEY) || 'auto');
+      function _applyTheme(mode) {
+        let effective = mode;
+        if (mode === 'auto') {
+          const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+          effective = (mq && mq.matches) ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = effective;
+      }
+      function cycleTheme() {
+        const order = ['auto', 'light', 'dark'];
+        const idx = order.indexOf(themeMode.value);
+        themeMode.value = order[(idx + 1) % order.length];
+        try { localStorage.setItem(LS_THEME_KEY, themeMode.value); } catch (e) {}
+        _applyTheme(themeMode.value);
+      }
+      const themeIcon  = computed(() => ({ auto:'◐', light:'☀', dark:'☾' })[themeMode.value] || '◐');
+      const themeLabel = computed(() => ({ auto:'跟隨系統', light:'亮色', dark:'暗色' })[themeMode.value] || '?');
+
       onMounted(() => {
         initColSettings();
         setupBusListeners();
+        // 初始套用主題(讀 LS 或跟隨系統)
+        _applyTheme(themeMode.value);
+        if (window.matchMedia) {
+          try {
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            const h = () => { if (themeMode.value === 'auto') _applyTheme('auto'); };
+            if (mq.addEventListener) mq.addEventListener('change', h);
+            else mq.addListener(h);
+          } catch (e) {}
+        }
         setStatus('wait', initStatus === 'loaded'
           ? `已從 localStorage 載入 ${registry.symbols().length} 個 symbol`
           : '已就緒，請選擇 TXT 檔案');
@@ -436,6 +467,7 @@
         convert, goPage, onChildStatus, registry,
         filterSummary, openModal,
         askDownloadLocation,
+        themeIcon, themeLabel, cycleTheme,
       };
     },
   });
