@@ -331,3 +331,38 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
    這部分太分散,改靠原檔自然繼承,這裡不強制
    ============================================================ */
 
+/* ============================================================
+   14. v4.1 斜向鏡面光帶 — modal / 大卡片
+   只加在大面(card-shell 在 theme.css 已處理)。
+   光帶限制在頂端 ~55%、screen 疊色,讓下半部表單/文字保持乾淨。
+   用 border-radius:inherit 對齊圓角,不需父層 overflow:hidden。
+   ============================================================ */
+.filter-modal,
+.cfg-tpl-diff-modal,
+.glass-panel,
+.glass-panel-raised {
+  position: relative;
+}
+.filter-modal::after,
+.cfg-tpl-diff-modal::after,
+.glass-panel::after,
+.glass-panel-raised::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 55%;
+  border-radius: inherit;
+  background: var(--specular);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 0;
+}
+/* 暗色下白光太亮,降一階 */
+:root[data-theme="dark"] .card-shell::after,
+:root[data-theme="dark"] .filter-modal::after,
+:root[data-theme="dark"] .cfg-tpl-diff-modal::after,
+:root[data-theme="dark"] .glass-panel::after,
+:root[data-theme="dark"] .glass-panel-raised::after {
+  opacity: 0.35;
+}
+

@@ -50,11 +50,11 @@
    
    v4.0:對齊新 token 體系(glass-1..5),仍保持青綠 accent */
 :root[data-theme="dark"] {
-  /* 主背景:深灰黑帶一絲暖色 */
-  --bg: #18171c;
-  --bg-mid: #1c1b22;
-  --bg-pink: #1a1a20;
-  --bg-end: #15151a;
+  /* 主背景:v4.1 深飽和午夜藍青(玻璃透出顏色,呼應亮色)*/
+  --bg: #0e1a33;
+  --bg-mid: #14305a;
+  --bg-pink: #15233f;
+  --bg-end: #0b1228;
 
   /* 玻璃層級(暗模式)— 把白色透明改為微亮白,在深底上自然呈灰玻璃 */
   --glass-1: rgba(255,255,255,0.04);
@@ -128,17 +128,17 @@
   --divider: rgba(255,255,255,0.08);
 }
 
-/* 暗色背景漸層 — 帶輕微柔色光暈,呼應亮色的「玻璃透出顏色」感 */
+/* 暗色背景漸層 — v4.1 深飽和藍青,帶鮮色光球,呼應亮色的「玻璃透出顏色」感 */
 :root[data-theme="dark"] body {
-  background: linear-gradient(135deg, #18171c 0%, #1c1b22 60%, #15151a 100%) !important;
+  background: linear-gradient(125deg, #0f1d3a 0%, #16335c 55%, #0b1530 100%) !important;
   color: var(--text);
 }
 :root[data-theme="dark"] body::before {
   background:
-    radial-gradient(circle 720px at -8% -12%, rgba(95,217,189,0.10), transparent 55%),
-    radial-gradient(circle 780px at 96% 72%,  rgba(120,90,180,0.10), transparent 60%),
-    radial-gradient(circle 420px at 38% 22%,  rgba(220,160,100,0.06), transparent 60%),
-    radial-gradient(circle 340px at 6% 68%,   rgba(74,160,210,0.08),  transparent 60%) !important;
+    radial-gradient(circle 760px at -6% -10%,  rgba(70,210,225,0.22),  transparent 56%),
+    radial-gradient(circle 820px at 98% 74%,   rgba(140,110,235,0.22), transparent 60%),
+    radial-gradient(circle 440px at 36% 20%,   rgba(90,150,255,0.18),  transparent 60%),
+    radial-gradient(circle 380px at 8% 70%,    rgba(60,200,215,0.16),  transparent 60%) !important;
 }
 
 /* 暗色模式下的「半透明白底」元件 — 主動翻轉

@@ -12,20 +12,23 @@
    ============================================================ */
 
 :root {
-  /* ── 背景漸層 — 帶柔和色彩光暈的白灰 ── */
-  --bg:     #EEEDEA;
-  --bg-mid: #F4F3F0;
-  --bg-pink:#FBFAF8;
-  --bg-end: #E9E8E4;
+  /* ── 背景漸層 — v4.1 鮮藍液態玻璃底(玻璃透出顏色)── */
+  /* 飽和藍青漸層,透過 card-shell 的 40px blur 在面板下化為柔色光,
+     gutter(殼外 16px)則直接呈現鮮豔藍。 */
+  --bg:     #4fa6e8;   /* 亮天空藍青 */
+  --bg-mid: #3f82e2;   /* 主藍 */
+  --bg-pink:#5d7ff0;   /* 偏紫藍(legacy 命名,值已重新定義) */
+  --bg-end: #3258c6;   /* 深靛藍 */
 
   /* ── 玻璃層級系統(亮模式)── */
-  /* 統一這 6 個層級,取代散布的 20+ 種透明度 */
-  --glass-1: rgba(255,255,255,0.32);   /* 底層 panel / 弱玻璃 */
-  --glass-2: rgba(255,255,255,0.48);   /* 一般 card */
-  --glass-3: rgba(255,255,255,0.62);   /* 互動元素 idle */
-  --glass-4: rgba(255,255,255,0.82);   /* hover/focus */
+  /* 統一這 6 個層級,取代散布的 20+ 種透明度
+     v4.1:底層三階略降白度,讓鮮藍底色透出更明顯 */
+  --glass-1: rgba(255,255,255,0.26);   /* 底層 panel / 弱玻璃 */
+  --glass-2: rgba(255,255,255,0.42);   /* 一般 card */
+  --glass-3: rgba(255,255,255,0.56);   /* 互動元素 idle */
+  --glass-4: rgba(255,255,255,0.80);   /* hover/focus */
   --glass-5: rgba(255,255,255,0.94);   /* modal 內容 */
-  --glass-edge: rgba(255,255,255,0.85); /* 邊框/高光 */
+  --glass-edge: rgba(255,255,255,0.88); /* 邊框/高光 */
 
   /* 舊 token alias(向後相容)*/
   --glass-bg:  var(--glass-2);
@@ -146,6 +149,18 @@
 
   /* ── focus ring(全站統一)── */
   --focus-ring: 0 0 0 4px rgba(74,210,180,0.22);
+
+  /* ── v4.1 鏡面光帶(斜向掃過玻璃的高光)── */
+  /* 大面玻璃用(card-shell / modal / 大卡片);各面以 opacity 調強弱。
+     峰值集中在斜軸 38~52%,避免在面板正中央留下白槓影響閱讀。 */
+  --specular: linear-gradient(122deg,
+    transparent 0%,
+    transparent 30%,
+    rgba(255,255,255,0.05) 38%,
+    rgba(255,255,255,0.30) 46%,
+    rgba(255,255,255,0.10) 52%,
+    transparent 62%,
+    transparent 100%);
 }
 
 * { box-sizing: border-box; }
@@ -155,7 +170,7 @@ html, body {
   font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
   font-size: 14px; color: var(--text);
   background:
-    linear-gradient(135deg, var(--bg) 0%, var(--bg-mid) 35%, var(--bg-pink) 65%, var(--bg-end) 100%);
+    linear-gradient(125deg, var(--bg) 0%, var(--bg-mid) 38%, var(--bg-pink) 68%, var(--bg-end) 100%);
   overflow: hidden;
   /* iOS 觸控反饋去掉 */
   -webkit-tap-highlight-color: transparent;
@@ -166,17 +181,19 @@ html, body {
 }
 
 /* ============================================================
-   背景柔色光暈 — 加強版,讓玻璃透出時有顏色穿透感
+   背景柔色光暈 — v4.1 鮮豔 bokeh 光球
+   飽和的青/藍/紫/桃光球,透過 card-shell 厚 blur 在面板下化為
+   iOS 風的色彩穿透。gutter 直接看到鮮豔光球。
    ============================================================ */
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(circle 720px at -8% -12%,  rgba(180,220,210,0.45), transparent 55%),
-    radial-gradient(circle 780px at 96% 72%,   rgba(220,200,235,0.42), transparent 60%),
-    radial-gradient(circle 420px at 38% 22%,   rgba(255,225,210,0.38), transparent 60%),
-    radial-gradient(circle 340px at 6% 68%,    rgba(140,220,200,0.28), transparent 60%),
-    radial-gradient(circle 380px at 78% -8%,   rgba(230,215,200,0.40), transparent 60%),
-    radial-gradient(circle 280px at 52% 90%,   rgba(200,225,240,0.32), transparent 60%);
+    radial-gradient(circle 760px at -6% -10%,  rgba(90,220,235,0.55),  transparent 56%),
+    radial-gradient(circle 820px at 98% 74%,   rgba(150,120,245,0.50), transparent 60%),
+    radial-gradient(circle 440px at 36% 20%,   rgba(120,180,255,0.45), transparent 60%),
+    radial-gradient(circle 380px at 8% 70%,    rgba(70,210,225,0.42),  transparent 60%),
+    radial-gradient(circle 420px at 80% -6%,   rgba(255,180,200,0.38), transparent 60%),
+    radial-gradient(circle 320px at 54% 92%,   rgba(120,150,250,0.40), transparent 60%);
   /* 微微飄動 */
   animation: bgFloat 32s ease-in-out infinite alternate;
 }
@@ -222,6 +239,17 @@ body::before {
     transparent 100%);
   pointer-events: none;
   z-index: 2;
+}
+/* v4.1 斜向鏡面光帶 — 偏上半部、低強度,不蓋住中央工作區 */
+.card-shell::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 62%;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: var(--specular);
+  opacity: 0.5;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* ============================================================
