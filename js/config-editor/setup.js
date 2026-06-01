@@ -5954,7 +5954,8 @@
         // v3.5 / #4A + #4B:08 檢視模式
         comboViewMode, setComboViewMode,
         comboCellDiff, comboDiffLabel,
-        // v3.6 / #2:Redo
+        // v3.6 / #2:Undo / Redo
+        undoMatrix, canUndo, undoCountForCurrent,
         redoMatrix, canRedo, redoCountForCurrent,
         // v3.6 / #3:diff baseline picker(combo step)
         comboDiffBaseline, effectiveDiffBaseline, setComboDiffBaseline, isComboDiffBaselinePinned,
