@@ -48,6 +48,7 @@
       max_count: 0,
       use_max: false,
       reel_limit: new Array(reelCount).fill(true),
+      enabled: true,     // v4.0 / #13:符號開關(false = 暫停,不匯出、不進權重同步,但保留資料)
       // ── A.xlsx 03_Symbols 擴充欄位 ──
       symbol_id: '',      // A.xlsx 用的 Symbol_ID(像 H1 / WILD,可與 name 不同)
       type: 'HIGH',       // HIGH / LOW / WILD / SCATTER / BONUS / SPECIAL
@@ -71,6 +72,7 @@
       max_count: s.max_count,
       use_max: s.use_max,
       reel_limit: [...s.reel_limit],
+      enabled:    s.enabled    != null ? s.enabled    : true,
       // 新欄位(向下相容:舊資料缺欄位給預設值)
       symbol_id:  s.symbol_id  != null ? s.symbol_id  : '',
       type:       s.type       != null ? s.type       : 'HIGH',
@@ -262,6 +264,7 @@
           max_count: s.max_count,
           use_max: s.use_max,
           reel_limit: [...s.reel_limit],
+          enabled:    s.enabled !== false,
           // ── 擴充欄位 ──
           symbol_id:  s.symbol_id  || '',
           type:       s.type       || 'HIGH',
@@ -292,6 +295,7 @@
           max_count: d.max_count || 0,
           use_max: !!d.use_max,
           reel_limit: Array.isArray(d.reel_limit) ? [...d.reel_limit] : new Array(reelCount).fill(true),
+          enabled:    d.enabled != null ? d.enabled : true,
           // ── 擴充欄位(舊版資料沒有就給預設)──
           symbol_id:  d.symbol_id  != null ? d.symbol_id  : '',
           type:       d.type       || 'HIGH',
@@ -346,6 +350,18 @@
             max_count: d.max_count || 0,
             use_max: !!d.use_max,
             reel_limit: Array.isArray(d.reel_limit) ? [...d.reel_limit] : new Array(reelCount).fill(true),
+            // v4.0:補齊擴充欄位(原本這條載入路徑會把這些欄位丟掉,進階屬性無法持久化)
+            enabled:    d.enabled != null ? d.enabled : true,
+            symbol_id:  d.symbol_id  != null ? d.symbol_id  : '',
+            type:       d.type       || 'HIGH',
+            pay_3x:     d.pay_3x     || 0,
+            pay_4x:     d.pay_4x     || 0,
+            pay_5x:     d.pay_5x     || 0,
+            pay_6x:     d.pay_6x     || 0,
+            mega_w:     d.mega_w     || 1,
+            mega_h:     d.mega_h     || 1,
+            is_wild:    !!d.is_wild,
+            is_scatter: !!d.is_scatter,
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

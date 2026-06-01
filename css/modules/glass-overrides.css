@@ -507,3 +507,22 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   background: rgba(255,255,255,0.08);
   color: var(--text);
 }
+
+/* ════════════════════════════════════════════════════════════
+   v4.0+ / #1:矩陣符號 ID 用斜線零(slashed-zero)
+   JetBrains Mono 11px bold 下,點狀 0 與 8 容易混淆。
+   啟用 OpenType "zero" 特性 → 斜線 0,辨識度提高。
+   ════════════════════════════════════════════════════════════ */
+.cfg-matrix-colhead-name,
+.cfg-matrix-colhead-sum,
+.cfg-matrix-rowhead,
+.cfg-matrix-cell,
+.cfg-matrix-cell-pct,
+.cfg-matrix-total,
+.cfg-matrix-total-chip {
+  font-feature-settings: "zero" 1;
+  font-variant-numeric: slashed-zero;
+}
+
+/* v4.0 / #2:符號欄「編輯符號清單」連結間距 */
+.cfg-matrix-symbols-edit-link { margin-left: 10px; font-size: 11px; }

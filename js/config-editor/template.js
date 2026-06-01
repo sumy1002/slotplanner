@@ -317,7 +317,7 @@
 
     <!-- ── 左:分組分頁列 ── -->
     <div class="cfg-tabs">
-      <div v-for="grp in TABS_BY_GROUP" :key="grp.id" class="cfg-tab-group">
+      <div v-for="grp in visibleTabGroups" :key="grp.id" class="cfg-tab-group">
         <div class="cfg-tab-group-header">
           <span class="cfg-tab-group-icon">{{ grp.icon }}</span>
           <span class="cfg-tab-group-label">{{ grp.label }}</span>
@@ -1144,22 +1144,8 @@
             </span>
           </div>
 
-          <!-- v3.5 / #14:平均占比預覽 bar -->
+          <!-- v4.0 / #2:移除頂部平均占比 chips(占比改看下方 cell 的 %橫/%縱 顯示模式);保留 CSV 匯入匯出 -->
           <div v-if="reelActiveMode" class="cfg-matrix-prob-bar">
-            <button class="cfg-matrix-prob-toggle"
-                    :class="{ collapsed: !probBarOpen }"
-                    @click="toggleProbBar()"
-                    :title="probBarOpen ? '收起占比預覽' : '展開占比預覽'">
-              📊 平均占比 <span class="cfg-prob-chev">{{ probBarOpen ? '▾' : '▸' }}</span>
-            </button>
-            <div v-if="probBarOpen && reelSymbolAvgProb(reelActiveMode)" class="cfg-matrix-prob-chips">
-              <span v-for="(p, sid) in reelSymbolAvgProb(reelActiveMode)" :key="sid" class="cfg-prob-chip">
-                <span class="cfg-prob-chip-sid">{{ sid }}</span>
-                <span class="cfg-prob-chip-val">{{ fmtPct(p) }}</span>
-              </span>
-            </div>
-            <span v-if="probBarOpen" class="cfg-prob-hint">基於當前權重,每 Reel 平均出現比例</span>
-            <!-- v3.5 / #15:CSV 匯入/匯出 -->
             <span class="cfg-matrix-csv-host">
               <button class="cfg-matrix-csv-btn" @click="exportReelCSV(reelActiveMode)" title="匯出當前模式為 CSV">⬇ CSV</button>
               <button class="cfg-matrix-csv-btn" @click="importReelCSV(reelActiveMode)" title="從 CSV 匯入(會覆寫當前模式)">⬆ CSV</button>
@@ -1180,17 +1166,14 @@
                     <span class="cfg-matrix-symbols-preview">{{ reelSymbolIdsStr(reelActiveMode) }}</span>
                   </summary>
                   <div class="cfg-matrix-symbols-body">
-                    <input class="input cfg-mono" type="text"
-                           :value="reelSymbolIdsStr(reelActiveMode)"
-                           @change="setReelSymbolIdsStr(reelActiveMode, $event.target.value)"
-                           placeholder="WILD, H1, H2, H3, L1, L2, L3, L4">
                     <button class="cfg-matrix-btn cfg-matrix-sync-btn"
                             @click="reelSyncFromRegistry(reelActiveMode)"
-                            title="從 03_Symbols 同步符號清單,新符號權重會被初始化為 100">
-                      ⇆ 從 03_Symbols 同步
+                            title="以 03_Symbols 為唯一來源套用符號欄:帶入所有啟用中的符號(新符號權重初始化 100),並移除已不在清單內的欄">
+                      ⇆ 從 03_Symbols 套用符號欄
                     </button>
+                    <a href="#" @click.prevent="active='symbols'" class="cfg-link cfg-matrix-symbols-edit-link">編輯符號清單 →</a>
                     <div class="cfg-hint" style="margin-top:6px;">
-                      逗號分隔。對應到 03_Symbols 的符號名稱,或 A.xlsx 用的 Symbol_ID(如 WILD)。
+                      符號欄以 <strong>03_Symbols</strong> 為唯一來源,不在此手動輸入。套用後會帶入所有啟用中的符號;停用或刪除的符號欄會一併移除。
                     </div>
                   </div>
                 </details>

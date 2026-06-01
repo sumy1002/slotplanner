@@ -1016,6 +1016,25 @@
       const activeReelIdx = ref(0);
       const activeReel = computed(() => layout[activeReelIdx.value] || null);
 
+      // v4.0 / #9:格數權重(每 reel 的列數分佈權重)只有「列高不一致」的盤面
+      //   (Megaways 類)才有意義。等高盤(所有 reel max_rows 相同)隱藏該分頁。
+      //   註:Batch 5 盤面結構重構後,會改由明確的機制選擇來驅動,此處先以資料判斷。
+      const isVariableHeightBoard = computed(() => {
+        const rows = layout.map(r => r.max_rows);
+        return new Set(rows).size > 1;
+      });
+      // 渲染用分頁群組:等高盤過濾掉 grid_size_weights
+      const visibleTabGroups = computed(() =>
+        TABS_BY_GROUP.map(grp => ({
+          ...grp,
+          tabs: grp.tabs.filter(t => t.id !== 'grid_size_weights' || isVariableHeightBoard.value),
+        })).filter(grp => grp.tabs.length > 0)
+      );
+      // 若目前停在格數權重頁、但盤面變回等高 → 自動切回 Reel 權重,避免停在隱藏頁
+      watch(isVariableHeightBoard, (v) => {
+        if (!v && active.value === 'grid_size_weights') active.value = 'reel_weights';
+      });
+
       function addReel() {
         const new_id = layout.length + 1;
         layout.push(makeReel(new_id));
@@ -1025,14 +1044,60 @@
       function removeReel(idx) {
         if (layout.length <= 1) return;
         if (!confirm(`確定要刪除 Reel #${layout[idx].reel_id} 嗎?\n後續 reel 會自動重編號。`)) return;
+        // 刪除前先記下「目前各位置的 reel_id」順序,供權重 key 重映射
+        const oldIds = layout.map(r => r.reel_id);
         layout.splice(idx, 1);
         // 自動重編號,保持 1..N 連續
         layout.forEach((r, i) => { r.reel_id = i + 1; });
+        // 倖存 reel 的舊 id(依新順序),用來搬移權重 key,避免資料位移
+        const survivingOldIds = oldIds.filter((_, i) => i !== idx);
+        _remapReelDimension(survivingOldIds);
         // 選中索引不要超出邊界
         if (activeReelIdx.value >= layout.length) {
           activeReelIdx.value = layout.length - 1;
         }
         emit('status', { type: 'ok', msg: '已刪除 Reel 並自動重編號' });
+      }
+
+      // 把所有權重表(reel / grid / combo)的 reel 維度 key 依「舊 id → 新 id」搬移。
+      // survivingOldIds[k] = 第 (k+1) 個新 reel_id 對應到的舊 reel_id。
+      // 對應不到(= 被刪掉那一格)的 key 直接丟棄,不殘留孤兒鍵。
+      function _remapReelDimension(survivingOldIds) {
+        const newForOld = {};
+        survivingOldIds.forEach((oldId, k) => { newForOld[oldId] = k + 1; });
+        // reel / grid:key 格式 `${reel}-${rest}`(rest = sid 或 grid_size)
+        for (const table of [reelWeights, gridWeights]) {
+          for (const mode in table) {
+            const w = table[mode] && table[mode].weights;
+            if (!w) continue;
+            const nw = {};
+            for (const key in w) {
+              const dash = key.indexOf('-');
+              if (dash < 0) continue;
+              const reel = parseInt(key.slice(0, dash), 10);
+              const rest = key.slice(dash + 1);
+              const nid = newForOld[reel];
+              if (nid !== undefined) nw[`${nid}-${rest}`] = w[key];
+            }
+            table[mode].weights = nw;
+          }
+        }
+        // combo:key 格式 `${step}-${reel}-${rest}`
+        for (const mode in comboWeights) {
+          const w = comboWeights[mode] && comboWeights[mode].weights;
+          if (!w) continue;
+          const nw = {};
+          for (const key in w) {
+            const parts = key.split('-');
+            if (parts.length < 3) continue;
+            const step = parts[0];
+            const reel = parseInt(parts[1], 10);
+            const rest = parts.slice(2).join('-');
+            const nid = newForOld[reel];
+            if (nid !== undefined) nw[`${step}-${nid}-${rest}`] = w[key];
+          }
+          comboWeights[mode].weights = nw;
+        }
       }
 
       // ──────────────────────────────────────────────────────────
@@ -1495,7 +1560,7 @@
           if (dm === 'pct_row') {
             for (const sid of e.symbol_ids) denom += Number(e.weights[`${r}-${sid}`]) || 0;
           } else {
-            for (let rr = 1; rr <= layout.length; rr++) denom += Number(e.weights[`${rr}-${col}`]) || 0;
+            for (const rr of layout) denom += Number(e.weights[`${rr.reel_id}-${col}`]) || 0;
           }
         } else if (kind === 'grid') {
           const e = gridW(mode);
@@ -1503,7 +1568,7 @@
           if (dm === 'pct_row') {
             for (const sz of e.grid_sizes) denom += Number(e.weights[`${r}-${sz}`]) || 0;
           } else {
-            for (let rr = 1; rr <= layout.length; rr++) denom += Number(e.weights[`${rr}-${col}`]) || 0;
+            for (const rr of layout) denom += Number(e.weights[`${rr.reel_id}-${col}`]) || 0;
           }
         } else if (kind === 'combo') {
           const e = comboW(mode);
@@ -1512,7 +1577,7 @@
           if (dm === 'pct_row') {
             for (const sid of e.symbol_ids) denom += Number(e.weights[`${st}-${r}-${sid}`]) || 0;
           } else {
-            for (let rr = 1; rr <= layout.length; rr++) denom += Number(e.weights[`${st}-${rr}-${col}`]) || 0;
+            for (const rr of layout) denom += Number(e.weights[`${st}-${rr.reel_id}-${col}`]) || 0;
           }
         }
         if (denom <= 0) return null;
@@ -2411,20 +2476,25 @@
       function ensureReelWeightsForMode(name) {
         if (!reelWeights[name]) {
           // 第一次進入該模式:用當前 symbolNames 為符號清單
-          const syms = symbolNames.value.length > 0
-            ? [...symbolNames.value]
+          const base = symbolNames.value.length > 0
+            ? symbolNames.value
             : ['WILD', 'H1', 'H2', 'H3', 'L1', 'L2', 'L3', 'L4'];
           reelWeights[name] = {
-            symbol_ids: syms,
+            symbol_ids: [...new Set(base)],   // 去重:重複會撞欄 key
             weights: {},
             notes: '',
           };
         }
         const entry = reelWeights[name];
-        // 確保 layout × symbol_ids 的所有 cell 都存在
-        for (let r = 1; r <= layout.length; r++) {
+        // 防呆:symbol_ids 去重。重複的符號會讓矩陣 <th :key="sid"> 出現重複 key,
+        // 造成 Vue patch 崩潰(nextSibling null)、點擊落錯 cell、占比分母重複計數。
+        // 只有真的有重複時才重新賦值,避免每次 render 都產生新陣列觸發無限更新。
+        const deduped = [...new Set(entry.symbol_ids)];
+        if (deduped.length !== entry.symbol_ids.length) entry.symbol_ids = deduped;
+        // 用實際 reel_id 建 cell(不假設 reel_id 連續 1..N)
+        for (const r of layout) {
           for (const sid of entry.symbol_ids) {
-            const k = `${r}-${sid}`;
+            const k = `${r.reel_id}-${sid}`;
             if (!(k in entry.weights)) entry.weights[k] = 100;
           }
         }
@@ -2454,23 +2524,47 @@
           }
         }
       }
-      // v3.5 / #9:從 03_Symbols 同步符號清單(用 symbol_id;沒有就用 name)
+      // v3.5 / #9:從 03_Symbols 取符號 id(用 symbol_id;沒有就用 name)
+      // v4.0 / #2 + #13:停用(enabled === false)的符號不帶入
       function _registrySymbolIds() {
         const ids = [];
         for (const s of (symbolList.value || [])) {
+          if (s && s.enabled === false) continue;   // #13:停用符號排除
           const id = (s.symbol_id && s.symbol_id.trim()) || s.name;
           if (id) ids.push(id);
         }
-        return ids;
+        return [...new Set(ids)];   // 去重,避免重複欄 key
       }
+      // v4.0 / #2:以 03_Symbols 為唯一來源「完整套用」符號欄。
+      //   - 帶入所有啟用中的符號(新欄權重初始化 100)
+      //   - 移除已不在清單內的欄,並清掉對應的孤兒權重鍵
       function reelSyncFromRegistry(mode) {
         const ids = _registrySymbolIds();
         if (ids.length === 0) {
-          emit('status', { type: 'warn', msg: '03_Symbols 沒有任何符號' });
+          emit('status', { type: 'warn', msg: '03_Symbols 沒有任何啟用中的符號' });
           return;
         }
-        setReelSymbolIdsStr(mode, ids.join(', '));
-        emit('status', { type: 'ok', msg: `已從 03_Symbols 同步 ${ids.length} 個符號` });
+        const entry = reelW(mode);
+        const before = entry.symbol_ids.slice();
+        entry.symbol_ids = ids;
+        const valid = new Set(ids);
+        // 補新欄的權重(用真實 reel_id)
+        for (const r of layout) {
+          for (const sid of ids) {
+            const k = `${r.reel_id}-${sid}`;
+            if (!(k in entry.weights)) entry.weights[k] = 100;
+          }
+        }
+        // 清掉欄已不存在的孤兒鍵
+        for (const k of Object.keys(entry.weights)) {
+          const dash = k.indexOf('-');
+          if (dash < 0) continue;
+          const sid = k.slice(dash + 1);
+          if (!valid.has(sid)) delete entry.weights[k];
+        }
+        const added = ids.filter(s => !before.includes(s)).length;
+        const removed = before.filter(s => !valid.has(s)).length;
+        emit('status', { type: 'ok', msg: `已套用 03_Symbols:共 ${ids.length} 欄(新增 ${added}、移除 ${removed})` });
       }
       // 計算某模式內最大權重,給熱力圖背景強度用
       function reelMaxWeight(mode) {
@@ -5481,22 +5575,7 @@
         }
 
         // ─── 08_Combo_Weights ───
-        for (const mode of Object.keys(comboWeights)) {
-          if (!validModeSet.has(mode)) {
-            add('warn', 'combo_weights',
-              `孤兒模式:${mode}`,
-              '這個模式在 11_Mode_Config 已不存在,但連爆權重表仍保留資料。');
-            continue;
-          }
-          const entry = comboWeights[mode];
-          if (!entry || !entry.symbol_ids) continue;
-          const unknown = entry.symbol_ids.filter(s => !symbolNameSet.has(s));
-          if (unknown.length > 0) {
-            add('warn', 'combo_weights',
-              `${mode} 模式:${unknown.length} 個符號未在 03_Symbols 定義`,
-              `孤立符號:${unknown.join(', ')}`);
-          }
-        }
+        // v4.0 / #14:連爆權重已移除,不再驗證
 
         // ─── 06_Paylines ───
         const lineIdSeen = new Map();
@@ -5855,7 +5934,7 @@
       });
 
       return {
-        TABS, TABS_BY_GROUP, active, activeTab, groupDirtyCount,
+        TABS, TABS_BY_GROUP, visibleTabGroups, isVariableHeightBoard, active, activeTab, groupDirtyCount,
         g, PAY_TYPES, WAYS_DIRS,
         registry, symbolList, symbolNames, allModeScopes,
         modes, modeNames, duplicateNames, modesDebugJson,

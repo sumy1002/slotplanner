@@ -158,7 +158,16 @@
       'Weight', 'Max_Count', 'Use_Max', 'Reel_Limit',
     ]);
     const syms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
+    // v4.0 / #13:停用(enabled === false)的符號不匯出;同時建立啟用 id 集合供 04/08 過濾,
+    //   id 解析方式對齊前端權重 key(symbol_id 優先,否則 name)
+    const enabledIds = new Set();
     for (const s of syms) {
+      if (s.enabled === false) continue;
+      const id = (s.symbol_id && s.symbol_id.trim()) || s.name;
+      if (id) enabledIds.add(id);
+    }
+    for (const s of syms) {
+      if (s.enabled === false) continue;   // 停用符號不寫入 03_Symbols
       const sid = s.symbol_id || s.name || `#${s.number}`;
       wsS.addRow([
         sid, s.name || '', s.number || '', s.type || 'HIGH',
@@ -178,6 +187,7 @@
       if (!e || !Array.isArray(e.symbol_ids)) continue;
       for (let r = 1; r <= layoutLength; r++) {
         for (const sid of e.symbol_ids) {
+          if (!enabledIds.has(sid)) continue;   // #13:停用符號的權重不匯出
           const w = e.weights ? e.weights[`${r}-${sid}`] : null;
           if (typeof w === 'number' && w > 0) {
             wsRW.addRow([m, r, sid, w, '']);
@@ -229,6 +239,7 @@
       for (const step of e.steps) {
         for (let r = 1; r <= layoutLength; r++) {
           for (const sid of (e.symbol_ids || [])) {
+            if (!enabledIds.has(sid)) continue;   // #13:停用符號的權重不匯出
             const w = e.weights ? e.weights[`${step}-${r}-${sid}`] : null;
             if (typeof w === 'number' && w > 0) {
               wsCW.addRow([m, step, r, sid, w, '']);

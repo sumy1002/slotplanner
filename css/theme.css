@@ -746,6 +746,44 @@ select.input,
   flex-shrink: 0;
 }
 
+/* v4.0 / #13:符號啟用/停用開關 */
+.sym-item-toggle {
+  position: relative;
+  width: 34px; height: 19px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  background: rgba(120,120,140,0.28);
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--t-fast);
+}
+.sym-item-toggle.on { background: var(--accent-hex); }
+.sym-item-toggle-knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.28);
+  transition: transform var(--t-pop);
+}
+.sym-item-toggle.on .sym-item-toggle-knob { transform: translateX(15px); }
+.sym-item-toggle:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+/* 停用狀態:整列淡化(swatch / 文字 / 占比),但開關本身維持清楚 */
+.sym-item-disabled .sym-swatch,
+.sym-item-disabled .sym-item-info,
+.sym-item-disabled .sym-item-pct { opacity: 0.42; filter: grayscale(0.6); }
+.sym-item-off-tag {
+  margin-left: 6px;
+  font-size: 9px; font-weight: 700;
+  color: var(--text-light);
+  border: 1px solid var(--card-brd);
+  border-radius: var(--r-xs);
+  padding: 1px 4px;
+  vertical-align: middle;
+}
+
 .sym-statusbar {
   height: 34px;
   display: flex; align-items: center; justify-content: space-between;

@@ -32,19 +32,25 @@
     <div class="sym-list">
       <div v-for="s in symbols" :key="s.id"
            class="sym-item"
-           :class="{selected: s.id === selectedId}"
+           :class="{selected: s.id === selectedId, 'sym-item-disabled': s.enabled === false}"
            @click="select(s.id)">
         <div class="sym-swatch" :style="swatchStyle(s.id)">
           {{ initialOf(s) }}
         </div>
         <div class="sym-item-info">
-          <div class="sym-item-name">{{ s.name || '(未命名)' }}</div>
+          <div class="sym-item-name">{{ s.name || '(未命名)' }}<span v-if="s.enabled === false" class="sym-item-off-tag">已停用</span></div>
           <div class="sym-item-meta">
             <span>#{{ s.number || '-' }}</span>
             <span>權重 {{ s.weight }}</span>
           </div>
         </div>
         <div class="sym-item-pct">{{ pctOf(s) }}%</div>
+        <button class="sym-item-toggle"
+                :class="{ on: s.enabled !== false }"
+                @click.stop="toggleEnabled(s.id)"
+                :title="s.enabled === false ? '已停用 — 點擊重新啟用(不會匯出、不進權重同步)' : '啟用中 — 點擊暫停此符號(保留資料,僅排除於匯出與同步)'">
+          <span class="sym-item-toggle-knob"></span>
+        </button>
       </div>
       <div v-if="!symbols.length" style="text-align:center; padding:30px 10px; color:var(--text-light); font-size:12px;">
         （目前沒有 symbol）<br>點擊上方「+ 新增」開始
@@ -467,6 +473,16 @@
         }
       }
 
+      // v4.0 / #13:切換符號啟用/停用(暫停而非刪除;停用的符號不匯出、不進權重同步)
+      function toggleEnabled(sid) {
+        const s = symbols.value.find(x => x.id === sid);
+        if (!s) return;
+        pushUndo();
+        s.enabled = (s.enabled === false);   // false → true / 其他 → false
+        commit();
+        emitStatus('ok', s.enabled ? `已啟用「${s.name || '(未命名)'}」` : `已停用「${s.name || '(未命名)'}」(資料保留)`);
+      }
+
       function addSymbol() {
         pushUndo();
         // 先寫回當前編輯
@@ -808,7 +824,7 @@
         totalWeight,
         importInput,
         megaPreview,
-        select, addSymbol, deleteSelected,
+        select, toggleEnabled, addSymbol, deleteSelected,
         undo, redo,
         pickSwatch, isCurrentSwatch, swatchStyle,
         initialOf, pctOf,

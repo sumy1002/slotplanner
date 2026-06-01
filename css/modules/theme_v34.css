@@ -1155,15 +1155,16 @@
   background: rgba(255,255,255,0.85);
 }
 
-/* ── #12:模式列 overflow scroll(模式很多時不擠掉右側) ── */
+/* ── #12:模式列排版 ──
+   v4.0 / #8 修正:原本用 overflow-x:auto 讓模式列水平捲動,
+   但 overflow-x:auto 會連帶把 overflow-y 變成裁切容器,
+   導致「⋯ 模式操作」往下展開的 popover 被裁掉、整顆按鈕像被擋住看不到。
+   改回 flex-wrap:wrap + overflow:visible:模式很多時換行(變高但不裁切),
+   popover 永遠完整顯示。 */
 .cfg-sticky-mode-bar {
-  flex-wrap: nowrap !important;
-  overflow-x: auto;
-  overflow-y: hidden;
+  flex-wrap: wrap;
+  overflow: visible;
 }
-/* 水平 sticky bar 用較細 scrollbar */
-.cfg-sticky-mode-bar::-webkit-scrollbar { height: 6px; }
-/* thumb 顏色:沿用全域 scrollbar.css 規則,不再單獨指定 */
 /* 主要操作不被擠走 */
 .cfg-sticky-mode-bar > .cfg-matrix-menu-host,
 .cfg-sticky-mode-bar > .cfg-matrix-display-toggle,

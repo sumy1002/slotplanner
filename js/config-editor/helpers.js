@@ -48,7 +48,7 @@
     // ── 權重表 ──
     { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: 'Reel 權重',    icon: '🎲', done: true, group: 'weight' },
     { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight' },
-    { id: 'combo_weights',     sheet: '08_Combo_Weights',      name: '連爆權重',     icon: '💥', done: true, group: 'weight' },
+    // v4.0 / #14:連爆權重(08)已移除 UI 分頁(資料也清掉);A.xlsx 仍會輸出空的 08 sheet 以維持 13 分頁結構
     // ── 賠付 & 規則 ──
     { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule' },
     { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
@@ -103,11 +103,17 @@
     'slotplanner.aconfig.constraints.v1',
     'slotplanner.aconfig.reelweights.v1',
     'slotplanner.aconfig.gridweights.v1',
-    'slotplanner.aconfig.comboweights.v1',
     'slotplanner.aconfig.discards.v1',
     'slotplanner.aconfig.rules.v1',
     'slotplanner.registry.v1',
   ];
+
+  // v4.0 / #14:連爆權重功能已移除 — 清掉殘留 LS(冪等,只在有資料時動作)
+  try {
+    if (localStorage.getItem('slotplanner.aconfig.comboweights.v1') !== null) {
+      localStorage.removeItem('slotplanner.aconfig.comboweights.v1');
+    }
+  } catch (e) { /* localStorage 不可用時忽略 */ }
   function captureBaselineSnapshot() {
     const data = {};
     for (const k of BASELINE_KEYS) {
@@ -405,13 +411,7 @@
     }
 
     // ─── 08_Combo_Weights ───
-    {
-      const o = _safeParse(oldData['slotplanner.aconfig.comboweights.v1'], {});
-      const n = _safeParse(getCur('slotplanner.aconfig.comboweights.v1'), {});
-      const d = _diffWeightsMap(o, n);
-      const changes = _formatWeightsChanges(d);
-      pushTab('combo_weights', '08_Combo_Weights', changes);
-    }
+    // v4.0 / #14:連爆權重已移除,不再納入變更比較
 
     // ─── 09_Puzzle_Rules ───
     {
