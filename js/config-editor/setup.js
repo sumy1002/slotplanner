@@ -1101,6 +1101,61 @@
       }
 
       // ──────────────────────────────────────────────────────────
+      //  v4.0 / #11:拖曳互換兩個 Reel
+      //  reel_id 維持 1..N 連續(後端硬性要求),所以「互換」= 交換兩個
+      //  位置上的所有屬性 + 交換對應的權重欄(reel/grid),讓整支 reel 連同
+      //  列高、副輪、權重一起搬過去。
+      // ──────────────────────────────────────────────────────────
+      const _dragReelIdx = ref(-1);
+      const _dragOverIdx = ref(-1);
+      function _swapReelWeightKeys(ra, rb) {
+        for (const table of [reelWeights, gridWeights]) {
+          for (const mode in table) {
+            const w = table[mode] && table[mode].weights;
+            if (!w) continue;
+            const nw = {};
+            for (const key in w) {
+              const dash = key.indexOf('-');
+              if (dash < 0) { nw[key] = w[key]; continue; }
+              const reel = parseInt(key.slice(0, dash), 10);
+              const rest = key.slice(dash + 1);
+              if (reel === ra)      nw[`${rb}-${rest}`] = w[key];
+              else if (reel === rb) nw[`${ra}-${rest}`] = w[key];
+              else                  nw[key] = w[key];
+            }
+            table[mode].weights = nw;
+          }
+        }
+      }
+      function swapReels(fromIdx, toIdx) {
+        if (fromIdx === toIdx) return;
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return;
+        const a = layout[fromIdx], b = layout[toIdx];
+        const ridA = a.reel_id, ridB = b.reel_id;
+        const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight'];
+        for (const k of attrs) { const t = a[k]; a[k] = b[k]; b[k] = t; }
+        _swapReelWeightKeys(ridA, ridB);
+        activeReelIdx.value = toIdx;
+        emit('status', { type: 'ok', msg: `已互換 R${ridA} ↔ R${ridB}(含列高/副輪/權重)` });
+      }
+      function onReelDragStart(idx, ev) {
+        _dragReelIdx.value = idx;
+        if (ev && ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = 'move';
+          try { ev.dataTransfer.setData('text/plain', String(idx)); } catch (e) { /* 某些瀏覽器限制 */ }
+        }
+      }
+      function onReelDragOver(idx) { _dragOverIdx.value = idx; }
+      function onReelDragLeave(idx) { if (_dragOverIdx.value === idx) _dragOverIdx.value = -1; }
+      function onReelDrop(idx) {
+        const from = _dragReelIdx.value;
+        if (from >= 0 && from !== idx) swapReels(from, idx);
+        _dragReelIdx.value = -1;
+        _dragOverIdx.value = -1;
+      }
+      function onReelDragEnd() { _dragReelIdx.value = -1; _dragOverIdx.value = -1; }
+
+      // ──────────────────────────────────────────────────────────
       //  v3.3 / A4:盤面範本(LAYOUT_PRESETS)
       //  一鍵替換整個 layout — 90% 玩家點進去都是要這幾個常見盤
       // ──────────────────────────────────────────────────────────
@@ -2049,6 +2104,45 @@
         return [...pts].sort((a, b) => a.reel - b.reel);
       }
 
+      // v4.0 / #16:方向白話標籤 / 說明
+      function paylineDirLabel(d) {
+        return d === 'LTR' ? '左 → 右' : (d === 'RTL' ? '右 → 左' : '雙向');
+      }
+      function paylineDirHint(d) {
+        return d === 'LTR' ? '由左至右計分(從 R1 那端開始連續相同)'
+             : (d === 'RTL' ? '由右至左計分(從最右 Reel 那端開始)'
+             : '兩個方向都計分(雙向中獎線)');
+      }
+
+      // v4.0 / #15:把 path 字串轉成白話描述
+      //   - 取得每個 reel 的列高,把列位翻成「上/中/下/第N列」
+      //   - 全部同列 → 「中排直線」之類;否則逐輪描述 R1·上 → R2·中 …
+      function humanizePaylinePath(pl) {
+        const parsed = parsePathString(pl && pl.path ? pl.path : '');
+        const pts = (parsed.points || []).slice().sort((a, b) => a.reel - b.reel);
+        if (pts.length === 0) return '(未設定路徑)';
+        const rowName = (reel, row) => {
+          const r = layout.find(x => x.reel_id === reel);
+          const mr = r ? r.max_rows : Math.max(...pts.map(p => p.row));
+          if (mr <= 1) return '單列';
+          if (row === 1) return '上';
+          if (row === mr) return '下';
+          const mid = Math.ceil(mr / 2);
+          if (row === mid) return '中';
+          return `第${row}列`;
+        };
+        const rows = pts.map(p => p.row);
+        const allSame = rows.every(r => r === rows[0]);
+        if (allSame) {
+          return `${rowName(pts[0].reel, rows[0])}排直線(每輪第 ${rows[0]} 列,共 ${pts.length} 輪)`;
+        }
+        // 偵測單調上升/下降(斜線)
+        const asc = rows.every((r, i) => i === 0 || r >= rows[i - 1]);
+        const desc = rows.every((r, i) => i === 0 || r <= rows[i - 1]);
+        const shape = (asc && !desc) ? '上行斜線 ' : (desc && !asc) ? '下行斜線 ' : '';
+        return shape + pts.map(p => `R${p.reel}·${rowName(p.reel, p.row)}`).join(' → ');
+      }
+
       // 計算這條 payline 的完整度(LINE 模式)
       // 回傳 { filledReels:Set, missingReels:[], duplicateReels:[], reelCount }
       function paylineCompleteness(pl) {
@@ -2095,12 +2189,12 @@
         const pl = _activePayline();
         if (!pl) return '';
         if (paylineCellPathIndex(cell) > 0) return 'in-path';
+        const pts = _currentPaylinePoints();
+        // v4.0 / #17:該 Reel 已有點(非本格)→ 點下去會替換,任何模式都標示
+        if (pts.some(p => p.reel === cell.reel)) return 'replace';
         if (paylineLineMode.value && paylineGuideOn.value) {
           const expected = paylineNextExpectedReel(pl);
           if (expected != null && cell.reel === expected) return 'expected';
-          // 該 reel 已有點 → disable(但仍允許點:會替換)
-          const pts = _currentPaylinePoints();
-          if (pts.some(p => p.reel === cell.reel)) return 'replace';
           // 還沒輪到的 reel
           if (expected != null && cell.reel > expected + 0) return 'available';
         }
@@ -2123,27 +2217,21 @@
           return;
         }
 
-        // LINE 模式 + 該 reel 已有別的 cell → 替換該 reel 的點
-        if (paylineLineMode.value) {
-          const sameReelIdx = pts.findIndex(p => p.reel === cell.reel);
-          if (sameReelIdx >= 0) {
-            const old = pts[sameReelIdx];
-            pts[sameReelIdx] = { reel: cell.reel, row: cell.row };
-            pl.path = _pointsToPathString(_sortPointsByReel(pts));
-            emit('status', { type: 'ok', msg: `R${cell.reel} 已從列 ${old.row} 改為列 ${cell.row}` });
-            return;
-          }
-          // 新增點(依 reel 排序)
-          pts.push({ reel: cell.reel, row: cell.row });
+        // 中獎線本質:每個 Reel 只能有一個連線點。
+        // v4.0 / #17:不論 pay_type 為何,同一 Reel 已有點就「替換」(防呆),
+        //   不再允許同一 Reel 出現多個點;寫回時一律依 reel 升序排序。
+        const sameReelIdx = pts.findIndex(p => p.reel === cell.reel);
+        if (sameReelIdx >= 0) {
+          const old = pts[sameReelIdx];
+          pts[sameReelIdx] = { reel: cell.reel, row: cell.row };
           pl.path = _pointsToPathString(_sortPointsByReel(pts));
-          emit('status', { type: 'ok', msg: `R${cell.reel} 設為列 ${cell.row}` });
+          emit('status', { type: 'ok', msg: `R${cell.reel} 已從列 ${old.row} 改為列 ${cell.row}` });
           return;
         }
-
-        // WAYS / CLUSTER 模式:沿用原本「按點擊順序加到最後」邏輯
+        // 新增點(依 reel 排序)
         pts.push({ reel: cell.reel, row: cell.row });
-        pl.path = _pointsToPathString(pts);
-        emit('status', { type: 'ok', msg: `已加點 (${cell.reel},${cell.row})` });
+        pl.path = _pointsToPathString(_sortPointsByReel(pts));
+        emit('status', { type: 'ok', msg: `R${cell.reel} 設為列 ${cell.row}` });
       }
 
       // 右鍵:移除最後一點(LINE 模式下會移除「reel 編號最大的那個點」,符合視覺直覺)
@@ -4989,7 +5077,8 @@
           // ── 06_Paylines ──
           const wsP = wb.addWorksheet('06_Paylines');
           wsP.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
-          for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, pl.direction, pl.notes]);
+          // v4.0 / #16:方向是全域設定;每行寫入 g.payline_direction(後端仍逐行讀 Direction,維持相容)
+          for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, g.payline_direction || 'LTR', pl.notes]);
           boldHdr(wsP); setCols(wsP, [10, 44, 12, 28]);
 
           // ── 07_Constraints ──
@@ -5941,7 +6030,9 @@
         addMode, removeMode, passStatus,
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
-        addReel, removeReel,
+        addReel, removeReel, swapReels,
+        _dragReelIdx, _dragOverIdx,
+        onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
         bins, binsFor, binsValid, binTickPercent, binsDebugJson,
         paylines, paylinesDebugJson, PAYLINE_DIRECTIONS,
@@ -5952,6 +6043,7 @@
         // ── v3.2 中獎線升級 ──
         paylineLineMode, paylineGuideOn,
         paylineCompleteness, paylineNextExpectedReel, paylineCellState,
+        humanizePaylinePath, paylineDirLabel, paylineDirHint,
         paylineOverlapIdxs, activePaylineStatus,
         PAYLINE_PRESETS, addPaylineFromPreset,
         paylineAddMenuOpen, togglePaylineAddMenu,

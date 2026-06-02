@@ -830,11 +830,20 @@
                 class="cfg-layout-reel-chip"
                 :class="{
                   active: activeReelIdx === idx,
-                  'has-sub': r.has_subreel
+                  'has-sub': r.has_subreel,
+                  'drag-over': _dragOverIdx === idx && _dragReelIdx !== idx,
+                  'dragging': _dragReelIdx === idx
                 }"
+                draggable="true"
+                @dragstart="onReelDragStart(idx, $event)"
+                @dragover.prevent="onReelDragOver(idx)"
+                @dragleave="onReelDragLeave(idx)"
+                @drop.prevent="onReelDrop(idx)"
+                @dragend="onReelDragEnd()"
                 @click="activeReelIdx = idx"
-                :title="'R' + r.reel_id + (r.has_subreel ? ' (含副 Reel)' : '')"
+                :title="'R' + r.reel_id + (r.has_subreel ? ' (含副 Reel)' : '') + ' · 可拖曳與其他 Reel 互換位置'"
               >
+                <span class="cfg-layout-reel-chip-grip" title="拖曳互換">⋮⋮</span>
                 <span class="cfg-layout-reel-chip-id">R{{ r.reel_id }}</span>
                 <span v-if="r.has_subreel" class="cfg-layout-reel-chip-sub-dot" title="含副 Reel">●</span>
                 <span class="cfg-layout-reel-chip-rows">{{ r.max_rows }}列</span>
@@ -936,7 +945,7 @@
 
                 <!-- 快速導覽 hint -->
                 <div class="cfg-layout-v2-nav-hint">
-                  <span>← →</span> 鍵或點擊左側 chip 切換 Reel
+                  <span>← →</span> 鍵或點擊左側 chip 切換;<span>拖曳 chip</span> 可與其他 Reel 互換位置(連列高/副輪/權重一起換)
                   <span class="cfg-layout-v2-nav-count">共 {{ layout.length }} 個 Reel · {{ totalCells }} 格</span>
                 </div>
 
@@ -1992,6 +2001,15 @@
                 <span>{{ paylineOverviewMode ? '✦' : '◇' }}</span>
                 <span>{{ paylineOverviewMode ? '總覽 ON' : '總覽' }}</span>
               </button>
+              <!-- v4.0 / #16:計分方向為全域設定,套用到所有中獎線 -->
+              <div class="cfg-payline-global-dir" title="計分方向(全域,套用到所有中獎線)">
+                <span class="cfg-payline-global-dir-label">方向</span>
+                <button v-for="d in PAYLINE_DIRECTIONS" :key="d"
+                        class="cfg-chip cfg-payline-global-dir-chip"
+                        :class="{ active: g.payline_direction === d }"
+                        :title="paylineDirHint(d)"
+                        @click="g.payline_direction = d">{{ paylineDirLabel(d) }}</button>
+              </div>
             </div>
 
             <div class="cfg-paylines-v2-list-body">
@@ -2021,13 +2039,12 @@
                 <div class="cfg-payline-v2-item-meta">
                   <div class="cfg-payline-v2-item-row">
                     <span class="cfg-payline-v2-item-id">L{{ pl.line_id }}</span>
-                    <span class="cfg-payline-v2-item-dir">{{ pl.direction }}</span>
                     <span v-if="paylineOverlapIdxs.has(idx)" class="cfg-payline-v2-badge overlap" title="前 3 格與其他線重疊">⚠</span>
                     <span v-else-if="pl.path && !paylineValid(pl).valid" class="cfg-payline-v2-badge err" title="路徑無效">⚠</span>
                     <span v-else-if="paylineLineMode && paylineValid(pl).valid && !paylineCompleteness(pl).isComplete" class="cfg-payline-v2-badge warn" title="LINE 完整度不足">!</span>
                     <span v-else-if="paylineValid(pl).valid" class="cfg-payline-v2-badge ok" title="路徑有效">✓</span>
                   </div>
-                  <div class="cfg-payline-v2-item-sub">{{ pl.notes || pl.path || '(未設定)' }}</div>
+                  <div class="cfg-payline-v2-item-sub" :title="pl.path">{{ humanizePaylinePath(pl) }}<span v-if="pl.notes" class="cfg-payline-v2-item-note"> · {{ pl.notes }}</span></div>
                 </div>
               </div>
             </div>
@@ -2126,17 +2143,6 @@
                            :class="{ err: paylines[selectedPaylineIdx].path && !paylineValid(paylines[selectedPaylineIdx]).valid }"
                            v-model.trim="paylines[selectedPaylineIdx].path"
                            placeholder="(1,1)-(2,1)-(3,1)-(4,1)-(5,1)">
-                  </div>
-
-                  <div class="cfg-paylines-v2-field">
-                    <label>方向</label>
-                    <div class="cfg-chip-row cfg-paylines-v2-chip-row">
-                      <button v-for="d in PAYLINE_DIRECTIONS" :key="d"
-                              class="cfg-chip cfg-paylines-v2-chip"
-                              :class="{ active: paylines[selectedPaylineIdx].direction === d }"
-                              :title="d === 'LTR' ? '由左至右計分(從 R1 開始)' : (d === 'RTL' ? '由右至左計分(從最右 Reel 開始)' : '雙向都計分')"
-                              @click="paylines[selectedPaylineIdx].direction = d">{{ d }}</button>
-                    </div>
                   </div>
 
                   <div class="cfg-paylines-v2-field cfg-paylines-v2-field-notes">

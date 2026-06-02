@@ -217,7 +217,9 @@
     // 06_Paylines
     const wsP = wb.addWorksheet('06_Paylines');
     wsP.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
-    for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, pl.direction, pl.notes]);
+    // v4.0 / #16:Direction 改全域設定(g.payline_direction);每行寫入相同值以維持後端逐行讀取相容
+    const _plDir = (g && g.payline_direction) || 'LTR';
+    for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
     boldHdr(wsP); setCols(wsP, [10, 44, 12, 28]);
 
     // 07_Constraints
