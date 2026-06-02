@@ -265,7 +265,7 @@
 
 /* 熱力圖在暗色下:增強透明度,讓紫色更明顯 */
 :root[data-theme="dark"] .cfg-matrix-cell-wrap[style*="rgba(140"] {
-  /* 原始亮色用 rgba(140,110,220,X);暗底下需要更亮,但是用 attribute selector
+  /* 原始亮色用 rgba(210,140,90,X);暗底下需要更亮,但是用 attribute selector
      沒辦法精準控制,所以倚賴 JS 端的 reelHeatColor 自己變色 */
 }
 
@@ -572,7 +572,7 @@
 .cfg-tpl-diff-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(40,30,60,0.50);
+  background: rgb(var(--tint-shadow) / 0.50);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 9999;
@@ -920,7 +920,7 @@
   border-radius: 4px;
   pointer-events: none;
   letter-spacing: 0;
-  background: rgba(90,61,176,0.85);
+  background: rgb(var(--tint-accent) / 0.85);
   color: #fff;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.55);
 }
@@ -1086,7 +1086,7 @@
   padding: 1px 7px;
   font-size: 10.5px;
   font-weight: 700;
-  background: rgba(90,61,176,0.15);
+  background: rgb(var(--tint-accent) / 0.15);
   color: var(--accent-hex, #0f6e56);
   border-radius: var(--r-pill);
   white-space: nowrap;
@@ -1550,7 +1550,7 @@
 }
 .cfg-combo-multi-card.is-active {
   border-color: var(--accent-hex, #7a3c20);
-  box-shadow: 0 0 0 1.5px rgba(190,130,105,0.25);
+  box-shadow: 0 0 0 1.5px rgb(var(--tint-accent) / 0.25);
 }
 
 .cfg-combo-multi-card-header {

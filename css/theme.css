@@ -44,6 +44,17 @@
   --hover:      rgba(210,155,125,0.40);
   --press:      rgba(190,130,105,0.38);
 
+  /* ── 暖色 tint 通道(v4.0.1:取代散落的舊紫 accent tint;以 rgb(var(--x) / α) 帶任意透明度)── */
+  --tint-1:      225 170 120;  /* 淺暖 tint(最常用,原 periwinkle accent tint)*/
+  --tint-2:      210 140 90;   /* 中暖 */
+  --tint-accent: 190 130 105;  /* = accent 本體通道 */
+  --tint-muted:  120 95 70;    /* 暖灰(原灰紫陰影/disabled)*/
+  --tint-deep:   60 38 22;     /* 深暖 */
+  --tint-pale:   240 212 182;  /* 極淺暖 */
+  --tint-wash:   248 240 230;  /* 近白暖 */
+  --tint-soft:   242 202 162;  /* 淺暖 */
+  --tint-shadow: 55 42 30;     /* 深暖灰(陰影)*/
+
   /* ── 危險色 ── */
   --danger:      rgba(255,200,200,0.42);
   --danger-brd:  rgba(255,150,150,0.60);
