@@ -1106,8 +1106,8 @@
       //  位置上的所有屬性 + 交換對應的權重欄(reel/grid),讓整支 reel 連同
       //  列高、副輪、權重一起搬過去。
       // ──────────────────────────────────────────────────────────
-      const _dragReelIdx = ref(-1);
-      const _dragOverIdx = ref(-1);
+      const dragReelIdx = ref(-1);
+      const dragOverIdx = ref(-1);
       function _swapReelWeightKeys(ra, rb) {
         for (const table of [reelWeights, gridWeights]) {
           for (const mode in table) {
@@ -1139,21 +1139,21 @@
         emit('status', { type: 'ok', msg: `已互換 R${ridA} ↔ R${ridB}(含列高/副輪/權重)` });
       }
       function onReelDragStart(idx, ev) {
-        _dragReelIdx.value = idx;
+        dragReelIdx.value = idx;
         if (ev && ev.dataTransfer) {
           ev.dataTransfer.effectAllowed = 'move';
           try { ev.dataTransfer.setData('text/plain', String(idx)); } catch (e) { /* 某些瀏覽器限制 */ }
         }
       }
-      function onReelDragOver(idx) { _dragOverIdx.value = idx; }
-      function onReelDragLeave(idx) { if (_dragOverIdx.value === idx) _dragOverIdx.value = -1; }
+      function onReelDragOver(idx) { dragOverIdx.value = idx; }
+      function onReelDragLeave(idx) { if (dragOverIdx.value === idx) dragOverIdx.value = -1; }
       function onReelDrop(idx) {
-        const from = _dragReelIdx.value;
+        const from = dragReelIdx.value;
         if (from >= 0 && from !== idx) swapReels(from, idx);
-        _dragReelIdx.value = -1;
-        _dragOverIdx.value = -1;
+        dragReelIdx.value = -1;
+        dragOverIdx.value = -1;
       }
-      function onReelDragEnd() { _dragReelIdx.value = -1; _dragOverIdx.value = -1; }
+      function onReelDragEnd() { dragReelIdx.value = -1; dragOverIdx.value = -1; }
 
       // ──────────────────────────────────────────────────────────
       //  v3.3 / A4:盤面範本(LAYOUT_PRESETS)
@@ -4759,7 +4759,7 @@
         }
       }
       // template 用的進入點(同名以底線開頭避免跟原 saveAsTemplate 撞)
-      function _handleSaveAsTemplate() {
+      function handleSaveAsTemplate() {
         saveAsTemplate();
       }
       // tplSaveOpen 開啟時自動 focus 名稱欄位,避免使用者還要再去點
@@ -6031,7 +6031,7 @@
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
         addReel, removeReel, swapReels,
-        _dragReelIdx, _dragOverIdx,
+        dragReelIdx, dragOverIdx,
         onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
         bins, binsFor, binsValid, binTickPercent, binsDebugJson,
@@ -6175,7 +6175,7 @@
         exportXlsx, onImportFile,
         dirtyTabs,
         showTemplatePanel, templateList, newTemplateName, newTemplateDesc,
-        tplSaveOpen, _handleSaveAsTemplate,
+        tplSaveOpen, handleSaveAsTemplate,
         // ── #16 範本 diff ──
         diffOpen, diffSelecting, diffPickA, diffPickB, diffPickFor,
         diffComparisonResult, diffTotalCount,

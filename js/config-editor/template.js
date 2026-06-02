@@ -248,15 +248,15 @@
       <input class="input cfg-mono cfg-tpl-name-input"
              v-model.trim="newTemplateName"
              placeholder="範本名稱(例:A案_客戶X)"
-             @keyup.enter="_handleSaveAsTemplate"
+             @keyup.enter="handleSaveAsTemplate"
              ref="tplNameInputRef">
       <input class="input cfg-tpl-desc-input"
              v-model.trim="newTemplateDesc"
              placeholder="說明(選填)"
-             @keyup.enter="_handleSaveAsTemplate">
+             @keyup.enter="handleSaveAsTemplate">
       <button class="btn-pill cfg-tpl-save-btn"
               :disabled="!newTemplateName"
-              @click="_handleSaveAsTemplate">💾 儲存</button>
+              @click="handleSaveAsTemplate">💾 儲存</button>
     </div>
 
     <!-- 範本清單 -->
@@ -831,8 +831,8 @@
                 :class="{
                   active: activeReelIdx === idx,
                   'has-sub': r.has_subreel,
-                  'drag-over': _dragOverIdx === idx && _dragReelIdx !== idx,
-                  'dragging': _dragReelIdx === idx
+                  'drag-over': dragOverIdx === idx && dragReelIdx !== idx,
+                  'dragging': dragReelIdx === idx
                 }"
                 draggable="true"
                 @dragstart="onReelDragStart(idx, $event)"
