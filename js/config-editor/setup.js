@@ -57,52 +57,6 @@
       const active   = ref('global');
       const g        = reactive(loadGlobal());
 
-      // ── B / #2,#15,#16:Megaways 模型 + 計分方向收斂 + 條件式分頁 ──
-      // megaways 是純 UI 旗標(寫進 01_Global 但 a_loader 會忽略);引擎仍只認 4 種 pay_type。
-      // MEGAWAYS 在 UI 上是獨立按鈕,實際對應 pay_type='WAYS' + megaways=true。
-      if (g.megaways === undefined) g.megaways = false;
-      if (!g.payline_direction) g.payline_direction = g.ways_direction || 'LTR';
-
-      // 賠付模型 UI 清單(MEGAWAYS 為 WAYS 的變體)
-      const PAY_MODELS = [
-        { id: 'LINE',     label: 'LINE',     desc: '中獎線' },
-        { id: 'WAYS',     label: 'WAYS',     desc: '全路徑' },
-        { id: 'MEGAWAYS', label: 'MEGAWAYS', desc: '可變列數' },
-        { id: 'SCATTER',  label: 'SCATTER',  desc: '任意位置' },
-        { id: 'CLUSTER',  label: 'CLUSTER',  desc: '同符相鄰群' },
-      ];
-      const isMegaways = computed(() => !!g.megaways);
-      const activePayModel = computed(() => g.megaways ? 'MEGAWAYS' : (g.pay_type || 'LINE'));
-      function selectPayModel(id) {
-        if (id === 'MEGAWAYS') { g.pay_type = 'WAYS'; g.megaways = true; }
-        else { g.pay_type = id; g.megaways = false; }
-      }
-
-      // #16:計分方向收斂成單一控制(全域),同步寫入兩個後端欄位
-      const curScanDir = computed(() => g.payline_direction || g.ways_direction || 'LTR');
-      const scanDirApplicable = computed(() => {
-        const t = (g.pay_type || '').toUpperCase();
-        return t === 'LINE' || t === 'WAYS';   // SCATTER / CLUSTER 無方向概念
-      });
-      function setScanDir(d) {
-        g.ways_direction = d;
-        g.payline_direction = d;
-      }
-
-      // #2 / #15:分頁條件式適用性
-      function tabNotApplicable(tabId) {
-        if (tabId === 'grid_size_weights') return !g.megaways;
-        if (tabId === 'paylines') return !!g.megaways;
-        return false;
-      }
-      function tabNAReason(tabId) {
-        if (tabId === 'grid_size_weights')
-          return '「格數權重」只在 Megaways 模式使用(盤面每輪開幾個格子可變)。目前不是 Megaways 模式,因此不適用。';
-        if (tabId === 'paylines')
-          return 'Megaways 模式以「全路徑 + 可變列數」計分,不使用固定中獎線。如需中獎線,請到 01_Global · 賠付模型 改回 LINE 模式。';
-        return '';
-      }
-
       // ──────────────────────────────────────────────────────────
       //  v3.4 / C12:暗色模式
       //  - 寫入 LS,並透過 document.documentElement.dataset.theme 觸發 CSS 變數覆寫
@@ -1069,20 +1023,23 @@
         const rows = layout.map(r => r.max_rows);
         return new Set(rows).size > 1;
       });
-      // C 對齊 Batch B:分頁適用性改由 megaways(明確機制)驅動,不再用盤面高度資料隱藏。
-      //   grid_size_weights / paylines 一律顯示,非適用時由 tabNotApplicable 反灰 + 不適用說明。
+      // 渲染用分頁群組:v4.1 一律全部顯示,適用性交給 tabNotApplicable 反灰處理
+      //   (原先依盤面是否等高隱藏 grid_size_weights,會與 Batch B 的 megaways 反灰打架)
       const visibleTabGroups = computed(() => TABS_BY_GROUP);
-      // 切換 megaways 時,若正停在變成「不適用」的分頁,溫和導去對應分頁(仍可手動點回查看)
-      watch(() => g.megaways, (mw) => {
-        if (mw && active.value === 'paylines') active.value = 'grid_size_weights';
-        if (!mw && active.value === 'grid_size_weights') active.value = 'paylines';
+      // 切換 megaways 時,若停在會變不適用的分頁,溫和導到對應分頁(仍可手動點回查看)
+      watch(() => g.megaways, () => {
+        if (tabNotApplicable(active.value)) {
+          active.value = (active.value === 'paylines') ? 'global'
+                       : (active.value === 'grid_size_weights') ? 'reel_weights'
+                       : active.value;
+        }
       });
 
       function addReel() {
         const new_id = layout.length + 1;
         layout.push(makeReel(new_id));
         activeReelIdx.value = layout.length - 1;  // 自動跳到新 reel
-        selectedReelIdxs.value = [];
+        selectedReelIdxs.value = [];              // v4.1:清空群組多選,避免索引錯位
         emit('status', { type: 'ok', msg: `已新增 Reel #${new_id}` });
       }
       function removeReel(idx) {
@@ -1100,7 +1057,7 @@
         if (activeReelIdx.value >= layout.length) {
           activeReelIdx.value = layout.length - 1;
         }
-        selectedReelIdxs.value = [];
+        selectedReelIdxs.value = [];   // v4.1:清空群組多選,避免索引錯位
         emit('status', { type: 'ok', msg: '已刪除 Reel 並自動重編號' });
       }
 
@@ -1200,125 +1157,255 @@
       }
       function onReelDragEnd() { _dragReelIdx.value = -1; _dragOverIdx.value = -1; }
 
-      // ── C / #3:盤面預覽上的點選 + 指標拖曳互換 ──
-      const _previewDragFrom = ref(-1);
-      const _previewDragOver = ref(-1);
-      function selectReelById(reel_id) {
-        const i = layout.findIndex(r => r.reel_id === reel_id);
-        if (i >= 0) activeReelIdx.value = i;
+      // ══════════════════════════════════════════════════════════
+      //  v4.1 Batch B/C/D — 補齊 template 引用、但原先未實作的邏輯層
+      //  (template.js / helpers.js / CSS 已先行更新,此處為對應的 setup)
+      // ══════════════════════════════════════════════════════════
+
+      // ── B:賠付模型(MEGAWAYS = pay_type 'WAYS' + UI-only megaways 旗標)──
+      //   引擎只認 LINE/WAYS/SCATTER/CLUSTER;megaways 落到 01_Global 但 a_loader 忽略。
+      const PAY_MODELS = [
+        { id: 'LINE',     label: 'LINE',     desc: '沿預先定義的中獎線計分' },
+        { id: 'WAYS',     label: 'WAYS',     desc: '相鄰輪同符即計分(243 ways)' },
+        { id: 'MEGAWAYS', label: 'MEGAWAYS', desc: '全路徑 + 每輪列數可變(引擎走 WAYS)' },
+        { id: 'SCATTER',  label: 'SCATTER',  desc: '任意位置散佈計分' },
+        { id: 'CLUSTER',  label: 'CLUSTER',  desc: '同符相鄰成群計分' },
+      ];
+      const isMegaways = computed(() =>
+        !!g.megaways && (g.pay_type || '').toUpperCase() === 'WAYS'
+      );
+      // 顯示用:megaways 旗標開時顯示 MEGAWAYS,否則顯示實際 pay_type
+      const activePayModel = computed(() =>
+        isMegaways.value ? 'MEGAWAYS' : (g.pay_type || 'LINE').toUpperCase()
+      );
+      function selectPayModel(id) {
+        if (id === 'MEGAWAYS') {
+          g.pay_type = 'WAYS';
+          g.megaways = true;
+        } else {
+          g.pay_type = id;
+          g.megaways = false;
+        }
       }
+      // 計分方向:全域唯一控制,只在 LINE / WAYS(含 Megaways)適用
+      const scanDirApplicable = computed(() => {
+        const pt = (g.pay_type || '').toUpperCase();
+        return pt === 'LINE' || pt === 'WAYS';
+      });
+      const curScanDir = computed(() => g.ways_direction || g.payline_direction || 'LTR');
+      // 同步寫 ways_direction + payline_direction,讓中獎線/全路徑共用同一個方向
+      function setScanDir(d) {
+        g.ways_direction = d;
+        g.payline_direction = d;
+      }
+
+      // ── B:條件式分頁(反灰仍可點,進去顯示整版「不適用」說明卡)──
+      //   grid_size_weights 僅 Megaways 適用;paylines 在 Megaways 不適用。
+      function tabNotApplicable(tabId) {
+        if (tabId === 'grid_size_weights') return !isMegaways.value;
+        if (tabId === 'paylines')          return isMegaways.value;
+        return false;
+      }
+      function tabNAReason(tabId) {
+        if (tabId === 'grid_size_weights') {
+          return '格數權重表只在 Megaways(每輪列數可變)下才有意義。目前不是 Megaways,可於 01_Global 把賠付模型切成 MEGAWAYS。';
+        }
+        if (tabId === 'paylines') {
+          return 'Megaways 採全路徑計分,不使用中獎線。若需設定中獎線,請於 01_Global 把賠付模型改回 LINE。';
+        }
+        return '';
+      }
+
+      // ── C:Reel 群組多選 + 鍵盤 + 預覽點選/拖曳互換 ──
+      const selectedReelIdxs = ref([]);   // 多選的 layout 索引(群組編輯用)
+      const groupRowsValue   = ref(3);    // 群組「設為此值」的列數輸入
+      const groupOffsetValue = ref(0);    // 群組「設為此值」的偏移輸入
+      const _previewDragFrom = ref(-1);   // 預覽盤面拖曳起點(layout 索引)
+      const _previewDragOver = ref(-1);   // 預覽盤面拖曳當前停留欄(layout 索引)
+      const groupActive = computed(() => selectedReelIdxs.value.length >= 2);
+
+      function onReelChipClick(idx, ev) {
+        if (idx < 0 || idx >= layout.length) return;
+        if (ev && (ev.ctrlKey || ev.metaKey)) {
+          // Ctrl/⌘:toggle 多選
+          const arr = selectedReelIdxs.value.slice();
+          const at = arr.indexOf(idx);
+          if (at >= 0) arr.splice(at, 1); else arr.push(idx);
+          selectedReelIdxs.value = arr;
+        } else if (ev && ev.shiftKey && selectedReelIdxs.value.length > 0) {
+          // Shift:從目前 active 到 idx 的範圍
+          const a = activeReelIdx.value;
+          const lo = Math.min(a, idx), hi = Math.max(a, idx);
+          const arr = [];
+          for (let i = lo; i <= hi; i++) arr.push(i);
+          selectedReelIdxs.value = arr;
+        } else {
+          // 單擊:單選
+          selectedReelIdxs.value = [idx];
+        }
+        activeReelIdx.value = idx;   // 一律把詳情切到點到的 reel
+      }
+      function clearReelSelection() {
+        selectedReelIdxs.value = [];
+      }
+      // 群組操作目標:多選 ≥2 時為整組,否則退回目前 active reel
+      function _groupTargets() {
+        const idxs = groupActive.value ? selectedReelIdxs.value : [activeReelIdx.value];
+        return idxs.map(i => layout[i]).filter(Boolean);
+      }
+      function groupSetRows(v) {
+        const n = Math.max(1, Math.min(9, Math.round(Number(v) || 1)));
+        _groupTargets().forEach(r => { r.max_rows = n; });
+      }
+      function groupSetOffset(v) {
+        const n = Math.max(-9, Math.min(9, Math.round(Number(v) || 0)));
+        _groupTargets().forEach(r => { r.y_offset = n; });
+      }
+      function groupAdjustRows(delta) {
+        _groupTargets().forEach(r => {
+          r.max_rows = Math.max(1, Math.min(9, (Number(r.max_rows) || 1) + delta));
+        });
+      }
+      function groupAdjustOffset(delta) {
+        _groupTargets().forEach(r => {
+          r.y_offset = Math.max(-9, Math.min(9, (Number(r.y_offset) || 0) + delta));
+        });
+      }
+      function groupToggleSubreel() {
+        const targets = _groupTargets();
+        const allOn = targets.length > 0 && targets.every(r => r.has_subreel);
+        targets.forEach(r => {
+          r.has_subreel = !allOn;
+          if (r.has_subreel && !r.subreel_position) {
+            r.subreel_position = 'BOTTOM';
+            r.subreel_rows = 1;
+          }
+        });
+      }
+      // 由 reel_id 選回主 Reel(預覽欄頭/格子點選)
+      function selectReelById(reel_id) {
+        const idx = layout.findIndex(r => r.reel_id === reel_id);
+        if (idx >= 0) {
+          activeReelIdx.value = idx;
+          selectedReelIdxs.value = [idx];
+        }
+      }
+      // 預覽盤面拖曳互換(指標事件;沿用 swapReels,連列高/副輪/權重一起換)
       function onPreviewPointerDown(idx, ev) {
         if (idx < 0 || idx >= layout.length) return;
-        activeReelIdx.value = idx;          // 按下即選取
+        selectReelById(layout[idx].reel_id);
         _previewDragFrom.value = idx;
         _previewDragOver.value = idx;
-        try { window.addEventListener('pointerup', _onPreviewPointerUp, { once: true }); } catch (e) {}
-        if (ev && ev.preventDefault) ev.preventDefault();
+        if (typeof window !== 'undefined') {
+          window.addEventListener('pointerup', _onPreviewPointerUp, { once: true });
+        }
       }
       function onPreviewPointerEnter(idx) {
         if (_previewDragFrom.value >= 0) _previewDragOver.value = idx;
       }
       function _onPreviewPointerUp() {
-        const from = _previewDragFrom.value, to = _previewDragOver.value;
+        const from = _previewDragFrom.value;
+        const to   = _previewDragOver.value;
+        if (from >= 0 && to >= 0 && from !== to) swapReels(from, to);
         _previewDragFrom.value = -1;
         _previewDragOver.value = -1;
-        if (from >= 0 && to >= 0 && from !== to) swapReels(from, to);
       }
-
-      // ── C / #3:盤面結構鍵盤操作(← → 選 Reel、↑ ↓ 控偏移、+ − 控列數)──
-      //   防呆:70ms 節流(擋長按/狂按一次跳太多)+ 數值夾在合法範圍。
-      let _layoutKeyLast = 0;
-      function _layoutKeyThrottle() {
-        const now = Date.now();
-        if (now - _layoutKeyLast < 70) return false;
-        _layoutKeyLast = now;
-        return true;
+      // 鍵盤操作(僅 layout 分頁、焦點不在輸入框):←→ 選 Reel、↑↓ 偏移、+− 列數
+      //   防呆:70ms 節流 + 夾值;多選 ≥2 時 ↑↓/+− 套用到整組。
+      let _layoutKeyThrottle = 0;
+      function _adjustActiveOffset(d) {
+        const r = activeReel.value;
+        if (r) r.y_offset = Math.max(-9, Math.min(9, (Number(r.y_offset) || 0) + d));
+      }
+      function _adjustActiveRows(d) {
+        const r = activeReel.value;
+        if (r) r.max_rows = Math.max(1, Math.min(9, (Number(r.max_rows) || 1) + d));
       }
       function _onLayoutKeydown(ev) {
         if (active.value !== 'layout') return;
         const t = ev.target;
-        // 不攔截輸入框/可編輯區內的按鍵
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-        if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-        const r = activeReel.value;
-        const k = ev.key;
-        if (k === 'ArrowLeft') {
+        const tag = (t && t.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+        const now = Date.now();
+        if (now - _layoutKeyThrottle < 70) return;
+        let handled = true;
+        switch (ev.key) {
+          case 'ArrowLeft':
+            activeReelIdx.value = Math.max(0, activeReelIdx.value - 1);
+            selectedReelIdxs.value = [activeReelIdx.value];
+            break;
+          case 'ArrowRight':
+            activeReelIdx.value = Math.min(layout.length - 1, activeReelIdx.value + 1);
+            selectedReelIdxs.value = [activeReelIdx.value];
+            break;
+          case 'ArrowUp':
+            groupActive.value ? groupAdjustOffset(-1) : _adjustActiveOffset(-1);
+            break;
+          case 'ArrowDown':
+            groupActive.value ? groupAdjustOffset(1) : _adjustActiveOffset(1);
+            break;
+          case '+': case '=':
+            groupActive.value ? groupAdjustRows(1) : _adjustActiveRows(1);
+            break;
+          case '-': case '_':
+            groupActive.value ? groupAdjustRows(-1) : _adjustActiveRows(-1);
+            break;
+          default:
+            handled = false;
+        }
+        if (handled) {
           ev.preventDefault();
-          if (!_layoutKeyThrottle()) return;
-          if (activeReelIdx.value > 0) activeReelIdx.value--;
-        } else if (k === 'ArrowRight') {
-          ev.preventDefault();
-          if (!_layoutKeyThrottle()) return;
-          if (activeReelIdx.value < layout.length - 1) activeReelIdx.value++;
-        } else if (k === 'ArrowUp' || k === 'ArrowDown') {
-          if (!r) return;
-          ev.preventDefault();
-          if (!_layoutKeyThrottle()) return;
-          const delta = (k === 'ArrowUp') ? -1 : 1;   // 上=往上偏(減)、下=往下偏(加)
-          if (selectedReelIdxs.value.length >= 2) groupAdjustOffset(delta);
-          else r.y_offset = Math.max(-9, Math.min(9, (Number(r.y_offset) || 0) + delta));
-        } else if (k === '+' || k === '=' || k === 'Add') {
-          if (!r) return;
-          ev.preventDefault();
-          if (!_layoutKeyThrottle()) return;
-          if (selectedReelIdxs.value.length >= 2) groupAdjustRows(1);
-          else r.max_rows = Math.min(9, (Number(r.max_rows) || 1) + 1);
-        } else if (k === '-' || k === '_' || k === 'Subtract') {
-          if (!r) return;
-          ev.preventDefault();
-          if (!_layoutKeyThrottle()) return;
-          if (selectedReelIdxs.value.length >= 2) groupAdjustRows(-1);
-          else r.max_rows = Math.max(1, (Number(r.max_rows) || 1) - 1);
+          _layoutKeyThrottle = now;
         }
       }
 
-      // ── #4 / A1:Reel 多選 + 群組批次編輯(純 UI,不寫 A.xlsx / 不影響引擎)──
-      const selectedReelIdxs = ref([]);            // 多選的位置索引(transient)
-      const groupRowsValue   = ref(3);
-      const groupOffsetValue = ref(0);
-      const groupActive = computed(() => selectedReelIdxs.value.length >= 2);
-      function groupReelList() {
-        return selectedReelIdxs.value.map(i => layout[i]).filter(Boolean);
+      // ── D:矩陣常駐快速操作列 + 欄/列頭點選 + grid 熱力圖 ──
+      const matrixFillValue = ref(10);   // 「填入值」輸入
+      function quickFillTable(kind, mode) {
+        matrixFillAll(kind, mode, null, matrixFillValue.value);
       }
-      function clearReelSelection() { selectedReelIdxs.value = []; }
-      function onReelChipClick(idx, ev) {
-        if (ev && (ev.ctrlKey || ev.metaKey)) {
-          const s = new Set(selectedReelIdxs.value);
-          if (s.has(idx)) s.delete(idx); else s.add(idx);
-          selectedReelIdxs.value = [...s].sort((a, b) => a - b);
-        } else if (ev && ev.shiftKey) {
-          const lo = Math.min(activeReelIdx.value, idx);
-          const hi = Math.max(activeReelIdx.value, idx);
-          const arr = [];
-          for (let i = lo; i <= hi; i++) arr.push(i);
-          selectedReelIdxs.value = arr;
-        } else {
-          selectedReelIdxs.value = [];
-        }
-        activeReelIdx.value = idx;
+      function quickApplySelection() {
+        if (matrixSelection.keys.size === 0) return;
+        applyMatrixSelOp('set', Math.max(0, Math.round(Number(matrixFillValue.value) || 0)));
       }
-      function groupSetRows(v) {
-        const n = Math.max(1, Math.min(9, Math.round(Number(v) || 1)));
-        for (const r of groupReelList()) r.max_rows = n;
-      }
-      function groupSetOffset(v) {
-        const n = Math.max(-9, Math.min(9, Math.round(Number(v) || 0)));
-        for (const r of groupReelList()) r.y_offset = n;
-      }
-      function groupAdjustRows(d) {
-        for (const r of groupReelList()) r.max_rows = Math.max(1, Math.min(9, (Number(r.max_rows) || 1) + d));
-      }
-      function groupAdjustOffset(d) {
-        for (const r of groupReelList()) r.y_offset = Math.max(-9, Math.min(9, (Number(r.y_offset) || 0) + d));
-      }
-      function groupToggleSubreel() {
-        const list = groupReelList();
-        const anyOff = list.some(r => !r.has_subreel);
-        for (const r of list) {
-          r.has_subreel = anyOff;       // 有任一沒開 → 全開;否則全關
-          if (anyOff && !r.subreel_position) { r.subreel_position = 'BOTTOM'; r.subreel_rows = 1; }
+      // 選取若不屬於當前 kind/mode 先清空,避免跨 tab 套用
+      function _clearSelIfScopeDiffers(kind, mode) {
+        const scope = _selectionScope();
+        if (scope && (scope.kind !== kind || scope.mode !== mode || scope.step !== '')) {
+          matrixSelection.keys = new Set();
+          matrixSelection.anchor = null;
         }
       }
+      function selectWholeColumn(kind, mode, col) {
+        _clearSelIfScopeDiffers(kind, mode);
+        col = String(col);
+        for (const r of layout) {
+          matrixSelection.keys.add(_selKey(kind, mode, r.reel_id, col));
+        }
+        matrixSelection.anchor = null;
+      }
+      function selectWholeRow(kind, mode, reel_id) {
+        _clearSelIfScopeDiffers(kind, mode);
+        for (const c of _colsForKind(kind, mode)) {
+          matrixSelection.keys.add(_selKey(kind, mode, reel_id, String(c)));
+        }
+        matrixSelection.anchor = null;
+      }
+      // grid 熱力圖(對齊 reelHeatColor;#13 用 accent,非紫)
+      function gridHeatColor(mode, w) {
+        if (w === 0 || w === undefined || w === null) {
+          return 'rgba(120,120,140,0.10)';
+        }
+        const mx = gridMaxWeight(mode);
+        if (!mx) return 'transparent';
+        const ratio = Math.sqrt(Math.min(1, w / mx));
+        return `rgb(var(--tint-accent) / ${(0.08 + 0.50 * ratio).toFixed(3)})`;
+      }
+
+      // template 用的別名(歷史上 setup 內以底線命名,template 已改用無底線)
+      const dragReelIdx = _dragReelIdx;
+      const dragOverIdx  = _dragOverIdx;
+      const handleSaveAsTemplate = _handleSaveAsTemplate;
 
       // ──────────────────────────────────────────────────────────
       //  v3.3 / A4:盤面範本(LAYOUT_PRESETS)
@@ -1545,21 +1632,12 @@
         return s;
       }
       // 整欄填統一值
-      // D / #14:批次操作後強制刷新矩陣 cell(重建 weights 物件參照,避開 v-memo 快取不更新)
-      function _forceMatrixRefresh(kind, mode) {
-        let e = null;
-        if (kind === 'reel') e = reelWeights[mode];
-        else if (kind === 'grid') e = (typeof gridWeights !== 'undefined') ? gridWeights[mode] : null;
-        else if (kind === 'combo') e = (typeof comboWeights !== 'undefined') ? comboWeights[mode] : null;
-        if (e && e.weights) e.weights = { ...e.weights };
-      }
       function reelFillColUniform(mode, sid, v = 100) {
         _pushUndo("reel", mode);        const e = reelW(mode);
         for (let r = 1; r <= layout.length; r++) {
           e.weights[`${r}-${sid}`] = v;
         }
         emit('status', { type: 'ok', msg: `「${sid}」整欄已設為 ${v}` });
-        _forceMatrixRefresh('reel', mode);
       }
       // 整欄縮放(*factor),保留比例
       function reelScaleCol(mode, sid, factor) {
@@ -1572,7 +1650,6 @@
           }
         }
         emit('status', { type: 'ok', msg: `「${sid}」整欄已乘以 ${factor}` });
-        _forceMatrixRefresh('reel', mode);
       }
       // 整欄正規化到目標總和(預設 100)
       function reelNormalizeCol(mode, sid, target = 100) {
@@ -1587,7 +1664,6 @@
           reelScaleCol(mode, sid, target / cur);
         }
         emit('status', { type: 'ok', msg: `「${sid}」整欄已正規化到 ${target}` });
-        _forceMatrixRefresh('reel', mode);
       }
 
       // 整欄複製到其他所有欄
@@ -1600,7 +1676,6 @@
           }
         }
         emit('status', { type: 'ok', msg: `已把「${from_sid}」複製到所有其他符號欄` });
-        _forceMatrixRefresh('reel', mode);
       }
 
       // 欄級操作 popover state(類似 reel 級)
@@ -1676,7 +1751,6 @@
           }
         }
         emit('status', { type: 'ok', msg: `R${reel} 整列已正規化到 ${target}` });
-        _forceMatrixRefresh('reel', mode);
       }
       function gridNormalizeRow(mode, reel, target = 100) {
         _pushUndo("grid", mode);        const e = gridW(mode);
@@ -1719,7 +1793,6 @@
           e.weights[`${reel}-${sid}`] = Math.round(v * factor);
         }
         emit('status', { type: 'ok', msg: `R${reel} 整列已乘以 ${factor}` });
-        _forceMatrixRefresh('reel', mode);
       }
       function gridScaleRow(mode, reel, factor) {
         _pushUndo("grid", mode);        if (!factor || factor <= 0) return;
@@ -2033,35 +2106,7 @@
           }
           t.table[t.key] = Math.max(0, next);
         }
-        const _touched = new Set();
-        for (const k of matrixSelection.keys) { const p = k.split(':'); _touched.add(p[0] + '|' + p[1]); }
-        for (const tk of _touched) { const [kk, mm] = tk.split('|'); _forceMatrixRefresh(kk, mm); }
         emit('status', { type: 'ok', msg: `已對 ${matrixSelection.keys.size} 個 cell 套用 ${op}` });
-      }
-
-      // ── D 大優化:常駐快速操作列 + 欄/列頭點選 ──
-      const matrixFillValue = ref(100);
-      function quickFillTable(kind, mode) {
-        const v = Math.max(0, Math.round(Number(matrixFillValue.value) || 0));
-        matrixFillAll(kind, mode, null, v);
-      }
-      function quickApplySelection() {
-        if (matrixSelection.keys.size === 0) return;
-        const v = Math.max(0, Math.round(Number(matrixFillValue.value) || 0));
-        applyMatrixSelOp('set', v);
-      }
-      function selectWholeColumn(kind, mode, col) {
-        const keys = new Set();
-        for (const r of layout) keys.add(_selKey(kind, mode, r.reel_id, String(col)));
-        matrixSelection.keys = keys;
-        matrixSelection.anchor = null;
-      }
-      function selectWholeRow(kind, mode, r) {
-        const cols = _colsForKind(kind, mode);
-        const keys = new Set();
-        for (const c of cols) keys.add(_selKey(kind, mode, r, String(c)));
-        matrixSelection.keys = keys;
-        matrixSelection.anchor = null;
       }
 
       // 視覺預覽的計算
@@ -2911,7 +2956,6 @@
       function reelFillRowUniform(mode, reel_id, v = 100) {
         _pushUndo("reel", mode);        const e = reelW(mode);
         for (const sid of e.symbol_ids) e.weights[`${reel_id}-${sid}`] = v;
-        _forceMatrixRefresh('reel', mode);
       }
       // 把某 Reel 的權重複製到所有 Reel
       function reelCopyToAll(mode, from_reel) {
@@ -2922,7 +2966,6 @@
             e.weights[`${r}-${sid}`] = e.weights[`${from_reel}-${sid}`] ?? 0;
           }
         }
-        _forceMatrixRefresh('reel', mode);
       }
       // 04 排序:重新排列 symbol_ids 順序(只動欄,不動權重值)
       function sortReelSymbols(mode, by) {
@@ -3123,7 +3166,6 @@
         const scope = (kind === 'combo' && step == null) ? '(全爆)' : (step != null ? `(第${step}爆)` : '');
         emit('status', { type: 'ok', msg: `${mode} ${scope} 整表 × ${factor}` });
         closeMatrixMenu();
-        _forceMatrixRefresh(kind, mode);
       }
 
       // 「整表填同值」— value 預設 100;適合快速重置
@@ -3135,7 +3177,6 @@
         const scope = (kind === 'combo' && step == null) ? '(全爆)' : (step != null ? `(第${step}爆)` : '');
         emit('status', { type: 'ok', msg: `${mode} ${scope} 整表填 ${v}` });
         closeMatrixMenu();
-        _forceMatrixRefresh(kind, mode);
       }
       // 「整表清空為 0」— 含 confirm,因為破壞性較強
       function matrixClearAll(kind, mode, step) {
@@ -3174,7 +3215,6 @@
         const scope = (step != null ? `(第${step}爆)` : '');
         emit('status', { type: 'ok', msg: `${mode} ${scope} 每列已正規化至 100` });
         closeMatrixMenu();
-        _forceMatrixRefresh(kind, mode);
       }
 
       // 「從另一模式複製」— deep clone 來源權重覆蓋當前模式
@@ -6219,7 +6259,7 @@
         document.addEventListener('click', _onDocClickForStepCopy, true);
         // #15:全域 Ctrl+K 開啟搜尋
         document.addEventListener('keydown', _onGlobalKeydown);
-        // C / #3:盤面結構鍵盤操作(僅 layout 分頁作用)
+        // v4.1 / C:盤面結構鍵盤操作(←→↑↓+−,僅 layout 分頁生效)
         document.addEventListener('keydown', _onLayoutKeydown);
         // #10:確保 baseline 存在(若首次使用就用當前 LS 內容建立)
         ensureBaseline();
@@ -6240,9 +6280,6 @@
       return {
         TABS, TABS_BY_GROUP, visibleTabGroups, isVariableHeightBoard, active, activeTab, groupDirtyCount,
         g, PAY_TYPES, WAYS_DIRS,
-        PAY_MODELS, isMegaways, activePayModel, selectPayModel,
-        curScanDir, scanDirApplicable, setScanDir,
-        tabNotApplicable, tabNAReason,
         registry, symbolList, symbolNames, allModeScopes,
         modes, modeNames, duplicateNames, modesDebugJson,
         addMode, removeMode, passStatus,
@@ -6250,12 +6287,21 @@
         activeReelIdx, activeReel,
         addReel, removeReel, swapReels,
         _dragReelIdx, _dragOverIdx,
-        _previewDragFrom, _previewDragOver,
-        selectReelById, onPreviewPointerDown, onPreviewPointerEnter,
+        dragReelIdx, dragOverIdx,
+        onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
+        // ── v4.1 / B:賠付模型 + 條件式分頁 + 計分方向收斂 ──
+        PAY_MODELS, isMegaways, activePayModel, selectPayModel,
+        scanDirApplicable, curScanDir, setScanDir,
+        tabNotApplicable, tabNAReason,
+        // ── v4.1 / C:Reel 群組多選 + 預覽互動 + 鍵盤 ──
         selectedReelIdxs, groupActive, groupRowsValue, groupOffsetValue,
         onReelChipClick, clearReelSelection,
         groupSetRows, groupSetOffset, groupAdjustRows, groupAdjustOffset, groupToggleSubreel,
-        onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
+        selectReelById, onPreviewPointerDown, onPreviewPointerEnter,
+        _previewDragFrom, _previewDragOver,
+        // ── v4.1 / D:矩陣快速操作列 + 欄列頭點選 + grid 熱力圖 ──
+        matrixFillValue, quickFillTable, quickApplySelection,
+        selectWholeColumn, selectWholeRow, gridHeatColor,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
         bins, binsFor, binsValid, binTickPercent, binsDebugJson,
         paylines, paylinesDebugJson, PAYLINE_DIRECTIONS,
@@ -6282,7 +6328,6 @@
         // ── #4 矩陣模式級操作(04/05/08 共用)──
         matrixMenu, openMatrixMenu, closeMatrixMenu,
         matrixScale, matrixFillAll, matrixNormalizeRows, matrixClearAll,
-        matrixFillValue, quickFillTable, quickApplySelection, selectWholeColumn, selectWholeRow,
         matrixCopyFromMode, matrixOtherModes,
         // ── #2 健康度檢查 ──
         validationIssues, validationSummary, validationPanelOpen,
@@ -6399,7 +6444,7 @@
         exportXlsx, onImportFile,
         dirtyTabs,
         showTemplatePanel, templateList, newTemplateName, newTemplateDesc,
-        tplSaveOpen, _handleSaveAsTemplate,
+        tplSaveOpen, _handleSaveAsTemplate, handleSaveAsTemplate,
         // ── #16 範本 diff ──
         diffOpen, diffSelecting, diffPickA, diffPickB, diffPickFor,
         diffComparisonResult, diffTotalCount,
@@ -6416,6 +6461,7 @@
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用
         selectedKind, rulesListFilter, rulesAddMenuOpen,
+        _selectItem,
         addRuleFromMenu,
         // ── #17 規則拖曳排序 ──
         rulesDragState, rulesAutoPriority,
