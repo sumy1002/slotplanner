@@ -70,6 +70,12 @@
         {{ selected ? '編輯：' + (selected.name || ('#' + selected.number) || ('id=' + selected.id)) : '編輯 Symbol' }}
       </div>
       <div class="topbar-actions">
+        <button v-if="selected" class="sym-edit-toggle"
+                :class="{ on: selected.enabled !== false }"
+                @click="toggleEnabled(selected.id)"
+                :title="selected.enabled === false ? '已停用 — 點擊重新啟用' : '啟用中 — 點擊停用此符號（資料保留,不匯出/不同步）'">
+          {{ selected.enabled === false ? '⏸ 已停用' : '● 啟用中' }}
+        </button>
         <button class="btn-pill" @click="exportJson" title="下載目前所有 symbol 為 JSON 設定檔">⇩ 匯出 JSON</button>
         <button class="btn-pill" @click="triggerImport" title="從 JSON 設定檔匯入（會覆寫目前資料）">⇧ 匯入 JSON</button>
         <button class="btn-pill" @click="resetDefaults" title="重設為預設 15 個 symbol">↺ 重設</button>
@@ -82,181 +88,188 @@
     </div>
 
     <div v-else class="sym-edit">
-      <!-- 顏色 / 編號 / 名稱 -->
-      <div class="sym-edit-section">
-        <div class="section-title">顏色 / 編號 / 名稱</div>
-        <div class="sym-edit-row">
-          <div class="sym-swatch-preview" :style="swatchStyle(selected.id)">
-            {{ initialOf(selected) }}
-          </div>
+      <!-- 停用橫幅(#7:編輯中可直接停用/啟用,停用時下方資訊反灰) -->
+      <div v-if="selected.enabled === false" class="sym-disabled-banner">
+        <span>⏸ 此符號目前已停用 —— 不會匯出、不進權重同步。下方欄位僅供檢視。</span>
+        <button class="btn-pill add" @click="toggleEnabled(selected.id)">↻ 重新啟用</button>
+      </div>
 
-          <div class="swatch-grid">
-            <div v-for="(c, i) in SWATCH_COLORS" :key="i"
-                 class="swatch-cell"
-                 :class="{selected: isCurrentSwatch(i)}"
-                 :style="{background: c[0]}"
-                 :title="c[0]"
-                 @click="pickSwatch(i)"></div>
-          </div>
+      <div class="sym-edit-body" :class="{ 'is-off': selected.enabled === false }">
 
-          <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;">
-            <div>
-              <div class="field-label-sm">編號（數字）</div>
-              <input class="input input-sm"
-                     :class="{err: numErr}"
-                     v-model="form.number"
-                     @input="onFieldEdit"
-                     placeholder="00"
-                     inputmode="numeric">
-              <div v-if="numErr" class="field-err">編號已重複</div>
+        <!-- ═══ 角色 / 類型(#9:移到最前,wild/scatter 由 Type 自動推導)═══ -->
+        <div class="sym-edit-section">
+          <div class="section-title">角色 / 類型</div>
+          <div class="sym-type-chips sym-type-chips-lg">
+            <button v-for="t in SYMBOL_TYPES" :key="t"
+                    class="sym-type-chip"
+                    :class="{ active: form.type === t }"
+                    @click="setType(t)">{{ t }}</button>
+          </div>
+          <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
+        </div>
+        <div class="sep"></div>
+
+        <!-- 外觀 / 識別(顏色 + 編號 + 名稱 + 代碼)-->
+        <div class="sym-edit-section">
+          <div class="section-title">外觀 / 識別</div>
+          <div class="sym-edit-row">
+            <div class="sym-swatch-preview" :style="swatchStyle(selected.id)">
+              {{ initialOf(selected) }}
             </div>
-            <div>
-              <div class="field-label-sm">名稱</div>
-              <input class="input input-sm"
-                     :class="{err: nameErr}"
-                     v-model="form.name"
-                     @input="onFieldEdit"
-                     placeholder="symbol 名稱">
-              <div v-if="nameErr" class="field-err">名稱已重複</div>
+            <div class="swatch-grid">
+              <div v-for="(c, i) in SWATCH_COLORS" :key="i"
+                   class="swatch-cell"
+                   :class="{selected: isCurrentSwatch(i)}"
+                   :style="{background: c[0]}"
+                   :title="c[0]"
+                   @click="pickSwatch(i)"></div>
             </div>
-          </div>
-        </div>
-      </div>
-      <div class="sep"></div>
-
-      <!-- 權重 -->
-      <div class="sym-edit-section">
-        <div class="section-title">權重</div>
-        <div class="weight-row">
-          <input type="range" class="weight-slider"
-                 min="0" max="1000" step="1"
-                 v-model.number="form.weight"
-                 :style="{'--val': (form.weight / 10) + '%'}"
-                 @input="onFieldEdit">
-          <div class="weight-val">{{ form.weight }}</div>
-        </div>
-      </div>
-      <div class="sep"></div>
-
-      <!-- 出現輪限制 -->
-      <div class="sym-edit-section">
-        <div class="section-title">出現輪限制</div>
-        <div class="hint">（輪數由盤面設計頁決定，目前為 {{ reelCount }} 輪）</div>
-        <div class="reel-limits">
-          <label v-for="(b, i) in form.reel_limit" :key="i" class="chk">
-            <input type="checkbox" v-model="form.reel_limit[i]" @change="onFieldEdit">
-            <span class="box"></span>
-            <span>輪 {{ i + 1 }}</span>
-          </label>
-        </div>
-      </div>
-      <div class="sep"></div>
-
-      <!-- 出現上限 -->
-      <div class="sym-edit-section">
-        <div class="section-title">出現上限</div>
-        <div style="display:flex; gap:12px; align-items:center; margin-left:4px;">
-          <label class="chk">
-            <input type="checkbox" v-model="form.use_max" @change="onFieldEdit">
-            <span class="box"></span>
-            <span>啟用上限</span>
-          </label>
-          <input class="input input-sm" style="width:64px;"
-                 type="number" min="0" max="999"
-                 v-model.number="form.max_count"
-                 :disabled="!form.use_max"
-                 @input="onFieldEdit">
-          <span style="font-size:12px; color:var(--text-light);">顆</span>
-        </div>
-      </div>
-      <div class="sep"></div>
-
-      <!-- ═══════ 進階屬性(A.xlsx 03_Symbols 用)═══════ -->
-      <div class="sym-edit-section sym-advanced">
-        <div class="section-title">
-          進階屬性
-          <span class="section-subtitle">(對應 A.xlsx 03_Symbols 欄位)</span>
-        </div>
-
-        <!-- Symbol_ID & Type -->
-        <div class="sym-adv-row">
-          <div class="sym-adv-field">
-            <div class="field-label-sm">
-              Symbol_ID
-              <span class="field-label-hint">A.xlsx 用的代碼,留空則用名稱</span>
-            </div>
-            <input class="input input-sm cfg-mono"
-                   v-model="form.symbol_id"
-                   @input="onFieldEdit"
-                   placeholder="WILD / H1 / L2 ...">
-          </div>
-          <div class="sym-adv-field">
-            <div class="field-label-sm">Type</div>
-            <div class="sym-type-chips">
-              <button v-for="t in SYMBOL_TYPES" :key="t"
-                      class="sym-type-chip"
-                      :class="{ active: form.type === t }"
-                      @click="form.type = t; onFieldEdit()">{{ t }}</button>
+            <div class="sym-id-fields">
+              <div>
+                <div class="field-label-sm">編號（數字）</div>
+                <input class="input input-sm input-center"
+                       :class="{err: numErr}"
+                       v-model="form.number"
+                       @input="onFieldEdit"
+                       placeholder="00"
+                       inputmode="numeric">
+                <div v-if="numErr" class="field-err">編號已重複</div>
+              </div>
+              <div>
+                <div class="field-label-sm">名稱</div>
+                <input class="input input-sm input-center"
+                       :class="{err: nameErr}"
+                       v-model="form.name"
+                       @input="onFieldEdit"
+                       placeholder="symbol 名稱">
+                <div v-if="nameErr" class="field-err">名稱已重複</div>
+              </div>
+              <div>
+                <div class="field-label-sm">
+                  Symbol_ID <span class="field-label-hint">A.xlsx 代碼,留空用名稱</span>
+                </div>
+                <input class="input input-sm input-center cfg-mono"
+                       v-model="form.symbol_id"
+                       @input="onFieldEdit"
+                       placeholder="WILD / H1 / L2">
+              </div>
             </div>
           </div>
         </div>
+        <div class="sep"></div>
 
-        <!-- Pay Table -->
-        <div class="sym-pay-section">
-          <div class="field-label-sm">
-            賠付表 Pay Table
-            <span class="field-label-hint">當 N 個此符號出現在中獎線上的賠付倍數</span>
+        <!-- 權重 -->
+        <div class="sym-edit-section">
+          <div class="section-title">權重</div>
+          <div class="weight-row">
+            <input type="range" class="weight-slider"
+                   min="0" max="1000" step="1"
+                   v-model.number="form.weight"
+                   :style="{'--val': (form.weight / 10) + '%'}"
+                   @input="onFieldEdit">
+            <div class="weight-val">{{ form.weight }}</div>
           </div>
+        </div>
+        <div class="sep"></div>
+
+        <!-- 賠付表(#11:緊湊迷你卡)-->
+        <div class="sym-edit-section">
+          <div class="section-title">賠付表 <span class="section-subtitle">N 連線時的賠付倍數</span></div>
           <div class="sym-pay-grid">
             <div class="sym-pay-cell">
               <label class="sym-pay-label">3×</label>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_3x"
-                     @input="onFieldEdit">
+                     v-model.number="form.pay_3x" @input="onFieldEdit">
             </div>
             <div class="sym-pay-cell">
               <label class="sym-pay-label">4×</label>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_4x"
-                     @input="onFieldEdit">
+                     v-model.number="form.pay_4x" @input="onFieldEdit">
             </div>
             <div class="sym-pay-cell">
               <label class="sym-pay-label">5×</label>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_5x"
-                     @input="onFieldEdit">
+                     v-model.number="form.pay_5x" @input="onFieldEdit">
             </div>
             <div class="sym-pay-cell">
               <label class="sym-pay-label">6×</label>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_6x"
-                     @input="onFieldEdit">
+                     v-model.number="form.pay_6x" @input="onFieldEdit">
             </div>
           </div>
         </div>
+        <div class="sep"></div>
 
-        <!-- Mega 尺寸 & 旗標 -->
-        <div class="sym-adv-row">
-          <div class="sym-adv-field sym-mega-field">
-            <div class="field-label-sm">
-              Mega 尺寸
-              <span class="field-label-hint">寬 × 高(覆蓋幾個 Reel / 幾列)</span>
+        <!-- 出現限制(輪 + 上限,#12:併兩欄省空間)-->
+        <div class="sym-edit-section">
+          <div class="section-title">出現限制</div>
+          <div class="sym-limit-grid">
+            <div>
+              <div class="field-label-sm">出現輪限制 <span class="field-label-hint">目前為 {{ reelCount }} 輪</span></div>
+              <div class="reel-limits">
+                <label v-for="(b, i) in form.reel_limit" :key="i" class="chk">
+                  <input type="checkbox" v-model="form.reel_limit[i]" @change="onFieldEdit">
+                  <span class="box"></span>
+                  <span>輪 {{ i + 1 }}</span>
+                </label>
+              </div>
             </div>
-            <div class="sym-mega-row">
-              <input class="input input-sm cfg-mono sym-mega-input" type="number" min="1" max="10"
-                     v-model.number="form.mega_w"
-                     @input="onFieldEdit">
-              <span class="sym-mega-sep">×</span>
-              <input class="input input-sm cfg-mono sym-mega-input" type="number" min="1" max="10"
-                     v-model.number="form.mega_h"
-                     @input="onFieldEdit">
+            <div>
+              <div class="field-label-sm">出現上限</div>
+              <div class="sym-max-row">
+                <label class="chk">
+                  <input type="checkbox" v-model="form.use_max" @change="onFieldEdit">
+                  <span class="box"></span>
+                  <span>啟用</span>
+                </label>
+                <input class="input input-sm input-center" style="width:64px;"
+                       type="number" min="0" max="999"
+                       v-model.number="form.max_count"
+                       :disabled="!form.use_max"
+                       @input="onFieldEdit">
+                <span class="sym-unit">顆</span>
+              </div>
             </div>
+          </div>
+        </div>
+        <div class="sep"></div>
+
+        <!-- 圖示尺寸 / Mega(#10:預設 1×1,點擊才展開設定)-->
+        <div class="sym-edit-section">
+          <div class="section-title">圖示尺寸</div>
+
+          <div v-if="!showMega" class="sym-size-default">
+            <span class="sym-size-badge">{{ form.mega_w }}×{{ form.mega_h }}</span>
+            <span class="sym-size-desc">{{ (form.mega_w > 1 || form.mega_h > 1) ? 'Mega 符號（佔多格）' : '一般符號（1×1）' }}</span>
+            <button class="btn-pill" @click="showMega = true">⤢ 設定 Mega 尺寸</button>
+          </div>
+
+          <div v-else class="sym-mega-edit">
+            <div class="sym-mega-steppers">
+              <div class="sym-mega-stepper-group">
+                <span class="field-label-sm">寬（Reel）</span>
+                <div class="cfg-stepper">
+                  <button class="cfg-stepper-btn" @click="bumpMega('w', -1)" :disabled="form.mega_w <= 1">−</button>
+                  <span class="cfg-stepper-val">{{ form.mega_w }}</span>
+                  <button class="cfg-stepper-btn" @click="bumpMega('w', 1)" :disabled="form.mega_w >= 10">+</button>
+                </div>
+              </div>
+              <div class="sym-mega-stepper-group">
+                <span class="field-label-sm">高（列）</span>
+                <div class="cfg-stepper">
+                  <button class="cfg-stepper-btn" @click="bumpMega('h', -1)" :disabled="form.mega_h <= 1">−</button>
+                  <span class="cfg-stepper-val">{{ form.mega_h }}</span>
+                  <button class="cfg-stepper-btn" @click="bumpMega('h', 1)" :disabled="form.mega_h >= 10">+</button>
+                </div>
+              </div>
+              <button class="btn-pill" @click="resetMega">↺ 還原 1×1</button>
+            </div>
+
             <!-- ── Mega 視覺預覽小盤面 ── -->
             <div class="sym-mega-preview">
               <svg :viewBox="megaPreview.viewBox" class="sym-mega-svg"
                    :style="{ width: megaPreview.svgWidth + 'px', height: megaPreview.svgHeight + 'px' }"
                    xmlns="http://www.w3.org/2000/svg">
-                <!-- 底層空盤面格子 -->
                 <g>
                   <rect v-for="cell in megaPreview.cells" :key="cell.k"
                         :x="cell.x" :y="cell.y"
@@ -265,12 +278,10 @@
                         class="sym-mega-cell-bg"
                         :class="{ 'sym-mega-cell-on': cell.on, 'sym-mega-cell-clip': cell.clip }" />
                 </g>
-                <!-- Mega 區塊外框(只有當 mega 大於 1x1 時顯示)-->
                 <rect v-if="megaPreview.megaRect"
                       :x="megaPreview.megaRect.x" :y="megaPreview.megaRect.y"
                       :width="megaPreview.megaRect.w" :height="megaPreview.megaRect.h"
                       class="sym-mega-outline" />
-                <!-- Reel 編號 -->
                 <text v-for="i in megaPreview.dispCols" :key="'R'+i"
                       :x="megaPreview.colLabelX(i)" :y="megaPreview.colLabelY"
                       class="sym-mega-axis">R{{ i }}</text>
@@ -284,24 +295,9 @@
               </div>
             </div>
           </div>
-
-          <div class="sym-adv-field sym-flags-field">
-            <div class="field-label-sm">旗標</div>
-            <div class="sym-flags-row">
-              <label class="chk sym-flag-chk">
-                <input type="checkbox" v-model="form.is_wild" @change="onFieldEdit">
-                <span class="box"></span>
-                <span>Is Wild</span>
-              </label>
-              <label class="chk sym-flag-chk">
-                <input type="checkbox" v-model="form.is_scatter" @change="onFieldEdit">
-                <span class="box"></span>
-                <span>Is Scatter</span>
-              </label>
-            </div>
-          </div>
         </div>
-      </div>
+
+      </div><!-- /sym-edit-body -->
     </div>
   </div>
 </div>
@@ -316,6 +312,9 @@
       const swatchMap = ref({});
       const reelCount = ref(5);
       const selectedId = ref(null);
+
+      // #10:Mega 尺寸區是否展開(預設折疊,只有 mega>1×1 才自動展開)
+      const showMega = ref(false);
 
       // ── 編輯表單 ──
       const form = reactive({
@@ -399,6 +398,8 @@
         form.mega_h     = s.mega_h     != null ? s.mega_h     : 1;
         form.is_wild    = !!s.is_wild;
         form.is_scatter = !!s.is_scatter;
+        // #10:有 mega 才預設展開,否則折疊成 1×1 badge
+        showMega.value  = (Number(form.mega_w) > 1 || Number(form.mega_h) > 1);
       }
 
       const selected = computed(() => {
@@ -457,6 +458,32 @@
       function onFieldEdit() {
         if (writeTimer) clearTimeout(writeTimer);
         writeTimer = setTimeout(writeForm, 150);
+      }
+
+      // #9:Type 為單一來源,wild/scatter 由 Type 推導
+      function setType(t) {
+        form.type = t;
+        form.is_wild = (t === 'WILD');
+        form.is_scatter = (t === 'SCATTER');
+        onFieldEdit();
+      }
+      const roleNote = computed(() => {
+        if (form.is_wild) return '✦ 此符號為 Wild —— 可替代其他符號';
+        if (form.is_scatter) return '★ 此符號為 Scatter —— 不受中獎線位置限制';
+        return '';
+      });
+
+      // #10:Mega 尺寸加減(1..10,防呆夾住範圍)
+      function bumpMega(dim, delta) {
+        const key = dim === 'w' ? 'mega_w' : 'mega_h';
+        const next = Math.min(10, Math.max(1, (Number(form[key]) || 1) + delta));
+        form[key] = next;
+        onFieldEdit();
+      }
+      function resetMega() {
+        form.mega_w = 1;
+        form.mega_h = 1;
+        onFieldEdit();
       }
 
       // ════════════════════════════════════════════════════════
@@ -824,11 +851,12 @@
         totalWeight,
         importInput,
         megaPreview,
+        showMega, roleNote,
         select, toggleEnabled, addSymbol, deleteSelected,
         undo, redo,
         pickSwatch, isCurrentSwatch, swatchStyle,
         initialOf, pctOf,
-        onFieldEdit,
+        onFieldEdit, setType, bumpMega, resetMega,
         exportJson, triggerImport, importJson,
         resetDefaults,
       };

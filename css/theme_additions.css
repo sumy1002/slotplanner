@@ -593,7 +593,7 @@
 .drag-overlay {
   /* 預設 absolute 對 content 來定位（content 是 position:relative）*/
   background: rgb(var(--tint-pale) / 0.78);
-  border: 2px dashed rgba(140,110,210,0.55);
+  border: 2px dashed rgb(var(--tint-accent) / 0.55);
   z-index: 50;
   /* 在窄視窗下避免文字疊到其他 UI */
   overflow: hidden;
@@ -835,7 +835,7 @@
   background: white;
   border: 1.5px solid var(--accent-brd);
   cursor: grab;
-  box-shadow: 0 1px 4px rgba(140,110,210,0.30);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
 }
 .reel-mega-w {
   font-family: 'JetBrains Mono', monospace;
@@ -950,8 +950,8 @@
   padding: 10px 10px 8px;
   box-shadow:
     inset 0 1.5px 0 rgba(255,255,255,1),
-    0 4px 16px rgba(140,110,200,0.16),
-    0 1px 4px rgba(140,110,200,0.10);
+    0 4px 16px rgb(var(--tint-accent) / 0.16),
+    0 1px 4px rgb(var(--tint-accent) / 0.10);
   min-width: 80px;
 }
 
@@ -3248,70 +3248,93 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* Pay Table 區 */
+/* Pay Table 區(#11:緊湊迷你卡,標籤在上、數值置中)*/
 .sym-pay-section {
   margin-bottom: 10px;
 }
 .sym-pay-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
   margin-top: 4px;
+  max-width: 360px;
 }
 .sym-pay-cell {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255,255,255,0.40);
-  border: 1px solid var(--glass-brd);
-  border-radius: 8px;
-  padding: 5px 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 5px 6px;
 }
 .sym-pay-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  color: var(--accent-hex);
-  width: 22px;
+  color: var(--text-light);
+  text-align: center;
+  width: auto;
   flex-shrink: 0;
 }
 .sym-pay-input {
   flex: 1;
-  text-align: right;
-  font-size: 11px;
+  text-align: center;
+  font-size: 12px;
   min-width: 0;
+  height: 28px;
 }
 
-/* Mega 尺寸 */
-.sym-mega-row {
+/* 角色 / 類型(#9:移到最前,放大 chips + 推導註記)*/
+.sym-type-chips-lg .sym-type-chip {
+  font-size: 11px;
+  padding: 6px 14px;
+}
+.sym-role-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-hex);
+}
+
+/* 圖示尺寸 / Mega(#10:預設折疊 1×1,點擊才展開)*/
+.sym-size-default {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.sym-mega-input {
-  width: 50px;
-  text-align: center;
-  font-weight: 700;
-}
-.sym-mega-sep {
+.sym-size-badge {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  color: var(--text-light);
   font-weight: 700;
+  font-size: 13px;
+  color: var(--accent-hex);
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
 }
-
-/* Flags 區 */
-.sym-flags-row {
+.sym-size-desc {
+  font-size: 12px;
+  color: var(--text-light);
+}
+.sym-mega-edit {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.sym-mega-steppers {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.sym-mega-stepper-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-.sym-flag-chk {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
+  gap: 5px;
 }
 
 /* 響應式:窄螢幕單欄 */
@@ -4062,6 +4085,24 @@
   flex-direction: column;
   gap: 0;
   max-width: 760px;        /* 單欄不要拉太寬,可讀性 */
+}
+
+/* E / #1:全域設定改兩欄,善用橫向空間(左=設定 / 右=模式定義)*/
+.cfg-global-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  max-width: 1200px;
+}
+.cfg-global-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cfg-global-col-modes { min-width: 0; }
+@media (max-width: 1100px) {
+  .cfg-global-grid { grid-template-columns: 1fr; max-width: 760px; }
 }
 
 /* 模擬參數 section:視覺上跟其他設計類欄位區隔 */
@@ -7826,3 +7867,150 @@
   pointer-events: none;
   opacity: 0.85;
 }
+/* ============================================================
+   B / #2 #15 #16:條件式分頁(不適用態)+ 計分方向唯讀提示
+   ============================================================ */
+/* 不適用分頁:左側 tab 反灰但仍可點 */
+.cfg-tab.cfg-tab-na {
+  opacity: 0.5;
+  filter: grayscale(0.45);
+}
+.cfg-tab.cfg-tab-na.active {
+  opacity: 0.85;
+  filter: none;
+}
+.cfg-tab-na-lock {
+  margin-left: 5px;
+  font-size: 9px;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
+/* 進入不適用分頁後的整版說明 */
+.cfg-tab-na-notice {
+  margin: 18px;
+  padding: 28px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  background: var(--glass-2);
+  border: 1px dashed var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--inset-glass);
+}
+.cfg-tab-na-notice-icon { font-size: 2rem; opacity: 0.7; }
+.cfg-tab-na-notice-title {
+  font-size: 15px; font-weight: 700; color: var(--text);
+}
+.cfg-tab-na-notice-text {
+  font-size: 12.5px; line-height: 1.7; color: var(--text-light);
+  max-width: 460px;
+}
+
+/* #16:中獎線方向唯讀顯示 */
+.cfg-payline-dir-readonly {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent-hex);
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+}
+
+/* ============================================================
+   D 大優化:Reel/Grid 矩陣常駐快速操作列 + 可點選欄列頭
+   ============================================================ */
+.cfg-matrix-quickbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset-glass);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+}
+.cfg-mqb-group { display: flex; align-items: center; gap: 6px; }
+.cfg-mqb-label { font-size: 11px; font-weight: 700; color: var(--text-light); }
+.cfg-mqb-value { width: 74px; }
+.cfg-mqb-sep { width: 1px; align-self: stretch; background: var(--divider); margin: 0 2px; }
+.cfg-mqb-spacer { flex: 1 1 auto; }
+.cfg-mqb-hint { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+/* 可點選的欄/列頭:游標 + hover 提示 */
+.cfg-matrix-head-sel { cursor: pointer; transition: color var(--t-fast), background var(--t-fast); }
+.cfg-matrix-head-sel:hover { color: var(--accent-hex); }
+td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-accent) / 0.14); }
+
+/* ============================================================
+   C / #3:盤面預覽可點選 + 指標拖曳互換
+   ============================================================ */
+.cfg-layout-cell-interactive {
+  cursor: grab;
+  touch-action: none;          /* 觸控拖曳不觸發捲動 */
+  transition: filter var(--t-fast), stroke var(--t-fast);
+}
+.cfg-layout-cell-interactive:hover { filter: brightness(1.06); }
+.cfg-layout-cell-interactive:active { cursor: grabbing; }
+.cfg-layout-cell-dragover {
+  stroke: var(--accent-hex);
+  stroke-width: 2;
+  filter: brightness(1.12);
+}
+.cfg-layout-label-interactive { cursor: pointer; }
+.cfg-layout-label-interactive:hover { fill: var(--accent-hex); }
+
+/* ============================================================
+   #4 / A1+B1:Reel 群組多選編輯 + 副 Reel 獨立子項目
+   ============================================================ */
+.cfg-layout-reel-chip-wrap { display: flex; flex-direction: column; gap: 3px; }
+
+/* 多選(群組)高亮 */
+.cfg-layout-reel-chip.group-selected {
+  border-color: var(--accent-brd);
+  box-shadow: 0 0 0 2px rgb(var(--tint-accent) / 0.30) inset;
+  background: rgb(var(--tint-accent) / 0.10);
+}
+
+/* 群組批次編輯列 */
+.cfg-layout-group-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgb(var(--tint-accent) / 0.08);
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset-glass);
+}
+.cfg-layout-group-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cfg-layout-group-bar-title { font-size: 12px; font-weight: 700; color: var(--accent-hex); }
+.cfg-layout-group-bar-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cfg-layout-group-bar-row .cfg-mqb-label { min-width: 30px; }
+
+/* 副 Reel 獨立子項目(縮排在主 Reel 下方)*/
+.cfg-layout-subreel-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 16px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: var(--glass-1);
+  border: 0.5px dashed var(--glass-edge);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.cfg-layout-subreel-chip:hover { background: var(--glass-3); color: var(--text); }
+.cfg-layout-subreel-chip.active { border-color: var(--accent-brd); color: var(--accent-hex); }
+.cfg-layout-subreel-chip-icon { opacity: 0.7; }
+.cfg-layout-subreel-chip-label { flex: 1; white-space: nowrap; }

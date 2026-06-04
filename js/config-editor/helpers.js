@@ -76,7 +76,8 @@
     output_prefix:      'B_結果',
     pay_type:           'LINE',
     ways_direction:     'LTR',
-    payline_direction:  'LTR',   // v4.0 / #16:中獎線計分方向(全域,套用到所有線)
+    payline_direction:  'LTR',
+    megaways:           false,
     cluster_min_size:   5,
     starting_mode:      'NG',
     max_chain_depth:    100,
