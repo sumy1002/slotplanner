@@ -41,7 +41,7 @@
         </button>
       </div>
       <div class="nav-btn" :class="{active: page===0}" @click="goPage(0)">
-        <span>📄</span><span class="nav-label">TXT → XLSX</span>
+        <span>🗂️</span><span class="nav-label">數據文件相關</span>
       </div>
       <div class="nav-divider"></div>
       <div class="nav-btn" :class="{active: page===3}" @click="goPage(3)">
@@ -88,8 +88,25 @@
             @dragleave="onContentDragLeave"
             @drop.prevent="onContentDrop">
 
-        <!-- ─── 頁面 0: TXT → XLSX ─── -->
+        <!-- ─── 頁面 0: 數據文件相關（含子分頁）─── -->
         <div v-if="page===0" :key="0" class="fade-enter">
+
+          <!-- 子分頁列（仿設定檔編輯器的分頁；之後可新增更多數據工具） -->
+          <div class="data-tabs" role="tablist">
+            <button v-for="t in dataTabs" :key="t.id"
+                    class="data-tab"
+                    :class="{ active: dataTab===t.id, 'is-soon': !t.ready }"
+                    role="tab"
+                    :aria-selected="dataTab===t.id"
+                    @click="setDataTab(t)">
+              <span class="data-tab-icon">{{ t.icon }}</span>
+              <span class="data-tab-label">{{ t.name }}</span>
+              <span v-if="!t.ready" class="data-tab-soon">即將推出</span>
+            </button>
+          </div>
+
+        <!-- ── 子分頁:TXT → XLSX ── -->
+        <div v-if="dataTab==='txt2xlsx'" class="data-tab-panel">
 
           <!-- 大拖曳指示覆蓋層（拖曳時顯示） -->
           <div v-if="isDragging" class="drag-overlay">
@@ -150,7 +167,17 @@
           </div>
 
           <div style="height:32px"></div>
-        </div>
+        </div><!-- /data-tab-panel: txt2xlsx -->
+
+        <!-- ── 子分頁:其他數據工具（開發中）── -->
+        <div v-else class="data-tab-panel">
+          <div class="placeholder">
+            <div class="title">{{ activeDataTab ? activeDataTab.name : '更多功能' }}</div>
+            <div class="sub">（功能開發中，敬請期待）</div>
+          </div>
+        </div><!-- /data-tab-panel: soon -->
+
+        </div><!-- /page 0 -->
 
         <!-- ─── 頁面 1: Symbol 管理 ─── -->
         <symbol-page v-else-if="page===1" :key="1"

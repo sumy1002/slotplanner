@@ -8014,3 +8014,65 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-layout-subreel-chip.active { border-color: var(--accent-brd); color: var(--accent-hex); }
 .cfg-layout-subreel-chip-icon { opacity: 0.7; }
 .cfg-layout-subreel-chip-label { flex: 1; white-space: nowrap; }
+
+/* ============================================================
+   「數據文件相關」區段 — 子分頁列(.data-tabs)
+   page 0 從單一 TXT→XLSX 工具改為含子分頁的區段容器;
+   TXT→XLSX 為首個子分頁,之後可新增更多數據工具。
+   水平分頁列,風格對齊設定檔編輯器的 .cfg-tab。
+   色彩全用 accent / glass token(theme_v34.css 有暗色覆寫,自動相容)。
+   ============================================================ */
+.data-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 22px;
+  padding: 5px;
+  background: var(--glass-1);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset-glass);
+  -webkit-backdrop-filter: var(--blur-thin);
+  backdrop-filter: var(--blur-thin);
+}
+.data-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-light);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--t-fast), color var(--t-fast),
+              border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.data-tab:hover { background: var(--glass-3); color: var(--text); }
+.data-tab.active {
+  background: var(--accent);
+  color: var(--accent-hex);
+  border-color: var(--accent-brd);
+  box-shadow: var(--shadow-sm);
+  font-weight: 700;
+}
+.data-tab-icon { font-size: 15px; line-height: 1; }
+.data-tab-label { line-height: 1; }
+.data-tab.is-soon { opacity: 0.78; cursor: pointer; }
+.data-tab.is-soon:hover { opacity: 1; }
+.data-tab-soon {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  color: var(--accent-hex);
+  background: rgb(var(--tint-accent) / 0.14);
+  border: 0.5px solid var(--accent-brd);
+  line-height: 1.6;
+}
+.data-tab-panel { animation: rise 320ms var(--ease-ios) both; }

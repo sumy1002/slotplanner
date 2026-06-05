@@ -25,8 +25,17 @@
     setup() {
       const page        = ref(0);
       const sbCollapsed = ref(false);
+
+      // ── 「數據文件相關」區段的子分頁（仿設定檔編輯器分頁）──
+      // ready=false 的分頁為未來功能占位,點進去顯示「開發中」。
+      const dataTabs = [
+        { id: 'txt2xlsx', name: 'TXT → XLSX', icon: '📄', ready: true  },
+        { id: 'more',     name: '更多功能',   icon: '➕', ready: false },
+      ];
+      const dataTab = ref('txt2xlsx');
+      const activeDataTab = computed(() => dataTabs.find(t => t.id === dataTab.value) || null);
       const titles = {
-        0: 'TXT → XLSX 轉換工具', 1: 'Symbol 管理',
+        0: '數據文件相關', 1: 'Symbol 管理',
         3: 'A 設定檔編輯器', 4: '批次處理', 5: '資料比對', 6: '模擬引擎'
       };
       const status = ref({ type: 'wait', msg: '已就緒' });
@@ -106,11 +115,30 @@
         }
       }
 
+      function _statusForDataTab() {
+        if (dataTab.value === 'txt2xlsx') {
+          if (fileInfo.value) setStatus('wait', `已選擇：${fileInfo.value.name}`);
+          else status.value = { ...pageDefaultStatus[0] };
+        } else {
+          setStatus('wait', '功能開發中');
+        }
+      }
+
+      function setDataTab(t) {
+        const id = typeof t === 'string' ? t : (t && t.id);
+        if (!id || id === dataTab.value) return;
+        dataTab.value = id;
+        _statusForDataTab();
+      }
+
+      // 拖曳載入僅在「數據文件相關 → TXT → XLSX」子分頁生效
+      function _dragActive() { return page.value === 0 && dataTab.value === 'txt2xlsx'; }
+
       function goPage(i) {
         // v3 變更:page 2(盤面設計)已整合進設定檔編輯器,自動遷移
         if (i === 2) i = 3;
         page.value = i;
-        if (i === 0 && fileInfo.value) setStatus('wait', `已選擇：${fileInfo.value.name}`);
+        if (i === 0) _statusForDataTab();
         else status.value = { ...pageDefaultStatus[i] };
         // 切到模擬引擎時才啟動 Pyodide（避免佔用初始載入頻寬）
         if (i === 6) _ensurePyodideWarmup();
@@ -122,18 +150,18 @@
       const isDragging = ref(false);
       let dragCounter = 0;
       function onContentDragEnter(e) {
-        if (page.value !== 0) return;
+        if (!_dragActive()) return;
         if (!e.dataTransfer?.types?.includes('Files')) return;
         dragCounter++; isDragging.value = true;
       }
-      function onContentDragOver(e) { if (page.value === 0) e.preventDefault(); }
+      function onContentDragOver(e) { if (_dragActive()) e.preventDefault(); }
       function onContentDragLeave() {
-        if (page.value !== 0) return;
+        if (!_dragActive()) return;
         dragCounter--;
         if (dragCounter <= 0) { dragCounter = 0; isDragging.value = false; }
       }
       function onContentDrop(e) {
-        if (page.value !== 0) return;
+        if (!_dragActive()) return;
         e.preventDefault(); dragCounter = 0; isDragging.value = false;
         const f = e.dataTransfer?.files?.[0];
         if (f) handleFile(f);
@@ -459,6 +487,7 @@
 
       return {
         page, sbCollapsed, titles, status,
+        dataTabs, dataTab, activeDataTab, setDataTab,
         pyodideStatus, pyodideStatusIcon, pyodideStatusText, pyodideStatusTip,
         fileInput, fileInfo, isConverting,
         isDragging, dropClass, dropIcon, dropMain, dropSub,
