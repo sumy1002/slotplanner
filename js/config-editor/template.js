@@ -1026,7 +1026,7 @@
                         'cfg-layout-cell-interactive',
                         c.kind === 'sub' ? 'cfg-layout-cell-sub' : 'cfg-layout-cell-main',
                         c.reel_id === (activeReel && activeReel.reel_id) ? 'cfg-layout-cell-active' : '',
-                        (_previewDragFrom >= 0 && _previewDragOver === (c.reel - 1) && _previewDragFrom !== (c.reel - 1)) ? 'cfg-layout-cell-dragover' : ''
+                        (previewDragFrom >= 0 && previewDragOver === (c.reel - 1) && previewDragFrom !== (c.reel - 1)) ? 'cfg-layout-cell-dragover' : ''
                       ]"
                       @pointerdown="onPreviewPointerDown(c.reel - 1, $event)"
                       @pointerenter="onPreviewPointerEnter(c.reel - 1)"
@@ -3234,7 +3234,7 @@
                      }"
                      :title="humanizeRule(r)"
                      draggable="true"
-                     @click="_selectItem('puzzle', idx)"
+                     @click="selectItem('puzzle', idx)"
                      @dragstart="onRuleDragStart(idx, $event)"
                      @dragover="onRuleDragOver(idx, $event)"
                      @dragleave="onRuleDragLeave(idx)"
@@ -3285,7 +3285,7 @@
                          'is-duplicate': discardDuplicateIds.has(d.discard_id) && d.discard_id,
                        }"
                        :title="humanizeDiscard(d)"
-                       @click="_selectItem('discard', idx)">
+                       @click="selectItem('discard', idx)">
                     <span class="cfg-split-item-id">{{ d.discard_id || '?' }}</span>
                     <span v-if="d.discard_kind" class="cfg-split-item-badge"
                           :class="d.discard_kind === 'HARD' ? 'hard' : 'soft'">
