@@ -49,6 +49,22 @@
     return '';
   }
 
+  // 依角色給一段可編輯的預設行為說明樣板
+  function behaviorTemplate(s) {
+    const role = _symRole(s) || 'SPECIAL';
+    const name = (s && (s.name || _symId(s))) || '此圖示';
+    switch (role) {
+      case 'WILD':
+        return `${name}（WILD）可替代盤面上除散佈（SCATTER／FREE）外的所有圖示以形成連線；本身不主動形成連線（如有自身賠率請於賠付表填寫）。`;
+      case 'SCATTER':
+        return `${name}（SCATTER）為散佈圖示，不需落在連線上；盤面任意位置出現達指定數量即觸發對應功能（例如進入 FREE GAME）。`;
+      case 'BONUS':
+        return `${name}（BONUS）達成指定出現條件後觸發 BONUS GAME / 獎勵關卡。`;
+      default:
+        return `${name} 為特殊圖示，具備專屬的觸發或替代行為，請補充其出現輪、數量門檻與效果。`;
+    }
+  }
+
   function _payTypeLabel(g) {
     const pt = (g.pay_type || 'LINE').toUpperCase();
     const map = { LINE: '連線（Payline）', WAYS: '全路徑（Ways）', SCATTER: '散佈（Scatter）', CLUSTER: '群聚（Cluster）' };
@@ -523,6 +539,7 @@
     mergeMeta,
     buildPlanXlsxBuffer,
     buildMechMarkdown,
+    behaviorTemplate,
     _isSpecial, _symId, _symRole,
   };
 
@@ -531,6 +548,16 @@
   // ════════════════════════════════════════════════════════════════════
   const TEMPLATE = `
   <div class="docgen">
+    <!-- 頂部 sticky 動作列：機制 MD 為主要動作 -->
+    <div class="docgen-actionbar">
+      <div class="docgen-actions">
+        <button class="btn btn-primary" @click="exportMd" :disabled="busy">📝 機制文件 (MD)</button>
+        <button class="btn" @click="exportXlsx" :disabled="busy">📊 企劃文件 (Excel)</button>
+        <button class="btn" @click="save" :disabled="busy">💾 儲存敘述</button>
+      </div>
+      <div class="docgen-hint" v-if="hint">{{ hint }}</div>
+    </div>
+
     <!-- 設定檔自動帶入摘要 -->
     <div class="docgen-summary glass-panel-flat">
       <div class="docgen-sum-title">設定檔將自動帶入</div>
@@ -589,7 +616,11 @@
     <div class="docgen-sec" v-if="cfg.specialSyms.length">
       <div class="docgen-sec-h">特殊圖示行為</div>
       <template v-for="s in cfg.specialSyms" :key="symId(s)">
-        <div class="field-label">{{ s.name || symId(s) }}（{{ role(s) || '特殊' }}）</div>
+        <div class="docgen-beh-head">
+          <div class="field-label" style="margin:0">{{ s.name || symId(s) }}（{{ role(s) || '特殊' }}）</div>
+          <button class="docgen-tpl-btn" @click="fillBehavior(s)"
+            title="帶入此類型的預設說明樣板（之後可手動修改）">✨ 帶入樣板</button>
+        </div>
         <textarea class="input docgen-ta" v-model="meta.special_behavior[symId(s)]"
           placeholder="描述此圖示的出現輪、替代規則、收集 / 觸發行為等"></textarea>
       </template>
@@ -632,14 +663,6 @@
         <input class="input" v-model="meta.freegame.cap_value">
       </div>
     </div>
-
-    <!-- 動作列 -->
-    <div class="docgen-actions">
-      <button class="btn" @click="save" :disabled="busy">💾 儲存敘述</button>
-      <button class="btn btn-primary" @click="exportXlsx" :disabled="busy">📊 匯出企劃文件 (Excel)</button>
-      <button class="btn btn-primary" @click="exportMd" :disabled="busy">📝 匯出機制文件 (MD)</button>
-    </div>
-    <div class="docgen-hint" v-if="hint">{{ hint }}</div>
   </div>`;
 
   SP.DocGenPage = {
@@ -667,6 +690,15 @@
       }
       function addJp() { meta.jackpot.rows.push({ name: '', mult: 0 }); }
       function removeJp(i) { meta.jackpot.rows.splice(i, 1); }
+
+      function fillBehavior(s) {
+        const id = symId(s);
+        const tpl = SP.DocGen.behaviorTemplate(s);
+        const cur = (meta.special_behavior[id] || '').trim();
+        if (cur && !confirm(`「${s.name || id}」已有內容，要覆蓋為預設樣板嗎？`)) return;
+        meta.special_behavior[id] = tpl;
+        setHint(`已帶入「${s.name || id}」的樣板，可再手動修改`, 'ok');
+      }
 
       function _download(blob, filename) {
         const url = URL.createObjectURL(blob);
@@ -708,7 +740,7 @@
         } finally { busy.value = false; }
       }
 
-      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, exportXlsx, exportMd, refreshConfig };
+      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, fillBehavior, exportXlsx, exportMd, refreshConfig };
     },
   };
 

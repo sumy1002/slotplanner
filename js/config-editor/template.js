@@ -345,11 +345,28 @@
           <span v-if="dirtyTabs[t.id]" class="cfg-tab-dirty-dot" title="此分頁有未匯出的變動"></span>
         </div>
       </div>
+
+      <!-- 📄 文件群組（不在 TABS 內：跨分頁輸出步驟，不對應 A.xlsx sheet）-->
+      <div class="cfg-tab-group">
+        <div class="cfg-tab-group-header">
+          <span class="cfg-tab-group-icon">📄</span>
+          <span class="cfg-tab-group-label">文件</span>
+        </div>
+        <div class="cfg-tab"
+             :class="{ active: active === 'docgen' }"
+             @click="active = 'docgen'">
+          <span class="cfg-tab-icon">📋</span>
+          <div class="cfg-tab-text">
+            <div class="cfg-tab-name">文件生成</div>
+            <div class="cfg-tab-sheet">Excel / MD</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── 右:當前分頁內容 ── -->
     <!-- 浮動「重設此頁」按鈕在 cfg-content 之外(cfg-body 內),避免被內部捲動帶走 -->
-    <button v-if="activeTab.kind !== 'fullpane'"
+    <button v-if="active !== 'docgen' && activeTab.kind !== 'fullpane'"
             class="cfg-content-reset-fab"
             @click="resetCurrent"
             :title="'重設本分頁(' + (activeTab.name || '') + ')為預設值'">
@@ -4149,6 +4166,11 @@
           <summary>🔍 預覽目前 JSON({{ Object.keys(bins).length }} 個區間定義)</summary>
           <pre class="cfg-debug-pre">{{ binsDebugJson }}</pre>
         </details>
+      </div>
+
+      <!-- ═══════ 📄 文件生成（跨分頁輸出，非 A.xlsx 設定）═══════ -->
+      <div v-else-if="active === 'docgen'" class="cfg-docgen-host">
+        <doc-gen-page @status="$emit('status', $event)"></doc-gen-page>
       </div>
 
       <!-- ═══════ 其他尚未實作的分頁 placeholder ═══════ -->
