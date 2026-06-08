@@ -30,6 +30,7 @@
       // ready=false 的分頁為未來功能占位,點進去顯示「開發中」。
       const dataTabs = [
         { id: 'txt2xlsx', name: 'TXT → XLSX', icon: '📄', ready: true  },
+        { id: 'docgen',   name: '文件生成',   icon: '📋', ready: true  },
         { id: 'more',     name: '更多功能',   icon: '➕', ready: false },
       ];
       const dataTab = ref('txt2xlsx');
@@ -119,6 +120,8 @@
         if (dataTab.value === 'txt2xlsx') {
           if (fileInfo.value) setStatus('wait', `已選擇：${fileInfo.value.name}`);
           else status.value = { ...pageDefaultStatus[0] };
+        } else if (dataTab.value === 'docgen') {
+          setStatus('wait', '文件生成：依設定檔產生企劃 / 機制文件');
         } else {
           setStatus('wait', '功能開發中');
         }
@@ -504,5 +507,6 @@
   app.component('symbol-page', SP.SymbolPage);
   app.component('config-page', SP.ConfigPage);
   app.component('sim-page',    SP.SimPage);
+  app.component('doc-gen-page', SP.DocGenPage);
   app.mount('#app');
 })();

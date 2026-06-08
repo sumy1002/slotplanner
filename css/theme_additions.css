@@ -8076,3 +8076,68 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   line-height: 1.6;
 }
 .data-tab-panel { animation: rise 320ms var(--ease-ios) both; }
+
+/* ════════════════════════════════════════════════════════════
+   文件生成（docgen）— page 0 「文件生成」子分頁 (v4.2+)
+   全用 accent / glass token，theme_v34.css 暗色覆寫自動相容
+   ════════════════════════════════════════════════════════════ */
+.docgen { display: flex; flex-direction: column; gap: 18px; padding: 4px 2px 24px; }
+
+.docgen-summary { padding: 14px 16px; border-radius: var(--r-md); }
+.docgen-sum-title {
+  font-size: 12px; font-weight: 700; color: var(--accent-hex);
+  letter-spacing: .04em; margin-bottom: 10px;
+}
+.docgen-sum-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px;
+}
+.docgen-sum-grid > div { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.docgen-sum-k {
+  flex-shrink: 0; min-width: 38px; font-weight: 700; color: var(--text-light);
+}
+.docgen-sum-v { color: var(--text); word-break: break-all; }
+
+.docgen-sec {
+  background: var(--glass-2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+.docgen-sec-h {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  padding-bottom: 10px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--glass-edge);
+}
+.docgen-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.docgen-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) {
+  .docgen-row2, .docgen-row3 { grid-template-columns: 1fr; }
+  .docgen-sum-grid { grid-template-columns: 1fr; }
+}
+.docgen-ta { min-height: 64px; resize: vertical; line-height: 1.5; }
+
+.docgen-flags { display: flex; flex-wrap: wrap; gap: 16px; }
+.docgen-flags label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+.docgen-flags input[type="checkbox"] { accent-color: var(--accent-hex); width: 15px; height: 15px; }
+
+.docgen-jp { display: flex; flex-direction: column; gap: 8px; }
+.docgen-jp-row { display: grid; grid-template-columns: 1fr 120px 36px; gap: 8px; align-items: center; }
+.btn-ghost-x {
+  border: 1px solid var(--glass-edge); background: var(--glass-1);
+  color: var(--text-light); border-radius: var(--r-sm); cursor: pointer;
+  height: 34px; font-size: 13px; transition: all var(--t-fast);
+}
+.btn-ghost-x:hover { color: #c0392b; border-color: #c0392b; }
+
+.docgen-actions {
+  display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+  margin-top: 4px;
+}
+.docgen-hint {
+  text-align: center; font-size: 13px; color: var(--accent-hex);
+  min-height: 18px;
+}
