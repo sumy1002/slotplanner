@@ -1023,71 +1023,16 @@
         const rows = layout.map(r => r.max_rows);
         return new Set(rows).size > 1;
       });
-      // ═══════════════════════════════════════════════════════════════
-      // v4.1 Batch B — Megaways 賠付模型 + 條件式分頁 + 計分方向收斂
-      //   MEGAWAYS 是 UI 概念,不是新的 pay_type。引擎只認 LINE/WAYS/SCATTER/
-      //   CLUSTER,故 MEGAWAYS 按鈕 = pay_type='WAYS' + UI-only `megaways` 旗標。
-      //   `megaways` / `payline_direction` 會落到 01_Global,但 a_loader 忽略。
-      // ═══════════════════════════════════════════════════════════════
-      const PAY_MODELS = [
-        { id: 'LINE',     label: '中獎線 LINE', desc: '固定中獎線,從左(或依方向)連續相同符號計分' },
-        { id: 'WAYS',     label: '全路徑 WAYS', desc: '243 ways 類:相鄰 Reel 任意位置相同符號即計分' },
-        { id: 'MEGAWAYS', label: 'Megaways',   desc: '全路徑 + 每輪每 Reel 列數可變(走 WAYS 引擎)' },
-        { id: 'SCATTER',  label: 'Scatter',    desc: '不限位置,盤面任意處出現足量符號即計分' },
-        { id: 'CLUSTER',  label: 'Cluster',    desc: '同符相鄰群組達門檻即計分' },
-      ];
-
-      // 是否 Megaways(UI 旗標,僅在 WAYS 引擎下有意義)
-      const isMegaways = computed(() => (g.pay_type === 'WAYS') && !!g.megaways);
-      // 賠付模型的「顯示值」:megaways 時顯示 MEGAWAYS,否則等同 pay_type
-      const activePayModel = computed(() => (isMegaways.value ? 'MEGAWAYS' : g.pay_type));
-
-      function selectPayModel(id) {
-        if (id === 'MEGAWAYS') {
-          g.pay_type = 'WAYS';
-          g.megaways = true;
-        } else {
-          g.pay_type = id;
-          g.megaways = false;
-        }
-        scheduleSave('賠付類型');
-      }
-
-      // 計分方向:僅 LINE / WAYS(含 Megaways)適用;SCATTER / CLUSTER 無方向概念
-      const scanDirApplicable = computed(() =>
-        g.pay_type === 'LINE' || g.pay_type === 'WAYS');
-      // 全域唯一的計分方向顯示值(ways_direction 為主,回退 payline_direction)
-      const curScanDir = computed(() => g.ways_direction || g.payline_direction || 'LTR');
-      // #16:設定方向時同步寫入 ways_direction + payline_direction(後端逐行讀 Direction)
-      function setScanDir(d) {
-        g.ways_direction = d;
-        g.payline_direction = d;
-        scheduleSave('Ways 方向');
-      }
-
-      // 條件式分頁:反灰仍可點,進去顯示整版「不適用」說明卡
-      //   grid_size_weights → 非 Megaways 時不適用;paylines → Megaways 時不適用
-      function tabNotApplicable(tabId) {
-        if (tabId === 'grid_size_weights') return !isMegaways.value;
-        if (tabId === 'paylines')          return isMegaways.value;
-        return false;
-      }
-      function tabNAReason(tabId) {
-        if (tabId === 'grid_size_weights')
-          return '格數權重(每 Reel 一局開幾格)只在 Megaways 模式下生效。目前賠付模型不是 Megaways,此表不會被使用。到 01_Global 把賠付模型切成 Megaways 即可啟用。';
-        if (tabId === 'paylines')
-          return 'Megaways 以全路徑(WAYS)計分,不使用固定中獎線。目前為 Megaways 模式,中獎線設定不會被使用。到 01_Global 改回其他賠付模型即可啟用。';
-        return '';
-      }
-
-      // Batch C 對齊:分頁清單一律顯示,適用性交給 tabNotApplicable 反灰處理
-      //   (原本依盤面是否等高隱藏 grid_size_weights,會與 megaways 反灰打架)
-      const visibleTabGroups = computed(() => TABS_BY_GROUP);
-      // 切換 megaways 時,若正停在「變不適用」的分頁 → 溫和導到對應分頁
-      watch(() => g.megaways, () => {
-        if (!active.value || !tabNotApplicable(active.value)) return;
-        if (active.value === 'grid_size_weights') active.value = 'reel_weights';
-        else if (active.value === 'paylines')     active.value = 'global';
+      // 渲染用分頁群組:等高盤過濾掉 grid_size_weights
+      const visibleTabGroups = computed(() =>
+        TABS_BY_GROUP.map(grp => ({
+          ...grp,
+          tabs: grp.tabs.filter(t => t.id !== 'grid_size_weights' || isVariableHeightBoard.value),
+        })).filter(grp => grp.tabs.length > 0)
+      );
+      // 若目前停在格數權重頁、但盤面變回等高 → 自動切回 Reel 權重,避免停在隱藏頁
+      watch(isVariableHeightBoard, (v) => {
+        if (!v && active.value === 'grid_size_weights') active.value = 'reel_weights';
       });
 
       function addReel() {
@@ -2616,6 +2561,7 @@
       const reelWeightsDebugJson = computed(() => JSON.stringify(reelWeights, null, 2));
 
       // 為某模式建立預設 Reel 權重表(以當前 layout.length × symbolNames 為基準)
+      const _fillSigReel = {};
       function ensureReelWeightsForMode(name) {
         if (!reelWeights[name]) {
           // 第一次進入該模式:用當前 symbolNames 為符號清單
@@ -2634,6 +2580,11 @@
         // 只有真的有重複時才重新賦值,避免每次 render 都產生新陣列觸發無限更新。
         const deduped = [...new Set(entry.symbol_ids)];
         if (deduped.length !== entry.symbol_ids.length) entry.symbol_ids = deduped;
+        // ── 效能:形狀(reel_ids × symbol_ids)沒變就跳過填值迴圈。
+        //    reelW() 在矩陣 render 時會被呼叫上百次,原本每次都跑 O(reels×symbols)
+        //    的 `k in weights` 迴圈,是矩陣卡頓主因。形狀簽章短路後降為 O(reels+symbols)。
+        const sig = layout.length + '|' + layout.map(r => r.reel_id).join(',') + '|' + entry.symbol_ids.join(',');
+        if (_fillSigReel[name] === sig) return;
         // 用實際 reel_id 建 cell(不假設 reel_id 連續 1..N)
         for (const r of layout) {
           for (const sid of entry.symbol_ids) {
@@ -2641,6 +2592,7 @@
             if (!(k in entry.weights)) entry.weights[k] = 100;
           }
         }
+        _fillSigReel[name] = sig;
       }
       function reelW(mode) { ensureReelWeightsForMode(mode); return reelWeights[mode]; }
       // 解析 "WILD, H1, H2" 等格式,失敗回 null
@@ -2710,7 +2662,21 @@
         emit('status', { type: 'ok', msg: `已套用 03_Symbols:共 ${ids.length} 欄(新增 ${added}、移除 ${removed})` });
       }
       // 計算某模式內最大權重,給熱力圖背景強度用
+      // 效能:活躍模式的「最大值 + top-2 門檻」用 computed 快取一次,
+      //   供 reelHeatColor / reelIsTopWeight 每格讀取(原本每格各自掃描/排序整表)。
+      //   依賴 reelW(active).weights,任一格變動才重算一次。
+      const _reelActiveStats = computed(() => {
+        const e = reelW(reelActiveMode.value);
+        let mx = 0; const vals = [];
+        for (const v of Object.values(e.weights)) {
+          if (typeof v === 'number') { if (v > mx) mx = v; if (v > 0) vals.push(v); }
+        }
+        vals.sort((a, b) => b - a);
+        const th = vals.length <= 2 ? 0 : vals[1];
+        return { mx, th };
+      });
       function reelMaxWeight(mode) {
+        if (mode === reelActiveMode.value) return _reelActiveStats.value.mx;
         const e = reelW(mode);
         let mx = 0;
         for (const v of Object.values(e.weights)) {
@@ -2743,7 +2709,9 @@
         const e = reelW(mode);
         const v = Number(e.weights[`${r}-${sid}`]) || 0;
         if (v <= 0) return false;
-        const th = _topNThreshold(e.weights, 2);
+        const th = (mode === reelActiveMode.value)
+          ? _reelActiveStats.value.th
+          : _topNThreshold(e.weights, 2);
         return th > 0 && v >= th;
       }
       function reelTotalForRow(mode, reel_id) {
@@ -3075,6 +3043,7 @@
       const gridWeights = reactive(loadGridWeights());
       const gridWeightsDebugJson = computed(() => JSON.stringify(gridWeights, null, 2));
 
+      const _fillSigGrid = {};
       function ensureGridWeightsForMode(name) {
         if (!gridWeights[name]) {
           gridWeights[name] = {
@@ -3084,12 +3053,15 @@
           };
         }
         const entry = gridWeights[name];
+        const sig = layout.length + '|' + layout.map(r => r.reel_id).join(',') + '|' + entry.grid_sizes.join(',');
+        if (_fillSigGrid[name] === sig) return;
         for (let r = 1; r <= layout.length; r++) {
           for (const s of entry.grid_sizes) {
             const k = `${r}-${s}`;
             if (!(k in entry.weights)) entry.weights[k] = 100;
           }
         }
+        _fillSigGrid[name] = sig;
       }
       function gridW(mode) { ensureGridWeightsForMode(mode); return gridWeights[mode]; }
       function gridSizesStr(mode) { return gridW(mode).grid_sizes.join(', '); }
@@ -3115,7 +3087,17 @@
         return s;
       }
       // v3.5 / #8:對齊 04,讓 05 sticky bar 也有 Max meta
+      //   效能:活躍模式的 max 用 computed 快取(gridHeatColor 每格讀取)。
+      const _gridActiveMax = computed(() => {
+        const e = gridW(gridActiveMode.value);
+        let mx = 0;
+        for (const v of Object.values(e.weights)) {
+          if (typeof v === 'number' && v > mx) mx = v;
+        }
+        return mx;
+      });
       function gridMaxWeight(mode) {
+        if (mode === gridActiveMode.value) return _gridActiveMax.value;
         const e = gridW(mode);
         let mx = 0;
         for (const v of Object.values(e.weights)) {
@@ -3158,6 +3140,7 @@
       // UI 狀態:每個模式當前正在編輯哪個 step(不持久化)
       const comboActiveStep = reactive({});
 
+      const _fillSigCombo = {};
       function ensureComboWeightsForMode(name) {
         if (!comboWeights[name]) {
           const syms = symbolNames.value.length > 0
@@ -3171,13 +3154,17 @@
           };
         }
         const e = comboWeights[name];
-        for (const step of e.steps) {
-          for (let r = 1; r <= layout.length; r++) {
-            for (const sid of e.symbol_ids) {
-              const k = `${step}-${r}-${sid}`;
-              if (!(k in e.weights)) e.weights[k] = 100;
+        const sig = layout.length + '|' + layout.map(r => r.reel_id).join(',') + '|' + e.steps.join(',') + '|' + e.symbol_ids.join(',');
+        if (_fillSigCombo[name] !== sig) {
+          for (const step of e.steps) {
+            for (let r = 1; r <= layout.length; r++) {
+              for (const sid of e.symbol_ids) {
+                const k = `${step}-${r}-${sid}`;
+                if (!(k in e.weights)) e.weights[k] = 100;
+              }
             }
           }
+          _fillSigCombo[name] = sig;
         }
         if (!comboActiveStep[name] || !e.steps.includes(comboActiveStep[name])) {
           comboActiveStep[name] = e.steps[0];
@@ -6077,13 +6064,223 @@
         document.removeEventListener('keydown', _onGlobalKeydown);
       });
 
+      // ============================================================
+      //  v4.1 補回:template 需要、但先前 setup 未實作/未 return 的綁定
+      //  分四組:賠付模型 / 計分方向 / 分頁適用性 / layout 群組多選 +
+      //  預覽互動 / 矩陣 quickbar。皆只動 reactive 既有資料,不碰 A.xlsx 契約。
+      // ============================================================
+
+      // ── 賠付模型(01_Global,5 按鈕:LINE/WAYS/MEGAWAYS/SCATTER/CLUSTER)──
+      //    引擎 pay_type enum 只有 LINE/WAYS/SCATTER/CLUSTER;
+      //    MEGAWAYS = pay_type='WAYS' + UI-only megaways 旗標(a_loader 忽略 megaways)
+      const PAY_MODELS = [
+        { id: 'LINE',     label: 'LINE 中獎線',  desc: '固定中獎線計分' },
+        { id: 'WAYS',     label: 'WAYS 全路徑',  desc: '相鄰輪相同符號即計分(243 ways 等)' },
+        { id: 'MEGAWAYS', label: 'MEGAWAYS',     desc: '全路徑 + 每輪列數可變(可變高度盤面)' },
+        { id: 'SCATTER',  label: 'SCATTER 任意', desc: '任意位置散佈計分' },
+        { id: 'CLUSTER',  label: 'CLUSTER 群集', desc: '同符相鄰成群計分' },
+      ];
+      const activePayModel = computed(() =>
+        (g.pay_type === 'WAYS' && g.megaways) ? 'MEGAWAYS' : g.pay_type
+      );
+      function selectPayModel(id) {
+        if (id === 'MEGAWAYS') {
+          g.pay_type = 'WAYS';
+          g.megaways = true;
+        } else {
+          g.pay_type = id;
+          g.megaways = false;
+        }
+        emit('status', { type: 'ok', msg: `賠付模型已設為 ${id}` });
+      }
+
+      // ── 計分方向(全域單一控制,同時套用 ways_direction 與 payline_direction)──
+      const scanDirApplicable = computed(() => {
+        const m = activePayModel.value;
+        return m === 'LINE' || m === 'WAYS' || m === 'MEGAWAYS';
+      });
+      const curScanDir = computed(() => g.ways_direction || g.payline_direction || 'LTR');
+      function setScanDir(d) {
+        if (!WAYS_DIRS.includes(d)) return;
+        g.ways_direction = d;
+        g.payline_direction = d;
+      }
+
+      // ── 分頁適用性(條件式反灰;grid_size_weights / paylines)──
+      function tabNotApplicable(id) {
+        if (id === 'grid_size_weights') return !isVariableHeightBoard.value;
+        if (id === 'paylines')          return g.pay_type !== 'LINE';
+        return false;
+      }
+      function tabNAReason(id) {
+        if (id === 'grid_size_weights')
+          return '目前盤面為等高(各輪 max_rows 相同),格數權重不會被引擎使用;改用 Megaways / 不等高盤面後才需設定。';
+        if (id === 'paylines')
+          return `目前賠付模型為 ${activePayModel.value},不使用固定中獎線。改回 LINE 才需要設定中獎線。`;
+        return '';
+      }
+
+      // ── 04/05 矩陣熱力圖:grid 版(沿用 reel 的色階,改用 gridMaxWeight)──
+      function gridHeatColor(mode, w) {
+        if (w === 0 || w === undefined || w === null) {
+          return 'rgba(120,120,140,0.10)';
+        }
+        const mx = gridMaxWeight(mode);
+        if (!mx) return 'transparent';
+        const ratio = Math.sqrt(Math.min(1, w / mx));
+        return `rgba(140, 110, 220, ${(0.08 + 0.50 * ratio).toFixed(3)})`;
+      }
+
+      // ── 矩陣 quickbar(常駐快速操作列)──
+      const matrixFillValue = ref(10);
+      function quickFillTable(kind, mode) {
+        matrixFillAll(kind, mode, null, Math.max(0, Number(matrixFillValue.value) || 0));
+      }
+      function quickApplySelection() {
+        if (matrixSelection.keys.size === 0) return;
+        applyMatrixSelOp('set', Math.max(0, Number(matrixFillValue.value) || 0));
+      }
+      function selectWholeColumn(kind, mode, col) {
+        clearMatrixSelection();
+        const reels = sortedReels(kind, mode);
+        const colStr = String(col);
+        reels.forEach(r => matrixSelection.keys.add(_selKey(kind, mode, r.reel_id, colStr)));
+        matrixSelection.anchor = null;
+      }
+      function selectWholeRow(kind, mode, reelId) {
+        clearMatrixSelection();
+        const cols = _colsForKind(kind, mode);
+        cols.forEach(c => matrixSelection.keys.add(_selKey(kind, mode, reelId, String(c))));
+        matrixSelection.anchor = null;
+      }
+
+      // ── layout:Reel chip 多選 / 群組批次編輯(Batch C)──
+      const selectedReelIdxs = ref([]);                       // 0-based reel index 多選
+      const groupActive = computed(() => selectedReelIdxs.value.length >= 2);
+      const groupRowsValue = ref(3);
+      const groupOffsetValue = ref(0);
+
+      function clearReelSelection() { selectedReelIdxs.value = []; }
+
+      function selectReelById(reelId) {
+        const idx = layout.findIndex(r => r.reel_id === reelId);
+        if (idx >= 0) {
+          activeReelIdx.value = idx;
+          selectedReelIdxs.value = [];
+        }
+      }
+      function onReelChipClick(idx, ev) {
+        if (idx < 0 || idx >= layout.length) return;
+        if (ev && (ev.ctrlKey || ev.metaKey)) {
+          const arr = selectedReelIdxs.value.slice();
+          const at = arr.indexOf(idx);
+          if (at >= 0) arr.splice(at, 1); else arr.push(idx);
+          selectedReelIdxs.value = arr;
+          activeReelIdx.value = idx;
+        } else if (ev && ev.shiftKey) {
+          const anchor = activeReelIdx.value;
+          const lo = Math.min(anchor, idx), hi = Math.max(anchor, idx);
+          const arr = [];
+          for (let i = lo; i <= hi; i++) arr.push(i);
+          selectedReelIdxs.value = arr;
+          activeReelIdx.value = idx;
+        } else {
+          selectedReelIdxs.value = [];
+          activeReelIdx.value = idx;
+        }
+      }
+      // 群組批次的作用對象:有多選就用多選,否則退回當前單一 reel
+      function _groupTargetReels() {
+        const set = new Set(selectedReelIdxs.value);
+        if (set.size === 0) set.add(activeReelIdx.value);
+        return [...set].map(i => layout[i]).filter(Boolean);
+      }
+      function groupSetRows(v) {
+        const n = Math.max(1, Math.min(20, Number(v) || 1));
+        _groupTargetReels().forEach(r => { r.max_rows = n; });
+      }
+      function groupAdjustRows(d) {
+        _groupTargetReels().forEach(r => {
+          r.max_rows = Math.max(1, Math.min(20, (Number(r.max_rows) || 1) + d));
+        });
+      }
+      function groupSetOffset(v) {
+        const n = Math.max(-20, Math.min(20, Number(v) || 0));
+        _groupTargetReels().forEach(r => { r.y_offset = n; });
+      }
+      function groupAdjustOffset(d) {
+        _groupTargetReels().forEach(r => {
+          r.y_offset = Math.max(-20, Math.min(20, (Number(r.y_offset) || 0) + d));
+        });
+      }
+      function groupToggleSubreel() {
+        const targets = _groupTargetReels();
+        const turnOn = targets.some(r => !r.has_subreel); // 有任一未開 → 整組開;否則整組關
+        targets.forEach(r => {
+          r.has_subreel = turnOn;
+          if (turnOn) {
+            if (!r.subreel_position) r.subreel_position = 'BOTTOM';
+            if (!r.subreel_rows || r.subreel_rows < 1) r.subreel_rows = 1;
+          }
+        });
+      }
+
+      // ── layout:SVG 預覽點選 / 拖曳互換 ──
+      const previewDragFrom = ref(-1);
+      const previewDragOver = ref(-1);
+      let _previewPointerActive = false;
+      let _previewPointerUp = null;
+      function onPreviewPointerDown(reelIdx, ev) {
+        if (reelIdx < 0 || reelIdx >= layout.length) return;
+        activeReelIdx.value = reelIdx;
+        selectedReelIdxs.value = [];
+        previewDragFrom.value = reelIdx;
+        previewDragOver.value = reelIdx;
+        _previewPointerActive = true;
+        // 用 window pointerup 收尾,允許在 svg 外放開
+        _previewPointerUp = () => {
+          if (previewDragFrom.value >= 0 && previewDragOver.value >= 0 &&
+              previewDragFrom.value !== previewDragOver.value) {
+            swapReels(previewDragFrom.value, previewDragOver.value);
+          }
+          previewDragFrom.value = -1;
+          previewDragOver.value = -1;
+          _previewPointerActive = false;
+          if (_previewPointerUp) {
+            window.removeEventListener('pointerup', _previewPointerUp, true);
+            _previewPointerUp = null;
+          }
+        };
+        window.addEventListener('pointerup', _previewPointerUp, true);
+      }
+      function onPreviewPointerEnter(reelIdx) {
+        if (!_previewPointerActive) return;
+        if (reelIdx < 0 || reelIdx >= layout.length) return;
+        previewDragOver.value = reelIdx;
+      }
+
       return {
-        TABS, TABS_BY_GROUP, visibleTabGroups, isVariableHeightBoard, active, activeTab, groupDirtyCount,
-        g, PAY_TYPES, WAYS_DIRS,
-        // v4.1 Batch B — 賠付模型 / 計分方向收斂 / 條件式分頁
-        PAY_MODELS, isMegaways, activePayModel, selectPayModel,
+        // ── v4.1 補回(賠付模型 / 計分方向 / 分頁適用性)──
+        PAY_MODELS, activePayModel, selectPayModel,
         scanDirApplicable, curScanDir, setScanDir,
         tabNotApplicable, tabNAReason,
+        gridHeatColor,
+        // ── v4.1 補回(矩陣 quickbar)──
+        matrixFillValue, quickFillTable, quickApplySelection,
+        selectWholeColumn, selectWholeRow,
+        // ── v4.1 補回(layout 群組多選 + 預覽互動)──
+        selectedReelIdxs, groupActive, groupRowsValue, groupOffsetValue,
+        clearReelSelection, selectReelById, onReelChipClick,
+        groupSetRows, groupAdjustRows, groupSetOffset, groupAdjustOffset, groupToggleSubreel,
+        previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
+        // ── template 用非底線名稱的別名(對應既有底線實作)──
+        selectItem: _selectItem,
+        handleSaveAsTemplate: _handleSaveAsTemplate,
+        dragReelIdx: _dragReelIdx,
+        dragOverIdx: _dragOverIdx,
+        tplNameInputRef,
+        TABS, TABS_BY_GROUP, visibleTabGroups, isVariableHeightBoard, active, activeTab, groupDirtyCount,
+        g, PAY_TYPES, WAYS_DIRS,
         registry, symbolList, symbolNames, allModeScopes,
         modes, modeNames, duplicateNames, modesDebugJson,
         addMode, removeMode, passStatus,
