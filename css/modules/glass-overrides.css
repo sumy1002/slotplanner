@@ -93,7 +93,7 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: none !important;
   box-shadow:
-    0 0 0 4px rgba(74,210,180,0.22),
+    var(--focus-ring),
     var(--shadow-sm) !important;
 }
 /* 危險按鈕用紅色 ring */
@@ -146,14 +146,14 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 }
 
 /* ============================================================
-   7. 文字選取顏色(iOS 風青綠)
+   7. 文字選取顏色(accent 陶土)
    ============================================================ */
 ::selection {
-  background: rgba(74,210,180,0.40);
+  background: rgb(var(--tint-accent) / 0.40);
   color: var(--text);
 }
 ::-moz-selection {
-  background: rgba(74,210,180,0.40);
+  background: rgb(var(--tint-accent) / 0.40);
   color: var(--text);
 }
 
@@ -652,7 +652,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 
 /* SVG 盤面:選中 Reel 高亮(原本缺) */
 .cfg-layout-cell-active {
-  fill: rgba(74,210,180,0.55) !important;
+  fill: rgb(var(--tint-accent) / 0.55) !important;
   stroke: var(--accent-hex) !important;
   stroke-width: 2 !important;
 }

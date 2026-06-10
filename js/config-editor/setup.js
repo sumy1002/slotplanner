@@ -2713,13 +2713,13 @@
       //   - 最大值:濃紫
       function reelHeatColor(mode, w) {
         if (w === 0 || w === undefined || w === null) {
-          return 'rgba(120,120,140,0.10)';  // 灰底
+          return 'rgb(var(--tint-muted) / 0.10)';  // 灰底
         }
         const mx = reelMaxWeight(mode);
         if (!mx) return 'transparent';
         // sqrt 讓低權重區也有顏色差,而不是大半都接近透明
         const ratio = Math.sqrt(Math.min(1, w / mx));
-        return `rgba(140, 110, 220, ${(0.08 + 0.50 * ratio).toFixed(3)})`;
+        return `rgb(var(--tint-accent) / ${(0.08 + 0.50 * ratio).toFixed(3)})`;
       }
       // v3.5 / #6:該模式內整表 top-N(預設 2)的 weight 門檻
       function _topNThreshold(weights, n = 2) {
@@ -6184,12 +6184,12 @@
       // ── 04/05 矩陣熱力圖:grid 版(沿用 reel 的色階,改用 gridMaxWeight)──
       function gridHeatColor(mode, w) {
         if (w === 0 || w === undefined || w === null) {
-          return 'rgba(120,120,140,0.10)';
+          return 'rgb(var(--tint-muted) / 0.10)';
         }
         const mx = gridMaxWeight(mode);
         if (!mx) return 'transparent';
         const ratio = Math.sqrt(Math.min(1, w / mx));
-        return `rgba(140, 110, 220, ${(0.08 + 0.50 * ratio).toFixed(3)})`;
+        return `rgb(var(--tint-accent) / ${(0.08 + 0.50 * ratio).toFixed(3)})`;
       }
 
       // ── 矩陣 quickbar(常駐快速操作列)──

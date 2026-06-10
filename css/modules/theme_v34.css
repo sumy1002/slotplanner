@@ -1165,6 +1165,10 @@
   flex-wrap: wrap;
   overflow: visible;
 }
+:root[data-theme="dark"] .cfg-sticky-mode-bar {
+  background: rgba(40,40,46,0.86);
+  border-bottom-color: rgba(255,255,255,0.12);
+}
 /* 主要操作不被擠走 */
 .cfg-sticky-mode-bar > .cfg-matrix-menu-host,
 .cfg-sticky-mode-bar > .cfg-matrix-display-toggle,
@@ -1213,8 +1217,8 @@
   gap: 10px;
   padding: 9px 14px;
   margin: 0 0 8px;
-  background: linear-gradient(90deg, rgba(95,169,255,0.10) 0%, rgba(95,169,255,0.04) 100%);
-  border: 1px solid rgba(95,169,255,0.30);
+  background: linear-gradient(90deg, rgb(var(--tint-accent) / 0.12) 0%, rgb(var(--tint-accent) / 0.04) 100%);
+  border: 1px solid var(--accent-brd);
   border-radius: var(--r-card);
   font-size: 12px;
   color: var(--text);
@@ -1224,7 +1228,7 @@
 .cfg-grid-hint-btn {
   flex-shrink: 0;
   padding: 5px 12px;
-  background: #4a93ee;
+  background: var(--accent-hex);
   border: none;
   color: #fff;
   border-radius: var(--r-pill);
@@ -1234,7 +1238,7 @@
   white-space: nowrap;
   transition: background 0.12s, transform 0.08s;
 }
-.cfg-grid-hint-btn:hover { background: #3a7fcc; }
+.cfg-grid-hint-btn:hover { background: rgb(var(--tint-2)); }
 .cfg-grid-hint-btn:active { transform: scale(0.97); }
 .cfg-grid-hint-close {
   flex-shrink: 0;
@@ -1325,16 +1329,16 @@
   border-color: #78b4ff !important;
 }
 :root[data-theme="dark"] .cfg-grid-hint-banner {
-  background: linear-gradient(90deg, rgba(120,180,255,0.12) 0%, rgba(120,180,255,0.04) 100%);
-  border-color: rgba(120,180,255,0.30);
+  background: linear-gradient(90deg, rgba(210,155,120,0.14) 0%, rgba(210,155,120,0.04) 100%);
+  border-color: rgba(210,155,120,0.30);
   color: var(--text);
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn {
-  background: #78b4ff;
+  background: var(--accent-hex);
   color: #161719;
 }
 :root[data-theme="dark"] .cfg-grid-hint-btn:hover {
-  background: #5a9ee5;
+  background: rgb(var(--tint-2));
 }
 :root[data-theme="dark"] .cfg-grid-hint-close:hover {
   background: rgba(255,255,255,0.10);
@@ -1431,15 +1435,15 @@
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  background: rgba(95,169,255,0.12);
-  border: 1px solid rgba(95,169,255,0.35);
-  color: #2c6dc4;
+  background: var(--accent);
+  border: 1px solid var(--accent-brd);
+  color: var(--accent-hex);
   border-radius: var(--r-pill);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s, transform 0.08s;
 }
-.cfg-matrix-csv-btn:hover { background: rgba(95,169,255,0.25); }
+.cfg-matrix-csv-btn:hover { background: var(--hover); }
 .cfg-matrix-csv-btn:active { transform: scale(0.96); }
 
 /* ── 暗色覆寫 ── */
@@ -1463,12 +1467,12 @@
   color: var(--accent-hex);
 }
 :root[data-theme="dark"] .cfg-matrix-csv-btn {
-  background: rgba(120,180,255,0.12);
-  border-color: rgba(120,180,255,0.30);
-  color: #78b4ff;
+  background: rgba(210,155,120,0.15);
+  border-color: rgba(210,155,120,0.30);
+  color: var(--accent-hex);
 }
 :root[data-theme="dark"] .cfg-matrix-csv-btn:hover {
-  background: rgba(120,180,255,0.22);
+  background: rgba(210,155,120,0.25);
 }
 
 /* ============================================================

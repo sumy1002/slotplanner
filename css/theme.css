@@ -315,7 +315,7 @@ body::before {
   background: var(--accent);
   color: var(--accent-hex);
   font-weight: 700;
-  box-shadow: var(--inset-btn), 0 2px 8px rgba(74,210,180,0.18);
+  box-shadow: var(--inset-btn), 0 2px 8px rgb(var(--tint-accent) / 0.18);
 }
 .nav-divider { height: 1px; background: var(--divider); margin: 8px 4px; }
 
@@ -441,7 +441,7 @@ body::before {
   background: var(--accent); border: 0.5px solid var(--accent-brd); color: var(--accent-hex);
   box-shadow: var(--shadow-md);
 }
-.btn-primary:hover  { background: var(--hover); border-color: rgba(110,215,190,0.72); transform: translateY(-0.5px); box-shadow: var(--shadow-lg); }
+.btn-primary:hover  { background: var(--hover); border-color: var(--accent-brd); transform: translateY(-0.5px); box-shadow: var(--shadow-lg); }
 .btn-primary:active { transform: scale(0.96); box-shadow: var(--shadow-sm); }
 .btn-primary:focus-visible { box-shadow: var(--focus-ring), var(--shadow-md); }
 .btn-primary.big { padding: 12px 28px; font-size: 14px; }
@@ -626,11 +626,11 @@ select.input,
 }
 .drop.default {
   background: var(--drop-default);
-  border: 1.5px dashed rgba(74,210,180,0.40);
+  border: 1.5px dashed rgb(var(--tint-accent) / 0.40);
 }
 .drop.drag {
   background: var(--drop-drag);
-  border: 1.5px dashed rgba(74,210,180,0.60);
+  border: 1.5px dashed rgb(var(--tint-accent) / 0.60);
   transform: scale(1.01);
 }
 .drop.selected {

@@ -4185,9 +4185,9 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(240,232,255,0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--glass-4);
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
   border-bottom: 1px solid var(--glass-brd);
   padding: 8px 14px;
   display: flex;
@@ -6501,7 +6501,7 @@
   border-color: var(--accent-brd);
 }
 .cfg-paylines-overview-toggle.active {
-  background: linear-gradient(135deg, var(--accent-hex), #ffae6a);
+  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
   color: #fff;
   border-color: var(--accent-hex);
   box-shadow: 0 1px 6px rgb(var(--tint-accent) / 0.35);
@@ -7333,7 +7333,7 @@
   transition: all 0.15s;
 }
 .cfg-layout-preset-chip:hover {
-  background: linear-gradient(135deg, var(--accent-hex), #ffae6a);
+  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
   color: #fff;
   border-color: var(--accent-hex);
   box-shadow: 0 2px 8px rgb(var(--tint-accent) / 0.30);
@@ -7656,7 +7656,7 @@
   color: var(--accent-hex);
 }
 .cfg-constraint-reel-chip.active {
-  background: linear-gradient(135deg, var(--accent-hex), #ffae6a);
+  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
   border-color: var(--accent-hex);
   color: #fff;
   box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
@@ -8117,21 +8117,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .docgen-ta { min-height: 64px; resize: vertical; line-height: 1.5; }
 
-.docgen-beh-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; margin-bottom: 5px;
-}
-.docgen-tpl-btn {
-  flex-shrink: 0; font-size: 12px; font-weight: 600;
-  color: var(--accent-hex);
-  background: rgb(var(--tint-accent) / 0.12);
-  border: 0.5px solid var(--accent-brd);
-  border-radius: var(--r-pill);
-  padding: 3px 11px; cursor: pointer;
-  transition: background var(--t-fast), box-shadow var(--t-fast);
-}
-.docgen-tpl-btn:hover { background: rgb(var(--tint-accent) / 0.22); box-shadow: var(--shadow-sm); }
-
 .docgen-flags { display: flex; flex-wrap: wrap; gap: 16px; }
 .docgen-flags label {
   display: inline-flex; align-items: center; gap: 6px;
@@ -8148,17 +8133,80 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .btn-ghost-x:hover { color: #c0392b; border-color: #c0392b; }
 
+.docgen-actions {
+  display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+  margin-top: 4px;
+}
+.docgen-hint {
+  text-align: center; font-size: 13px; color: var(--accent-hex);
+  min-height: 18px;
+}
+
+/* ── v4.4 補齊：宿主容器 + sticky 動作列 + 行為標題列 + 樣板鈕 + 裸 btn ── */
+/* 設定檔編輯器 active==='docgen' 的宿主(原本無樣式,內容貼邊) */
+.cfg-docgen-host {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 20px 28px;
+}
+/* 頂部 sticky 動作列(原本無 CSS → 退回白底「白板」) */
 .docgen-actionbar {
-  position: sticky; top: 0; z-index: 5;
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; margin: -4px -2px 6px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
   background: var(--glass-4);
   backdrop-filter: var(--blur-md);
   -webkit-backdrop-filter: var(--blur-md);
   border: 1px solid var(--glass-edge);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+.docgen-actionbar .docgen-actions { margin-top: 0; justify-content: flex-start; }
+/* 特殊圖示行為:標題 + ✨ 帶入樣板 同列 */
+.docgen-beh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+.docgen-tpl-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-hex);
+  background: var(--accent);
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast), transform 80ms var(--ease-ios);
+}
+.docgen-tpl-btn:hover { background: var(--hover); }
+.docgen-tpl-btn:active { transform: scale(0.96); }
+/* docgen 內的裸 .btn(企劃 Excel / 儲存敘述 / 新增 JP)theme.css 的 .btn 基底無背景 → 補玻璃次要態 */
+.docgen .btn:not(.btn-primary) {
+  background: var(--glass-3);
+  border: 1px solid var(--glass-edge);
+  color: var(--text);
   box-shadow: var(--shadow-sm);
 }
-.docgen-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.docgen-hint { font-size: 13px; color: var(--accent-hex); min-height: 0; }
-.cfg-docgen-host { width: 100%; }
+.docgen .btn:not(.btn-primary):hover {
+  background: var(--glass-4);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
+.docgen .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+:root[data-theme="dark"] .docgen-actionbar {
+  background: rgba(40,40,46,0.86);
+  border-color: rgba(255,255,255,0.12);
+}
