@@ -5584,6 +5584,11 @@
       }
       const debugJson = computed(() => JSON.stringify(g, null, 2));
 
+      // [效能] JSON 預覽 gating:<details> 收合時不 render <pre>,對應的
+      // *DebugJson computed 就不會被存取 → 不在每次編輯時白做 JSON.stringify。
+      // 鍵:global/layout/paylines/constraints/rules/discards/bins。
+      const dbgOpen = reactive({});
+
       // ── 自動儲存(防抖 400ms)── 共用 timer,合併所有 watcher 的寫入
       // ── 修改追蹤(任務 2)── 每個 tab 是否有未匯出的變動
       const dirtyTabs = reactive({});  // { tabId: true }
@@ -5656,6 +5661,8 @@
             dirty.value = false;
             // #10:LS 寫入成功 → 觸發變更回顧重算
             changesVersion.value++;
+            // [效能] 健康度檢查與儲存同一拍(防抖)重算,解耦每次編輯的同步成本
+            recomputeValidation();
             emit('status', { type: 'ok', msg: `${label} 已自動儲存` });
           } else {
             emit('status', { type: 'err', msg: 'localStorage 寫入失敗' });
@@ -5676,9 +5683,14 @@
 
       // ──────────────────────────────────────────────────────────
       //  #2 跨 tab 健康度檢查(validateConfig)
-      //  computed,任何依賴變動會自動重算;每條結果含 severity/tab/msg
+      //  [效能] 原為 computed:被 header 徽章(validationSummary)與左側
+      //  分頁徽章(issuesByTab)常駐讀取,故任一 store/symbolNames 結構變動
+      //  都會同步重跑這 ~225 行。改為「純函式 _computeValidationIssues()
+      //  + 結果 ref」:只在自動儲存 flush 那一拍(同 changesVersion)與
+      //  symbolNames 變動時重算,不再卡在每次編輯的熱路徑(徽章 ~400ms lag)。
+      //  純函式在 setTimeout/手動呼叫情境下執行,無 reactive 追蹤 → 真正解耦。
       // ──────────────────────────────────────────────────────────
-      const validationIssues = computed(() => {
+      function _computeValidationIssues() {
         const out = [];
         // 跑時 push 函數(以避免重複 push 同種訊息可在外層去重)
         const add = (severity, tab, msg, detail) => {
@@ -5903,7 +5915,16 @@
         }
 
         return out;
-      });
+      }
+
+      // [效能] 結果存 ref;只在自動儲存 flush(同一拍)與 symbolNames 變動時重算。
+      // 初始即時算一次(此處在 setup 同步流程中、非 effect 內 → 不建立追蹤)。
+      const validationIssues = ref(_computeValidationIssues());
+      function recomputeValidation() {
+        validationIssues.value = _computeValidationIssues();
+      }
+      // 符號來自另一頁(SymbolRegistry),改動罕見且便宜 → 即時重算,避免徽章漏更新。
+      watch(symbolNames, recomputeValidation);
 
       // 摘要:錯誤/警告數
       const validationSummary = computed(() => {
@@ -6483,7 +6504,7 @@
         exportTemplateFile, onImportTemplate,
         sourceIcon, sourceText, sourceTextShort, dirty,
         devMode, onSourceIconClick,
-        debugJson,
+        debugJson, dbgOpen,
         resetCurrent,
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用

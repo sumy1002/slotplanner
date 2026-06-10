@@ -558,9 +558,9 @@
         </div>
 
         <!-- 區塊 6:JSON 預覽(除錯用) -->
-        <details class="cfg-debug">
+        <details class="cfg-debug" @toggle="dbgOpen.global = $event.target.open">
           <summary>🔍 預覽目前 JSON</summary>
-          <pre class="cfg-debug-pre">{{ debugJson }}</pre>
+          <pre v-if="dbgOpen.global" class="cfg-debug-pre">{{ debugJson }}</pre>
         </details>
         </div>
 
@@ -1012,9 +1012,9 @@
             </div><!-- /cfg-layout-v2-fields -->
 
             <!-- 詳情底部：JSON debug -->
-            <details class="cfg-debug cfg-layout-v2-debug">
+            <details class="cfg-debug cfg-layout-v2-debug" @toggle="dbgOpen.layout = $event.target.open">
               <summary>🔍 預覽 JSON（{{ layout.length }} 個 Reel）</summary>
-              <pre class="cfg-debug-pre">{{ layoutDebugJson }}</pre>
+              <pre v-if="dbgOpen.layout" class="cfg-debug-pre">{{ layoutDebugJson }}</pre>
             </details>
           </div><!-- /cfg-layout-v2-detail -->
 
@@ -2348,9 +2348,9 @@
               </div>
 
               <!-- debug 折疊 -->
-              <details class="cfg-debug cfg-paylines-v2-debug">
+              <details class="cfg-debug cfg-paylines-v2-debug" @toggle="dbgOpen.paylines = $event.target.open">
                 <summary>🔍 預覽目前 JSON({{ paylines.length }} 條中獎線)</summary>
-                <pre class="cfg-debug-pre">{{ paylinesDebugJson }}</pre>
+                <pre v-if="dbgOpen.paylines" class="cfg-debug-pre">{{ paylinesDebugJson }}</pre>
               </details>
             </template>
           </div>
@@ -2587,9 +2587,9 @@
               </div>
 
               <!-- debug 折疊 -->
-              <details class="cfg-debug cfg-constraints-v2-debug">
+              <details class="cfg-debug cfg-constraints-v2-debug" @toggle="dbgOpen.constraints = $event.target.open">
                 <summary>🔍 預覽目前 JSON({{ constraints.length }} 個約束)</summary>
-                <pre class="cfg-debug-pre">{{ constraintsDebugJson }}</pre>
+                <pre v-if="dbgOpen.constraints" class="cfg-debug-pre">{{ constraintsDebugJson }}</pre>
               </details>
             </template>
           </div>
@@ -3847,9 +3847,9 @@
 
               </div>
 
-              <details class="cfg-debug" style="margin-top:8px;">
+              <details class="cfg-debug" style="margin-top:8px;" @toggle="dbgOpen.rules = $event.target.open">
                 <summary>🔍 預覽目前 JSON(拼圖規則 {{ rules.length }} 條)</summary>
-                <pre class="cfg-debug-pre">{{ rulesDebugJson }}</pre>
+                <pre v-if="dbgOpen.rules" class="cfg-debug-pre">{{ rulesDebugJson }}</pre>
               </details>
             </template>
 
@@ -4072,9 +4072,9 @@
                 </div>
               </div>
 
-              <details class="cfg-debug" style="margin-top:8px;">
+              <details class="cfg-debug" style="margin-top:8px;" @toggle="dbgOpen.discards = $event.target.open">
                 <summary>🔍 預覽目前 JSON(棄牌規則 {{ discards.length }} 條)</summary>
-                <pre class="cfg-debug-pre">{{ discardsDebugJson }}</pre>
+                <pre v-if="dbgOpen.discards" class="cfg-debug-pre">{{ discardsDebugJson }}</pre>
               </details>
             </template>
           </div>
@@ -4162,9 +4162,9 @@
           </div>
         </div>
 
-        <details class="cfg-debug">
+        <details class="cfg-debug" @toggle="dbgOpen.bins = $event.target.open">
           <summary>🔍 預覽目前 JSON({{ Object.keys(bins).length }} 個區間定義)</summary>
-          <pre class="cfg-debug-pre">{{ binsDebugJson }}</pre>
+          <pre v-if="dbgOpen.bins" class="cfg-debug-pre">{{ binsDebugJson }}</pre>
         </details>
       </div>
 

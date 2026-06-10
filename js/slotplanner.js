@@ -297,11 +297,62 @@ def run_and_return(a_path: str) -> dict:
     );
   }
 
+  // ══════════════════════════════════════════════════════════
+  //  Python 原始碼載入器(module 層級 + Promise 快取)
+  //
+  //  [效能] py/ 13 檔在整個 session 內不會變,先前 SimPage 每次模擬都
+  //  重新 fetch 一輪是白做的網路 I/O。提到 module 層做 Promise 快取後:
+  //    - 首次 run / preloadPython() 抓一次,之後重用(跨 run、跨 SimPage 重掛)。
+  //    - 失敗則清掉 promise,讓下次可重試(行為與原本一致)。
+  //    - app.js 可在預熱(ensureWorker)後呼叫 preloadPython() 暖機,
+  //      讓首次模擬不必等 fetch。
+  // ══════════════════════════════════════════════════════════
+  const _PY_FILES = [
+    { path: '/core/__init__.py',         url: 'py/core/__init__.py' },
+    { path: '/iolayer/__init__.py',      url: 'py/iolayer/__init__.py' },
+    { path: '/stats/__init__.py',        url: 'py/stats/__init__.py' },
+    { path: '/core/schemas.py',          url: 'py/core/schemas.py' },
+    { path: '/core/condition_parser.py', url: 'py/core/condition_parser.py' },
+    { path: '/core/logic_parser.py',     url: 'py/core/logic_parser.py' },
+    { path: '/core/reel_generator.py',   url: 'py/core/reel_generator.py' },
+    { path: '/core/grid_engine.py',      url: 'py/core/grid_engine.py' },
+    { path: '/core/pay_resolver.py',     url: 'py/core/pay_resolver.py' },
+    { path: '/core/combo_engine.py',     url: 'py/core/combo_engine.py' },
+    { path: '/iolayer/a_loader.py',      url: 'py/iolayer/a_loader.py' },
+    { path: '/iolayer/b_writer.py',      url: 'py/iolayer/b_writer.py' },
+    { path: '/stats/collector.py',       url: 'py/stats/collector.py' },
+  ];
+  let _pyFilesPromise = null;
+  function _loadPythonFilesShared() {
+    if (_pyFilesPromise) return _pyFilesPromise;
+    _pyFilesPromise = (async () => {
+      const files = {};
+      const results = await Promise.all(
+        _PY_FILES.map(async ({ path, url }) => {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return { path, code: await res.text() };
+          } catch (e) {
+            throw new Error(`無法載入 ${url}: ${e.message}。請確認用 HTTP server 啟動,且 py/ 資料夾存在`);
+          }
+        })
+      );
+      for (const { path, code } of results) files[path] = code;
+      // run_web.py 仍內嵌(web 專用入口,只有 90 行)
+      files['/run_web.py'] = RUN_WEB_PY;
+      return files;
+    })().catch((e) => { _pyFilesPromise = null; throw e; });
+    return _pyFilesPromise;
+  }
+
   SP.workerService = {
     ensureWorker: _workerEnsure,
     subscribe:    _workerSubscribe,
     postRun:      _workerPostRun,
     isPyReady:    () => _workerPyReady,
+    // [效能] 預熱時可呼叫:提前抓好 py/ 原始碼(共用快取),首次模擬不必等 fetch
+    preloadPython: _loadPythonFilesShared,
     // debug
     _listenerCount: () => _workerListeners.size,
   };
@@ -2177,49 +2228,10 @@ def run_and_return(a_path: str) -> dict:
         SP.workerService.postRun(xlsxBytes, pythonFiles);
       }
 
-      async function _loadPythonFiles() {
-        // v3.5 起:Python 原始碼從 py/ 資料夾 fetch(GitHub Pages/http server 都可)
-        // file:// 協定下 fetch 會 CORS 失敗,但本專案已強制要求 http server
-        const PY_FILES = [
-          // 必要的 __init__.py
-          { path: '/core/__init__.py',     url: 'py/core/__init__.py' },
-          { path: '/iolayer/__init__.py',  url: 'py/iolayer/__init__.py' },
-          { path: '/stats/__init__.py',    url: 'py/stats/__init__.py' },
-          // core 模組
-          { path: '/core/schemas.py',          url: 'py/core/schemas.py' },
-          { path: '/core/condition_parser.py', url: 'py/core/condition_parser.py' },
-          { path: '/core/logic_parser.py',     url: 'py/core/logic_parser.py' },
-          { path: '/core/reel_generator.py',   url: 'py/core/reel_generator.py' },
-          { path: '/core/grid_engine.py',      url: 'py/core/grid_engine.py' },
-          { path: '/core/pay_resolver.py',     url: 'py/core/pay_resolver.py' },
-          { path: '/core/combo_engine.py',     url: 'py/core/combo_engine.py' },
-          // iolayer
-          { path: '/iolayer/a_loader.py',  url: 'py/iolayer/a_loader.py' },
-          { path: '/iolayer/b_writer.py',  url: 'py/iolayer/b_writer.py' },
-          // stats
-          { path: '/stats/collector.py',   url: 'py/stats/collector.py' },
-        ];
-
-        const files = {};
-        // 平行 fetch 全部 Python 檔(主執行緒,同 origin,無 CORS 問題)
-        const results = await Promise.all(
-          PY_FILES.map(async ({ path, url }) => {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              const code = await res.text();
-              return { path, code };
-            } catch (e) {
-              throw new Error(`無法載入 ${url}: ${e.message}。請確認用 HTTP server 啟動,且 py/ 資料夾存在`);
-            }
-          })
-        );
-        for (const { path, code } of results) {
-          files[path] = code;
-        }
-        // run_web.py 仍內嵌(因為它是 web 專用入口,只有 90 行)
-        files['/run_web.py'] = RUN_WEB_PY;
-        return files;
+      // [效能] 改用 module 層級的共享快取載入器(py/ 整 session 不變,不再每次 run 重 fetch)。
+      // 保留同名 wrapper,兩個呼叫點(runOnce / 比較模式)維持原樣不動。
+      function _loadPythonFiles() {
+        return _loadPythonFilesShared();
       }
 
       onMounted(() => {
