@@ -593,7 +593,7 @@
             模式清單(對應 A.xlsx 的 11_Mode_Config 分頁,匯出時仍會獨立成一張分頁)
           </div>
           <div class="cfg-modes-list">
-            <div v-for="(m, idx) in modes" :key="modeKey(m)" class="cfg-mode-card"
+            <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
                  :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode }">
 
               <!-- 卡片頂部:模式名稱 + 刪除 -->
