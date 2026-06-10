@@ -593,7 +593,7 @@
             模式清單(對應 A.xlsx 的 11_Mode_Config 分頁,匯出時仍會獨立成一張分頁)
           </div>
           <div class="cfg-modes-list">
-            <div v-for="(m, idx) in modes" :key="idx" class="cfg-mode-card"
+            <div v-for="(m, idx) in modes" :key="modeKey(m)" class="cfg-mode-card"
                  :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode }">
 
               <!-- 卡片頂部:模式名稱 + 刪除 -->
@@ -1378,7 +1378,7 @@
                           :style="{ backgroundColor: reelHeatColor(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0) }"
                           @click.stop="toggleMatrixCell('reel', reelActiveMode, r.reel_id, sid, $event)">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number="reelW(reelActiveMode).weights[r.reel_id + '-' + sid]"
+                               v-model.number.lazy="reelW(reelActiveMode).weights[r.reel_id + '-' + sid]"
                                @click.stop>
                         <span v-if="cellPercent('reel', reelActiveMode, r.reel_id, sid)"
                               class="cfg-matrix-cell-pct"
@@ -1509,7 +1509,7 @@
                                 class="cfg-matrix-cell-wrap"
                                 :style="{ backgroundColor: reelHeatColor(m, reelW(m).weights[r.reel_id + '-' + sid] || 0) }">
                               <input class="cfg-matrix-cell" type="number" min="0"
-                                     v-model.number="reelW(m).weights[r.reel_id + '-' + sid]"
+                                     v-model.number.lazy="reelW(m).weights[r.reel_id + '-' + sid]"
                                      @click.stop>
                             </td>
                           </template>
@@ -1868,7 +1868,7 @@
                                    { 'is-selected': isMatrixCellSelected('grid', gridActiveMode, r.reel_id, sz) }]"
                           @click.stop="toggleMatrixCell('grid', gridActiveMode, r.reel_id, sz, $event)">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number="gridW(gridActiveMode).weights[r.reel_id + '-' + sz]"
+                               v-model.number.lazy="gridW(gridActiveMode).weights[r.reel_id + '-' + sz]"
                                @click.stop>
                         <span v-if="cellPercent('grid', gridActiveMode, r.reel_id, sz)"
                               class="cfg-matrix-cell-pct"
@@ -1995,7 +1995,7 @@
                                 class="cfg-matrix-cell-wrap"
                                 :style="{ backgroundColor: gridHeatColor ? gridHeatColor(m, gridW(m).weights[r.reel_id + '-' + sz] || 0) : '' }">
                               <input class="cfg-matrix-cell" type="number" min="0"
-                                     v-model.number="gridW(m).weights[r.reel_id + '-' + sz]"
+                                     v-model.number.lazy="gridW(m).weights[r.reel_id + '-' + sz]"
                                      @click.stop>
                             </td>
                           </template>
@@ -2939,7 +2939,7 @@
                           :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, comboActiveStep[comboActiveModeBar], comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid] || 0) }"
                           @click.stop="toggleMatrixCell('combo', comboActiveModeBar, r.reel_id, sid, $event, comboActiveStep[comboActiveModeBar])">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number="comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid]"
+                               v-model.number.lazy="comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid]"
                                @click.stop>
                         <span v-if="cellPercent('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar])"
                               class="cfg-matrix-cell-pct"
@@ -3073,7 +3073,7 @@
                                 class="cfg-matrix-cell-wrap"
                                 :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0) }">
                               <input class="cfg-matrix-cell" type="number" min="0"
-                                     v-model.number="comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]"
+                                     v-model.number.lazy="comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]"
                                      @click.stop>
                             </td>
                           </template>
