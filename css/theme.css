@@ -964,6 +964,12 @@ select.input,
   padding: 3px 8px;
 }
 
+/* 全站原生核取框 / 單選鈕統一主色(消除各分頁殘留的原生藍;個別已宣告者值相同不受影響) */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent-hex);
+}
+
 /* Reel limit checkboxes */
 .reel-limits {
   display: flex; gap: 10px; flex-wrap: wrap;

@@ -1111,13 +1111,7 @@
 }
 .cfg-matrix-sync-btn {
   align-self: flex-start;
-  background: rgba(95,169,255,0.15);
-  border-color: rgba(95,169,255,0.4);
-  color: #2c6dc4;
   font-size: 11px;
-}
-.cfg-matrix-sync-btn:hover {
-  background: rgba(95,169,255,0.28);
 }
 
 /* ── #10:排序改 select dropdown ── */
@@ -1293,14 +1287,6 @@
   background: rgba(210,155,120,0.20);
   color: var(--accent-hex);
 }
-:root[data-theme="dark"] .cfg-matrix-sync-btn {
-  background: rgba(120,180,255,0.15);
-  border-color: rgba(120,180,255,0.35);
-  color: #78b4ff;
-}
-:root[data-theme="dark"] .cfg-matrix-sync-btn:hover {
-  background: rgba(120,180,255,0.28);
-}
 :root[data-theme="dark"] .cfg-matrix-sort-v2-select {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.12);
@@ -1435,15 +1421,19 @@
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  background: var(--accent);
-  border: 1px solid var(--accent-brd);
-  color: var(--accent-hex);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  color: var(--text-light);
   border-radius: var(--r-pill);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, transform 0.08s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
 }
-.cfg-matrix-csv-btn:hover { background: var(--hover); }
+.cfg-matrix-csv-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
 .cfg-matrix-csv-btn:active { transform: scale(0.96); }
 
 /* ── 暗色覆寫 ── */
@@ -1466,13 +1456,10 @@
 :root[data-theme="dark"] .cfg-prob-chip-val {
   color: var(--accent-hex);
 }
-:root[data-theme="dark"] .cfg-matrix-csv-btn {
-  background: rgba(210,155,120,0.15);
-  border-color: rgba(210,155,120,0.30);
-  color: var(--accent-hex);
-}
 :root[data-theme="dark"] .cfg-matrix-csv-btn:hover {
-  background: rgba(210,155,120,0.25);
+  background: var(--accent);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
 }
 
 /* ============================================================

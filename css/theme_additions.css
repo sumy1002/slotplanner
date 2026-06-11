@@ -6501,10 +6501,10 @@
   border-color: var(--accent-brd);
 }
 .cfg-paylines-overview-toggle.active {
-  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
+  background: var(--accent-hex);
   color: #fff;
   border-color: var(--accent-hex);
-  box-shadow: 0 1px 6px rgb(var(--tint-accent) / 0.35);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
 }
 
 /* 列表本體 */
@@ -6887,10 +6887,10 @@
   border-color: var(--accent-brd);
 }
 .cfg-paylines-guide-toggle.active {
-  background: linear-gradient(135deg, #6cb1ff, #5fa9ff);
+  background: var(--accent-hex);
   color: #fff;
-  border-color: #4a93ee;
-  box-shadow: 0 1px 6px rgba(95,169,255,0.40);
+  border-color: var(--accent-hex);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
 }
 
 /* ── 狀態 banner ── */
@@ -7333,11 +7333,10 @@
   transition: all 0.15s;
 }
 .cfg-layout-preset-chip:hover {
-  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
+  background: var(--accent-hex);
   color: #fff;
   border-color: var(--accent-hex);
-  box-shadow: 0 2px 8px rgb(var(--tint-accent) / 0.30);
-  transform: translateY(-1px);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
 }
 .cfg-layout-preset-chip-icon {
   font-size: 13px;
@@ -7656,7 +7655,7 @@
   color: var(--accent-hex);
 }
 .cfg-constraint-reel-chip.active {
-  background: linear-gradient(135deg, var(--accent-hex), rgb(var(--tint-2)));
+  background: var(--accent-hex);
   border-color: var(--accent-hex);
   color: #fff;
   box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
