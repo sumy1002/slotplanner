@@ -8209,3 +8209,94 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: rgba(40,40,46,0.86);
   border-color: rgba(255,255,255,0.12);
 }
+
+/* ════════════════════════════════════════════════════════════
+   v4.6 · 副盤種類（主輪 / 副盤分群）
+   - 副盤種類選擇器卡片（沿用 v4.5 按鈕三態契約:idle 中性玻璃 / active 實心 accent）
+   - 預覽 SVG 四型副格各自色（layout 結構語義色，非主色按鈕，比照既有 sub 琥珀）
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 種類選擇器卡片格 ── */
+.cfg-subreel-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.cfg-subreel-kind-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-ios),
+              border-color var(--t-fast) var(--ease-ios),
+              color var(--t-fast) var(--ease-ios);
+  text-align: left;
+}
+.cfg-subreel-kind-card:hover {
+  background: var(--accent);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
+.cfg-subreel-kind-card.active {
+  background: var(--accent-hex);
+  border-color: var(--accent-hex);
+  color: #fff;
+  box-shadow: 0 1px 4px rgb(var(--tint-accent)/0.30);
+}
+.cfg-subreel-kind-icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
+.cfg-subreel-kind-label { font-size: 12px; font-weight: 600; }
+
+:root[data-theme="dark"] .cfg-subreel-kind-card {
+  background: var(--glass-3);
+  border-color: var(--glass-brd);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .cfg-subreel-kind-card:hover {
+  background: var(--accent);
+  color: var(--accent-hex);
+}
+:root[data-theme="dark"] .cfg-subreel-kind-card.active {
+  background: var(--accent-hex);
+  color: #fff;
+}
+
+/* ── 雙盤面提醒條 ── */
+.cfg-subreel-dual-note {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: rgb(var(--tint-accent)/0.10);
+  border: 1px solid rgb(var(--tint-accent)/0.28);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.cfg-subreel-dual-note code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgb(var(--tint-accent)/0.16);
+}
+
+/* ── 預覽 SVG:四型副格色（結構語義色） ── */
+/* STACK = 既有琥珀（.cfg-layout-cell-sub 基底已給，不重複） */
+.cfg-layout-cell-sub-side {        /* 獨立直向副盤:藍綠 */
+  fill: rgba(120,200,210,0.62);
+  stroke: rgba(60,150,165,0.90);
+}
+.cfg-layout-cell-sub-horiz {       /* 橫向上方副盤:淺紫 */
+  fill: rgba(180,160,225,0.62);
+  stroke: rgba(120,95,195,0.90);
+}
+.cfg-layout-cell-sub-dual {        /* 雙盤面:粉紅虛線感（用較飽和邊框區分） */
+  fill: rgba(235,160,190,0.55);
+  stroke: rgba(205,90,135,0.92);
+  stroke-dasharray: 2 1.5;
+}

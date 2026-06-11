@@ -122,6 +122,21 @@ class ReelLayout:
     subreel_position: str = ""    # TOP/BOTTOM/LEFT/RIGHT
     subreel_rows: int = 0
     subreel_inherit_weight: bool = False
+    # v4.6: 副輪「種類」——把單一 Hold&Win 概念擴成四型。
+    #   STACK          堆疊式（沿用舊行為；副輪列接在主輪後面，TOP/BOTTOM）
+    #   SIDE_VERTICAL  獨立直向副盤（在主盤旁，與主盤無關；LEFT/RIGHT）
+    #   TOP_HORIZONTAL 橫向副盤（在主盤上方，與主盤相關；可用不同符號）
+    #   DUAL_PANEL     雙盤面（與主輪同尺寸、無滾動；Cashman Bingo 式）
+    # 空字串視為 STACK（向後相容舊檔）。
+    subreel_kind: str = "STACK"
+
+    @property
+    def effective_kind(self) -> str:
+        return self.subreel_kind or "STACK"
+
+    @property
+    def is_dual_panel(self) -> bool:
+        return self.has_subreel and self.effective_kind == "DUAL_PANEL"
 
 
 @dataclass

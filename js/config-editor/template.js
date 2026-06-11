@@ -875,8 +875,8 @@
                       class="cfg-layout-subreel-chip"
                       :class="{ active: activeReelIdx === idx }"
                       @click="onReelChipClick(idx, $event)"
-                      :title="'R' + r.reel_id + ' 的副 Reel · ' + (r.subreel_position || 'BOTTOM') + ' · ' + r.subreel_rows + ' 列 · 點擊編輯'">
-                <span class="cfg-layout-subreel-chip-icon">↳</span>
+                      :title="'R' + r.reel_id + ' 的副盤 · ' + (SUBREEL_KINDS.find(k=>k.key===(r.subreel_kind||'STACK'))||{}).label + ' · ' + (r.subreel_position || 'BOTTOM') + ' · ' + r.subreel_rows + ' 列 · 點擊編輯'">
+                <span class="cfg-layout-subreel-chip-icon">{{ (SUBREEL_KINDS.find(k=>k.key===(r.subreel_kind||'STACK'))||{}).icon || '↳' }}</span>
                 <span class="cfg-layout-subreel-chip-label">副 R{{ r.reel_id }}</span>
                 <span class="cfg-layout-reel-chip-rows">{{ r.subreel_rows }}列</span>
               </button>
@@ -901,10 +901,10 @@
                 <!-- 副 Reel 切換 -->
                 <button class="cfg-reel-subreel-toggle"
                         :class="{ active: activeReel.has_subreel }"
-                        @click="activeReel.has_subreel = !activeReel.has_subreel; if(activeReel.has_subreel && !activeReel.subreel_position){ activeReel.subreel_position='BOTTOM'; activeReel.subreel_rows=1; }"
-                        :title="activeReel.has_subreel ? '移除副 Reel' : '附加副 Reel(Hold & Win 用)'">
+                        @click="activeReel.has_subreel = !activeReel.has_subreel; if(activeReel.has_subreel){ if(!activeReel.subreel_kind) activeReel.subreel_kind='STACK'; if(!activeReel.subreel_position){ activeReel.subreel_position='BOTTOM'; } if(!activeReel.subreel_rows) activeReel.subreel_rows=1; }"
+                        :title="activeReel.has_subreel ? '移除副盤' : '附加副盤/副輪'">
                   <span class="cfg-reel-subreel-icon">{{ activeReel.has_subreel ? '✓' : '+' }}</span>
-                  <span>副 Reel</span>
+                  <span>副盤</span>
                 </button>
                 <button class="cfg-mode-delete-btn"
                         @click="removeReel(activeReelIdx)"
@@ -963,44 +963,78 @@
                   </div>
                 </div>
 
-                <!-- 副 Reel 設定（展開式，點副 Reel 按鈕才出現）-->
+                <!-- 副盤設定（展開式，點副盤按鈕才出現）-->
                 <div v-if="activeReel.has_subreel" class="cfg-reel-subreel-section">
                   <div class="cfg-reel-subreel-title">
-                    <span>🔗 副 Reel 設定</span>
-                    <span class="cfg-reel-subreel-hint">Hold &amp; Win 用 · 可在主 Reel 上/下方</span>
+                    <span>🔗 副盤設定</span>
+                    <span class="cfg-reel-subreel-hint">主輪 / 副盤已分開群組 · 先選種類，下方選項會跟著變</span>
                   </div>
-                  <div class="cfg-mode-grid">
-                    <div class="cfg-field cfg-field-compact">
-                      <label class="cfg-label">
-                        副 Reel 位置 <span class="cfg-key">SubReel_Position</span>
-                      </label>
-                      <div class="cfg-chip-row">
-                        <button class="cfg-chip" :class="{ active: activeReel.subreel_position === 'TOP' }"
-                                @click="activeReel.subreel_position = 'TOP'">TOP（上方）</button>
-                        <button class="cfg-chip" :class="{ active: activeReel.subreel_position === 'BOTTOM' }"
-                                @click="activeReel.subreel_position = 'BOTTOM'">BOTTOM（下方）</button>
-                      </div>
-                    </div>
-                    <div class="cfg-field cfg-field-compact">
-                      <label class="cfg-label">
-                        副 Reel 列數 <span class="cfg-key">SubReel_Rows</span>
-                      </label>
-                      <input class="input" type="number" min="1" max="5" v-model.number="activeReel.subreel_rows">
-                    </div>
-                  </div>
+
+                  <!-- v4.6:副盤「種類」選擇器 -->
                   <div class="cfg-field" style="margin-top:2px;">
                     <label class="cfg-label">
-                      副 Reel 繼承權重 <span class="cfg-key">SubReel_Inherit_Weight</span>
+                      副盤種類 <span class="cfg-key">SubReel_Kind</span>
+                    </label>
+                    <div class="cfg-subreel-kind-grid">
+                      <button v-for="k in SUBREEL_KINDS" :key="k.key"
+                              class="cfg-subreel-kind-card"
+                              :class="{ active: (activeReel.subreel_kind||'STACK') === k.key }"
+                              @click="setSubreelKind(k.key)"
+                              :title="k.desc">
+                        <span class="cfg-subreel-kind-icon">{{ k.icon }}</span>
+                        <span class="cfg-subreel-kind-label">{{ k.label }}</span>
+                      </button>
+                    </div>
+                    <div class="cfg-hint" v-if="activeSubreelKindDef">{{ activeSubreelKindDef.desc }}</div>
+                  </div>
+
+                  <div class="cfg-mode-grid" style="margin-top:8px;">
+                    <!-- 位置：依 kind 動態給可選項 -->
+                    <div class="cfg-field cfg-field-compact" v-if="activeSubreelKindDef && activeSubreelKindDef.positions.length > 1">
+                      <label class="cfg-label">
+                        副盤位置 <span class="cfg-key">SubReel_Position</span>
+                      </label>
+                      <div class="cfg-chip-row">
+                        <button v-for="pos in activeSubreelKindDef.positions" :key="pos"
+                                class="cfg-chip" :class="{ active: activeReel.subreel_position === pos }"
+                                @click="activeReel.subreel_position = pos">{{ pos }}</button>
+                      </div>
+                    </div>
+                    <div class="cfg-field cfg-field-compact" v-else-if="activeSubreelKindDef">
+                      <label class="cfg-label">副盤位置</label>
+                      <div class="cfg-payline-dir-readonly">{{ activeReel.subreel_position || activeSubreelKindDef.default_position }}（此種類固定）</div>
+                    </div>
+
+                    <!-- 列數：DUAL_PANEL 鎖定＝主輪列數 -->
+                    <div class="cfg-field cfg-field-compact">
+                      <label class="cfg-label">
+                        副盤列數 <span class="cfg-key">SubReel_Rows</span>
+                      </label>
+                      <input v-if="(activeReel.subreel_kind||'STACK') !== 'DUAL_PANEL'"
+                             class="input" type="number" min="1" max="9" v-model.number="activeReel.subreel_rows">
+                      <div v-else class="cfg-payline-dir-readonly">{{ activeReel.max_rows }} 列（雙盤面鎖定＝主輪列數）</div>
+                    </div>
+                  </div>
+
+                  <div class="cfg-field" style="margin-top:6px;">
+                    <label class="cfg-label">
+                      副盤權重來源 <span class="cfg-key">SubReel_Inherit_Weight</span>
                     </label>
                     <div class="cfg-chip-row">
                       <button class="cfg-chip" :class="{ active: !activeReel.subreel_inherit_weight }"
-                              @click="activeReel.subreel_inherit_weight = false">否（獨立權重）</button>
+                              @click="activeReel.subreel_inherit_weight = false">獨立權重</button>
                       <button class="cfg-chip" :class="{ active: activeReel.subreel_inherit_weight }"
-                              @click="activeReel.subreel_inherit_weight = true">是（沿用主）</button>
+                              @click="activeReel.subreel_inherit_weight = true">沿用主輪</button>
                     </div>
-                    <div class="cfg-hint">否時需在 04_Reel_Weights 另設此 Reel 的副權重表</div>
+                    <div class="cfg-hint">獨立時須在 04_Reel_Weights 用「{{ activeReel.reel_id }}.sub」另設此副盤權重表;沿用主輪則複用主輪抽樣池。</div>
+                  </div>
+
+                  <!-- 雙盤面提醒 -->
+                  <div v-if="(activeReel.subreel_kind||'STACK') === 'DUAL_PANEL'" class="cfg-subreel-dual-note">
+                    ▦ 雙盤面：模擬時會在主輪同欄產生一張同尺寸、每次 spin 靜態重抽（無滾動）的第二盤。引擎已支援，B 結果中以 <code>is_subreel</code> 標記。
                   </div>
                 </div>
+
 
                 <!-- 快速導覽 hint -->
                 <div class="cfg-layout-v2-nav-hint">
@@ -1042,6 +1076,7 @@
                         'cfg-layout-cell',
                         'cfg-layout-cell-interactive',
                         c.kind === 'sub' ? 'cfg-layout-cell-sub' : 'cfg-layout-cell-main',
+                        c.kind === 'sub' && c.sub_kind ? ('cfg-layout-cell-sub-' + c.sub_kind) : '',
                         c.reel_id === (activeReel && activeReel.reel_id) ? 'cfg-layout-cell-active' : '',
                         (previewDragFrom >= 0 && previewDragOver === (c.reel - 1) && previewDragFrom !== (c.reel - 1)) ? 'cfg-layout-cell-dragover' : ''
                       ]"

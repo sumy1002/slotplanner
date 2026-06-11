@@ -151,6 +151,8 @@ def _parse_layout(df: pd.DataFrame) -> LayoutConfig:
                 subreel_position=_to_str(r.get("SubReel_Position")),
                 subreel_rows=int(r.get("SubReel_Rows", 0) or 0),
                 subreel_inherit_weight=_to_bool(r.get("SubReel_Inherit_Weight")),
+                # v4.6: 新欄位，舊檔無此欄 → 預設 STACK（向後相容）
+                subreel_kind=(_to_str(r.get("SubReel_Kind")) or "STACK"),
             ))
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)

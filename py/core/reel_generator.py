@@ -244,11 +244,26 @@ class ReelGenerator:
         combo_step: int,
         sticky_cells: dict[tuple[int, int], SymbolDef],
     ) -> None:
-        """填副輪格子（subreel）；行號接在主輪後面（或沿用 subreel_position 解讀）"""
-        if not reel.has_subreel or reel.subreel_rows <= 0:
+        """填副輪格子（subreel）；行號接在主輪後面（或沿用 subreel_position 解讀）。
+
+        v4.6:四種 subreel_kind 都走同一條抽樣路徑（接在主輪後的連續 row index），
+        差別只在「列數」與「權重來源」:
+          - DUAL_PANEL（雙盤面）:列數 = 主輪實際列數（與主盤同尺寸、無滾動），
+            每次 spin 重抽一次即為靜態盤面;權重可沿用主輪或用獨立副輪池。
+          - STACK / SIDE_VERTICAL / TOP_HORIZONTAL:沿用 subreel_rows。
+        位置(TOP/BOTTOM/LEFT/RIGHT)純為視覺資訊，不影響抽樣。
+        """
+        if not reel.has_subreel:
             return
         rid = reel.reel_id
         main_rows = self.last_active_rows.get(rid, reel.max_rows)
+        # 雙盤面:列數鎖定為主輪實際列數（無滾動的第二張同尺寸盤）
+        if reel.effective_kind == "DUAL_PANEL":
+            sub_count = main_rows
+        else:
+            sub_count = reel.subreel_rows
+        if sub_count <= 0:
+            return
         pool = self._get_pool(mode, rid, True, combo_step)
         if pool is None:
             # 若沒有 subreel 專屬池，且 inherit_weight=True 則複用主輪池
@@ -257,7 +272,7 @@ class ReelGenerator:
             if pool is None:
                 return
 
-        for sub_row in range(reel.subreel_rows):
+        for sub_row in range(sub_count):
             # 副輪 row index 接在主輪後面（以負數區分也可，此處用連續正整數）
             k = (rid, main_rows + sub_row)
             if k in sticky_cells:

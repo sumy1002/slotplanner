@@ -142,10 +142,11 @@
     // 02_Layout
     const wsL = wb.addWorksheet('02_Layout');
     wsL.addRow(['Reel_ID', 'Y_Offset', 'Max_Rows', 'Has_SubReel',
-                'SubReel_Position', 'SubReel_Rows', 'SubReel_Inherit_Weight']);
+                'SubReel_Position', 'SubReel_Rows', 'SubReel_Inherit_Weight', 'SubReel_Kind']);
     for (const r of layoutRows) {
       wsL.addRow([r.reel_id, r.y_offset, r.max_rows, r.has_subreel,
-                  r.subreel_position, r.subreel_rows, r.subreel_inherit_weight]);
+                  r.subreel_position, r.subreel_rows, r.subreel_inherit_weight,
+                  r.subreel_kind || 'STACK']);
     }
     boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22]);
 

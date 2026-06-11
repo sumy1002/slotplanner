@@ -592,13 +592,31 @@
       subreel_position: '',
       subreel_rows: 0,
       subreel_inherit_weight: false,
+      subreel_kind: 'STACK',   // v4.6:STACK / SIDE_VERTICAL / TOP_HORIZONTAL / DUAL_PANEL
     };
   }
+
+  // v4.6:副輪四型定義（UI 用）。kind→預設位置/列數行為都在 setup.js 處理。
+  const SUBREEL_KINDS = [
+    { key: 'STACK',          icon: '🔒', label: '堆疊副輪',   short: '堆疊',
+      desc: 'Hold & Win 式;副輪列接在主輪上/下方，與主輪同欄滾動。',
+      positions: ['TOP', 'BOTTOM'], default_position: 'BOTTOM', dual: false },
+    { key: 'SIDE_VERTICAL',  icon: '↕', label: '獨立直向副盤', short: '直向',
+      desc: '在主盤最旁邊的直向副盤，與主盤面無關（獨立抽樣）。',
+      positions: ['LEFT', 'RIGHT'], default_position: 'RIGHT', dual: false },
+    { key: 'TOP_HORIZONTAL', icon: '↔', label: '橫向上方副盤', short: '橫向',
+      desc: '在主盤上方的橫向副盤，與主盤面相關;可用不同符號集。',
+      positions: ['TOP'], default_position: 'TOP', dual: false },
+    { key: 'DUAL_PANEL',     icon: '▦', label: '雙盤面',       short: '雙盤',
+      desc: '與主輪同尺寸、無滾動的第二張盤（Cashman Bingo 式）;列數鎖定＝主輪列數。',
+      positions: ['BOTTOM', 'RIGHT'], default_position: 'BOTTOM', dual: true },
+  ];
+  const SUBREEL_KIND_MAP = Object.fromEntries(SUBREEL_KINDS.map(k => [k.key, k]));
 
   const DEFAULT_LAYOUT = [
     { reel_id: 1, y_offset:  1, max_rows: 3, has_subreel: false, subreel_position: '',       subreel_rows: 0, subreel_inherit_weight: false },
     { reel_id: 2, y_offset:  0, max_rows: 4, has_subreel: false, subreel_position: '',       subreel_rows: 0, subreel_inherit_weight: false },
-    { reel_id: 3, y_offset: -1, max_rows: 5, has_subreel: true,  subreel_position: 'BOTTOM', subreel_rows: 1, subreel_inherit_weight: true  },
+    { reel_id: 3, y_offset: -1, max_rows: 5, has_subreel: true,  subreel_position: 'BOTTOM', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK'  },
     { reel_id: 4, y_offset:  0, max_rows: 4, has_subreel: false, subreel_position: '',       subreel_rows: 0, subreel_inherit_weight: false },
     { reel_id: 5, y_offset:  1, max_rows: 3, has_subreel: false, subreel_position: '',       subreel_rows: 0, subreel_inherit_weight: false },
   ];
@@ -1968,6 +1986,7 @@
     _fmtVal, _formatWeightsChanges, loadGlobal, saveGlobal,
     makeMode, DEFAULT_MODES, loadModes, saveModes,
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
+    SUBREEL_KINDS, SUBREEL_KIND_MAP,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,

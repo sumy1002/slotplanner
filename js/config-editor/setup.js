@@ -29,6 +29,7 @@
     _fmtVal, _formatWeightsChanges, loadGlobal, saveGlobal,
     makeMode, DEFAULT_MODES, loadModes, saveModes,
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
+    SUBREEL_KINDS, SUBREEL_KIND_MAP,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
@@ -1155,7 +1156,7 @@
         if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return;
         const a = layout[fromIdx], b = layout[toIdx];
         const ridA = a.reel_id, ridB = b.reel_id;
-        const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight'];
+        const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight', 'subreel_kind'];
         for (const k of attrs) { const t = a[k]; a[k] = b[k]; b[k] = t; }
         _swapReelWeightKeys(ridA, ridB);
         activeReelIdx.value = toIdx;
@@ -1177,6 +1178,41 @@
         _dragOverIdx.value = -1;
       }
       function onReelDragEnd() { _dragReelIdx.value = -1; _dragOverIdx.value = -1; }
+
+      // ──────────────────────────────────────────────────────────
+      //  v4.6:副輪「種類」切換
+      //  切 kind 時自動把 position / rows 帶到該 kind 合理的預設值，
+      //  避免出現「SIDE_VERTICAL 卻 position=BOTTOM」這種不一致狀態。
+      // ──────────────────────────────────────────────────────────
+      function setSubreelKind(kind) {
+        const r = activeReel.value;
+        if (!r) return;
+        const def = SUBREEL_KIND_MAP[kind];
+        if (!def) return;
+        r.subreel_kind = kind;
+        // position:若目前 position 不在該 kind 允許清單,改回該 kind 預設
+        if (!def.positions.includes(r.subreel_position)) {
+          r.subreel_position = def.default_position;
+        }
+        // 雙盤面:列數鎖定＝主輪列數(無滾動同尺寸盤)
+        if (def.dual) {
+          r.subreel_rows = r.max_rows;
+        } else if (!r.subreel_rows || r.subreel_rows < 1) {
+          r.subreel_rows = 1;
+        }
+      }
+      // 雙盤面列數須跟著主輪列數走(鎖定)
+      watch(() => activeReel.value && activeReel.value.max_rows, (mr) => {
+        const r = activeReel.value;
+        if (r && r.has_subreel && (r.subreel_kind || 'STACK') === 'DUAL_PANEL') {
+          r.subreel_rows = mr;
+        }
+      });
+      const activeSubreelKindDef = computed(() => {
+        const r = activeReel.value;
+        if (!r) return null;
+        return SUBREEL_KIND_MAP[r.subreel_kind || 'STACK'] || SUBREEL_KIND_MAP.STACK;
+      });
 
       // ──────────────────────────────────────────────────────────
       //  v3.3 / A4:盤面範本(LAYOUT_PRESETS)
@@ -1227,9 +1263,27 @@
           gen: () => [
             { reel_id: 1, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
             { reel_id: 2, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 3, y_offset: 0, max_rows: 3, has_subreel: true,  subreel_position: 'BOTTOM', subreel_rows: 1, subreel_inherit_weight: true },
+            { reel_id: 3, y_offset: 0, max_rows: 3, has_subreel: true,  subreel_position: 'BOTTOM', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
             { reel_id: 4, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
             { reel_id: 5, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
+          ] },
+        { key: 'dual-panel', icon: '▥', label: '雙盤面 5×3 ×2',
+          note: 'Cashman Bingo 式;每個 reel 帶一張同尺寸、無滾動的第二盤(下方)',
+          gen: () => Array.from({length: 5}, (_, i) => ({
+            reel_id: i+1, y_offset: 0, max_rows: 3,
+            has_subreel: true, subreel_position: 'BOTTOM', subreel_rows: 3,
+            subreel_inherit_weight: true, subreel_kind: 'DUAL_PANEL',
+          })) },
+        { key: 'side-vertical', icon: '↕', label: '主盤 5×3 + 右側直副盤',
+          note: '主盤 5×3,最右一欄為與主盤無關的獨立直向副盤(3 列)',
+          gen: () => [
+            ...Array.from({length: 5}, (_, i) => ({
+              reel_id: i+1, y_offset: 0, max_rows: 3,
+              has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
+            })),
+            { reel_id: 6, y_offset: 0, max_rows: 3, has_subreel: true,
+              subreel_position: 'RIGHT', subreel_rows: 3, subreel_inherit_weight: false,
+              subreel_kind: 'SIDE_VERTICAL' },
           ] },
       ];
 
@@ -1257,8 +1311,9 @@
           `04/05/08 矩陣的權重會保留,但缺少對應的 Reel 行會自動補 0,多餘的會空著。\n\n` +
           `確定要套用嗎?`
         )) return;
-        // 替換 layout(用 splice 保 reactivity)
-        layout.splice(0, layout.length, ...preset.gen());
+        // 替換 layout(用 splice 保 reactivity);用 makeReel 補齊新欄位(subreel_kind 等)
+        const rows = preset.gen().map(r => ({ ...makeReel(r.reel_id), ...r }));
+        layout.splice(0, layout.length, ...rows);
         activeReelIdx.value = 0;
         layoutPresetMenuOpen.value = false;
         emit('status', { type: 'ok', msg: `已套用盤面範本「${preset.label}」` });
@@ -1881,14 +1936,61 @@
       }
 
       // 視覺預覽的計算
+      // ──────────────────────────────────────────────────────────
+      //  v4.6:盤面預覽幾何
+      //  四種 subreel_kind 的視覺擺法:
+      //    STACK          → 同欄,主輪上/下方(TOP/BOTTOM),小 gap
+      //    TOP_HORIZONTAL → 同欄,主輪上方,小 gap(視覺同 STACK-TOP,但著色不同)
+      //    SIDE_VERTICAL  → 自成一欄,擺在主輪左/右側(LEFT/RIGHT),欄距加大
+      //    DUAL_PANEL     → 第二張同尺寸盤;BOTTOM=主輪正下方一個大 gap、RIGHT=主輪右側一欄
+      //  為了讓「自成一欄」的副盤(SIDE_VERTICAL / DUAL_PANEL-RIGHT)有水平空間,
+      //  先算每個 reel 佔幾個「視覺欄」,再累加成 colStart。
+      // ──────────────────────────────────────────────────────────
+      function _reelExtraCols(r) {
+        // 回傳該 reel 在主欄之外、額外向右borrow 的視覺欄數
+        if (!r.has_subreel) return 0;
+        const kind = r.subreel_kind || 'STACK';
+        if (kind === 'SIDE_VERTICAL' && r.subreel_position === 'RIGHT') return 1;
+        if (kind === 'DUAL_PANEL' && r.subreel_position === 'RIGHT') return 1;
+        return 0;
+      }
+      function _reelLeadCols(r) {
+        // 回傳該 reel 在主欄之前、向左borrow 的視覺欄數(LEFT 副盤)
+        if (!r.has_subreel) return 0;
+        const kind = r.subreel_kind || 'STACK';
+        if (kind === 'SIDE_VERTICAL' && r.subreel_position === 'LEFT') return 1;
+        if (kind === 'DUAL_PANEL' && r.subreel_position === 'LEFT') return 1;
+        return 0;
+      }
+      // 每個 reel 的主欄 col 起點(累加 lead/extra)
+      const layoutColStarts = computed(() => {
+        const starts = [];
+        let col = 0;
+        for (const r of layout) {
+          col += _reelLeadCols(r);   // 先讓出左側副盤欄
+          starts.push(col);          // 主欄位置
+          col += 1 + _reelExtraCols(r);
+        }
+        return starts;
+      });
+      const layoutTotalCols = computed(() => {
+        let col = 0;
+        for (const r of layout) col += _reelLeadCols(r) + 1 + _reelExtraCols(r);
+        return Math.max(1, col);
+      });
+
       const layoutMetrics = computed(() => {
         let minTop = 0, maxBot = 0;
         for (const r of layout) {
           let top = r.y_offset;
           let bot = r.y_offset + Math.max(1, r.max_rows) - 1;
           if (r.has_subreel && r.subreel_rows > 0) {
-            if (r.subreel_position === 'TOP')    top = top - r.subreel_rows;
-            if (r.subreel_position === 'BOTTOM') bot = bot + r.subreel_rows;
+            const kind = r.subreel_kind || 'STACK';
+            const pos = r.subreel_position;
+            // 只有「同欄、上下堆疊」的型(STACK / TOP_HORIZONTAL，以及 DUAL_PANEL-BOTTOM)
+            // 才會把垂直範圍往外撐;LEFT/RIGHT 的自成一欄副盤垂直範圍 ≤ 主輪。
+            if (pos === 'TOP') top = top - r.subreel_rows;
+            else if (pos === 'BOTTOM') bot = bot + r.subreel_rows;
           }
           minTop = Math.min(minTop, top);
           maxBot = Math.max(maxBot, bot);
@@ -1898,47 +2000,51 @@
 
       const layoutCells = computed(() => {
         const { minTop } = layoutMetrics.value;
+        const starts = layoutColStarts.value;
+        const STEP = LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP;
         const cells = [];
         layout.forEach((r, idx) => {
-          const x = idx * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP);
+          const mainCol = starts[idx];
+          const x = mainCol * STEP;
           // 主 Reel 格子
           for (let i = 0; i < r.max_rows; i++) {
             const row = r.y_offset + i;
             cells.push({
               x,
-              y: (row - minTop) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP),
+              y: (row - minTop) * STEP,
               kind: 'main',
               reel_id: r.reel_id,
-              // #9 點選用:邏輯座標(reel 從 1 開始 = idx+1;row 為該 reel 內的 1-based index)
               reel: idx + 1,
               row: i + 1,
             });
           }
           // 副 Reel 格子
           if (r.has_subreel && r.subreel_rows > 0) {
-            if (r.subreel_position === 'TOP') {
+            const skind = r.subreel_kind || 'STACK';
+            const pos = r.subreel_position;
+            const subClass = skind === 'DUAL_PANEL' ? 'dual'
+                            : skind === 'SIDE_VERTICAL' ? 'side'
+                            : skind === 'TOP_HORIZONTAL' ? 'horiz' : 'stack';
+            if (pos === 'TOP') {
               for (let i = 0; i < r.subreel_rows; i++) {
                 const row = r.y_offset - r.subreel_rows + i;
-                cells.push({
-                  x,
-                  y: (row - minTop) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP) - LAYOUT_SUBREEL_GAP,
-                  kind: 'sub',
-                  reel_id: r.reel_id,
-                  reel: idx + 1,
-                  row: null, // 副 reel 不參與點選
-                });
+                cells.push({ x, y: (row - minTop) * STEP - LAYOUT_SUBREEL_GAP,
+                  kind: 'sub', sub_kind: subClass, reel_id: r.reel_id, reel: idx + 1, row: null });
               }
-            } else if (r.subreel_position === 'BOTTOM') {
+            } else if (pos === 'BOTTOM') {
               for (let i = 0; i < r.subreel_rows; i++) {
                 const row = r.y_offset + r.max_rows + i;
-                cells.push({
-                  x,
-                  y: (row - minTop) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP) + LAYOUT_SUBREEL_GAP,
-                  kind: 'sub',
-                  reel_id: r.reel_id,
-                  reel: idx + 1,
-                  row: null,
-                });
+                cells.push({ x, y: (row - minTop) * STEP + LAYOUT_SUBREEL_GAP,
+                  kind: 'sub', sub_kind: subClass, reel_id: r.reel_id, reel: idx + 1, row: null });
+              }
+            } else if (pos === 'LEFT' || pos === 'RIGHT') {
+              // 自成一欄:LEFT 在 mainCol-1、RIGHT 在 mainCol+1
+              const subCol = pos === 'LEFT' ? mainCol - 1 : mainCol + 1;
+              const sx = subCol * STEP + (pos === 'LEFT' ? -LAYOUT_SUBREEL_GAP : LAYOUT_SUBREEL_GAP);
+              for (let i = 0; i < r.subreel_rows; i++) {
+                const row = r.y_offset + i;   // 與主輪頂端對齊
+                cells.push({ x: sx, y: (row - minTop) * STEP,
+                  kind: 'sub', sub_kind: subClass, reel_id: r.reel_id, reel: idx + 1, row: null });
               }
             }
           }
@@ -1946,18 +2052,23 @@
         return cells;
       });
 
-      const layoutLabels = computed(() => layout.map((r, idx) => ({
-        x: idx * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP) + LAYOUT_CELL_SIZE / 2,
-        reel_id: r.reel_id,
-      })));
+      const layoutLabels = computed(() => {
+        const starts = layoutColStarts.value;
+        const STEP = LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP;
+        return layout.map((r, idx) => ({
+          x: starts[idx] * STEP + LAYOUT_CELL_SIZE / 2,
+          reel_id: r.reel_id,
+        }));
+      });
 
       const layoutViewBox = computed(() => {
         if (layout.length === 0) return '0 0 100 100';
-        const w = Math.max(1, layout.length) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP);
+        const STEP = LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP;
+        const w = layoutTotalCols.value * STEP + 2 * LAYOUT_SUBREEL_GAP;
         const { minTop, maxBot } = layoutMetrics.value;
-        const h = (maxBot - minTop + 1) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP)
+        const h = (maxBot - minTop + 1) * STEP
                   + 2 * LAYOUT_SUBREEL_GAP + LAYOUT_LABEL_HEIGHT;
-        return `0 ${-LAYOUT_LABEL_HEIGHT - LAYOUT_SUBREEL_GAP} ${w} ${h}`;
+        return `${-LAYOUT_SUBREEL_GAP} ${-LAYOUT_LABEL_HEIGHT - LAYOUT_SUBREEL_GAP} ${w} ${h}`;
       });
 
       const totalCells = computed(() =>
@@ -2065,6 +2176,8 @@
         const v = paylineValid(pl);
         if (!v.valid || v.points.length === 0) return [];
         const { minTop } = layoutMetrics.value;
+        const starts = layoutColStarts.value;
+        const STEP = LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP;
         const out = [];
         for (const pt of v.points) {
           const idx = pt.reel - 1;
@@ -2072,8 +2185,8 @@
           const r = layout[idx];
           const abs_row = r.y_offset + (pt.row - 1);
           out.push({
-            x: idx * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP) + LAYOUT_CELL_SIZE / 2,
-            y: (abs_row - minTop) * (LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP) + LAYOUT_CELL_SIZE / 2,
+            x: starts[idx] * STEP + LAYOUT_CELL_SIZE / 2,
+            y: (abs_row - minTop) * STEP + LAYOUT_CELL_SIZE / 2,
           });
         }
         return out;
@@ -6348,6 +6461,8 @@
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
         addReel, removeReel, swapReels,
+        // v4.6 副輪種類
+        SUBREEL_KINDS, setSubreelKind, activeSubreelKindDef,
         _dragReelIdx, _dragOverIdx,
         onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
