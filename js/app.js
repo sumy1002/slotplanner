@@ -29,45 +29,21 @@
       // ── 「數據文件相關」區段的子分頁（仿設定檔編輯器分頁）──
       // ready=false 的分頁為未來功能占位,點進去顯示「開發中」。
       const dataTabs = [
-        { id: 'txt2xlsx', name: 'TXT → XLSX', icon: '📄', ready: true  },
-        { id: 'more',     name: '更多功能',   icon: '➕', ready: false },
+        { id: 'txt2xlsx', name: 'TXT → XLSX',    icon: '📄', ready: true  },
+        // v4.9-b:模擬引擎下架後,「比較前後調整數據」由此工具接手
+        //        (上傳兩份外部模擬器產出的 B 結果檔並排比較)
+        { id: 'bcompare', name: 'A/B 結果比較',  icon: '📊', ready: true  },
+        { id: 'more',     name: '更多功能',      icon: '➕', ready: false },
       ];
       const dataTab = ref('txt2xlsx');
       const activeDataTab = computed(() => dataTabs.find(t => t.id === dataTab.value) || null);
       const titles = {
         0: '數據文件相關', 1: 'Symbol 管理',
-        3: 'A 設定檔編輯器', 4: '批次處理', 5: '資料比對', 6: '模擬引擎'
+        3: 'A 設定檔編輯器', 4: '批次處理', 5: '資料比對'
       };
       const status = ref({ type: 'wait', msg: '已就緒' });
 
-      // ── Pyodide 載入狀態(全域顯示在側邊欄)──
-      const pyodideStatus = ref('idle');  // 'idle' | 'loading' | 'ready' | 'error'
-      const pyodideStatusDetail = ref('');
-      const pyodideStatusIcon = computed(() => {
-        switch (pyodideStatus.value) {
-          case 'loading': return '⏳';
-          case 'ready':   return '✓';
-          case 'error':   return '✗';
-          default:        return '○';
-        }
-      });
-      const pyodideStatusText = computed(() => {
-        switch (pyodideStatus.value) {
-          case 'loading': return '載入中';
-          case 'ready':   return 'Pyodide 就緒';
-          case 'error':   return 'Pyodide 失敗';
-          default:        return 'Pyodide';
-        }
-      });
-      const pyodideStatusTip = computed(() => {
-        const detail = pyodideStatusDetail.value ? `\n${pyodideStatusDetail.value}` : '';
-        switch (pyodideStatus.value) {
-          case 'loading': return `Pyodide 載入中(背景下載 ~6MB,完成後模擬引擎即可使用)${detail}`;
-          case 'ready':   return 'Pyodide 已就緒,模擬引擎可立即使用';
-          case 'error':   return `Pyodide 載入失敗 — 將在進入模擬引擎時重試${detail}`;
-          default:        return '尚未啟動';
-        }
-      });
+      // v4.9-b:Pyodide 載入狀態區塊已移除(模擬引擎下架,改外部程式執行)
 
       const fileInput    = ref(null);
       const fileInfo     = ref(null);
@@ -82,48 +58,14 @@
         3: { type: 'wait', msg: 'A 設定檔編輯器' },
         4: { type: 'wait', msg: '功能開發中' },
         5: { type: 'wait', msg: '功能開發中' },
-        6: { type: 'wait', msg: '模擬引擎就緒' },
       };
-
-      // ── Pyodide Worker 訂閱與啟動（抽成函數，供 on-demand 呼叫）──
-      let _pyodideWarmupDone = false;
-      function _ensurePyodideWarmup() {
-        if (_pyodideWarmupDone) return;
-        _pyodideWarmupDone = true;
-        try {
-          if (window.SlotPlanner && window.SlotPlanner.workerService) {
-            const ws = window.SlotPlanner.workerService;
-            ws.subscribe((data) => {
-              if (data.type === 'ready') {
-                pyodideStatus.value = 'ready';
-              } else if (data.type === 'status' && pyodideStatus.value !== 'ready') {
-                pyodideStatus.value = 'loading';
-                pyodideStatusDetail.value = data.msg || '';
-              } else if (data.type === 'error' && pyodideStatus.value !== 'ready') {
-                pyodideStatus.value = 'error';
-                pyodideStatusDetail.value = data.msg || '未知錯誤';
-              }
-            });
-            pyodideStatus.value = ws.isPyReady() ? 'ready' : 'loading';
-            ws.ensureWorker();
-            // v4.8:補上 v4.4 待辦 — worker 預熱後緊接抓 py/ 原始碼暖機
-            //   (module 層 Promise 快取,首次模擬省掉 9 個 fetch 的等待)
-            if (typeof ws.preloadPython === 'function') {
-              ws.preloadPython().catch(() => { /* 失敗會清快取,模擬時自動重試 */ });
-            }
-            console.log('[app] Pyodide worker 啟動（on-demand）');
-          }
-        } catch (e) {
-          pyodideStatus.value = 'error';
-          pyodideStatusDetail.value = e.message || String(e);
-          console.warn('[app] Pyodide 啟動失敗:', e);
-        }
-      }
 
       function _statusForDataTab() {
         if (dataTab.value === 'txt2xlsx') {
           if (fileInfo.value) setStatus('wait', `已選擇：${fileInfo.value.name}`);
           else status.value = { ...pageDefaultStatus[0] };
+        } else if (dataTab.value === 'bcompare') {
+          setStatus('wait', '上傳 A、B 兩份外部模擬結果檔(B_結果_*.xlsx)以比較');
         } else {
           setStatus('wait', '功能開發中');
         }
@@ -142,11 +84,11 @@
       function goPage(i) {
         // v3 變更:page 2(盤面設計)已整合進設定檔編輯器,自動遷移
         if (i === 2) i = 3;
+        // v4.9-b:模擬引擎(6)已移除 — 自動遷移到「數據文件相關 → A/B 結果比較」
+        if (i === 6) { i = 0; dataTab.value = 'bcompare'; }
         page.value = i;
         if (i === 0) _statusForDataTab();
         else status.value = { ...pageDefaultStatus[i] };
-        // 切到模擬引擎時才啟動 Pyodide（避免佔用初始載入頻寬）
-        if (i === 6) _ensurePyodideWarmup();
       }
 
       function onChildStatus(s) { status.value = { ...s }; }
@@ -493,7 +435,6 @@
       return {
         page, sbCollapsed, titles, status,
         dataTabs, dataTab, activeDataTab, setDataTab,
-        pyodideStatus, pyodideStatusIcon, pyodideStatusText, pyodideStatusTip,
         fileInput, fileInfo, isConverting,
         isDragging, dropClass, dropIcon, dropMain, dropSub,
         triggerPick, onPickedFile,
@@ -508,7 +449,8 @@
 
   app.component('symbol-page', SP.SymbolPage);
   app.component('config-page', SP.ConfigPage);
-  app.component('sim-page',    SP.SimPage);
+  // v4.9-b:sim-page 已移除;A/B 結果比較接手(數據文件相關子分頁)
+  app.component('b-compare-page', SP.BComparePage);
   app.component('doc-gen-page', SP.DocGenPage);
   app.mount('#app');
 })();

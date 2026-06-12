@@ -5121,8 +5121,14 @@
         } else if (sortBy === 'name-desc') {
           sorted.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-Hant'));
         }
-        return sorted;
+        // v4.9:內建範本恆置頂(不受搜尋外的排序影響;搜尋仍可過濾掉它)
+        const builtins = sorted.filter(t => t.builtin);
+        const users    = sorted.filter(t => !t.builtin);
+        return [...builtins, ...users];
       });
+      // v4.9:標頭計數只算使用者範本(內建恆在,計入會誤導「已存了 1 份」)
+      const userTemplateCount = computed(() =>
+        templateList.value.filter(t => !t.builtin).length);
       const tplApi = () => (window.SlotPlanner && window.SlotPlanner.Templates) || null;
 
       function refreshTemplateList() {
@@ -5260,6 +5266,14 @@
       // 從 LS 讀某個範本的 data
       function _loadTemplateData(slug) {
         if (!slug) return null;
+        // v4.9:優先走 Templates API(內建範本不在 LS,需由 API 的 builder 取得)
+        const api = tplApi();
+        if (api && typeof api.getData === 'function') {
+          try {
+            const d = api.getData(slug);
+            if (d) return d;
+          } catch (e) { /* fallthrough → 走 LS 直讀 */ }
+        }
         try {
           const raw = localStorage.getItem(`slotplanner.template.${slug}.v1`);
           if (!raw) return null;
@@ -5318,6 +5332,11 @@
       });
 
       function deleteTemplateConfirm(t) {
+        // v4.9:內建範本不可刪除(UI 已隱藏按鈕,此為雙保險)
+        if (t && t.builtin) {
+          emit('status', { type: 'err', msg: '內建範本無法刪除' });
+          return;
+        }
         if (!confirm(`確定要刪除範本「${t.name}」嗎?此動作不可復原。`)) return;
         const api = tplApi();
         if (!api) return;
@@ -5640,16 +5659,14 @@
       const searchSelectedIdx = ref(0);
 
       // 01_Global 的欄位名 — 寫死,因為這些是 schema 固定的
+      // v4.9-b:模擬執行參數(simulation_count / random_seed / output_prefix /
+      //        big_win_thresholds / dead_spin_buckets)已自 UI 移除,
+      //        搜尋目錄同步下架(避免跳轉到不存在的欄位)
       const GLOBAL_FIELDS = [
-        { key: 'simulation_count', label: '模擬次數' },
-        { key: 'random_seed',      label: '隨機種子' },
-        { key: 'output_prefix',    label: '輸出檔名前綴' },
         { key: 'pay_type',         label: '賠付類型' },
         { key: 'ways_direction',   label: 'Ways 方向' },
         { key: 'cluster_min_size', label: 'Cluster 最小群組' },
         { key: 'return_pct',       label: '目標 RTP' },
-        { key: 'big_win_thresholds', label: '大獎門檻' },
-        { key: 'dead_spin_buckets',  label: '連續死局統計分桶' },
       ];
 
       // 建立扁平索引,每次 reactive 變動會自動重算
@@ -6442,7 +6459,7 @@
 
         if (id === 'global') {
           // v3.1:global 同時涵蓋全域 + 模式定義(原 11_Mode_Config 已合併進來)
-          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 模擬參數(simulation_count、random_seed、output_prefix)\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· 進階參數(max_chain_depth/max_chain_per_rule/big_win_thresholds/dead_spin_buckets)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
+          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
           Object.assign(g, DEFAULT_GLOBAL);
           modes.splice(0, modes.length, ...DEFAULT_MODES.map(m => ({ ...m })));
           emit('status', { type: 'ok', msg: '已重設全域設定 + 模式定義為預設值' });
@@ -6908,6 +6925,7 @@
         exportXlsx, onImportFile,
         dirtyTabs,
         showTemplatePanel, templateList, newTemplateName, newTemplateDesc,
+        userTemplateCount,   // v4.9:標頭計數(僅使用者範本)
         tplSaveOpen,   // v4.8:_handleSaveAsTemplate 改僅以別名 handleSaveAsTemplate 匯出
         // ── #16 範本 diff ──
         diffOpen, diffSelecting, diffPickA, diffPickB, diffPickFor,

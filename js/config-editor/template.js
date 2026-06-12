@@ -201,7 +201,7 @@
             @click="toggleTemplatePanel"
             title="範本管理:可存多份設定快照,在不同設計案間切換">
       <span class="cfg-btn-icon">💾</span>
-      <span class="cfg-btn-text-full">範本{{ templateList.length > 0 ? ' (' + templateList.length + ')' : '' }}</span>
+      <span class="cfg-btn-text-full">範本{{ userTemplateCount > 0 ? ' (' + userTemplateCount + ')' : '' }}</span>
       <span class="cfg-btn-text-short">範本</span>
     </button>
   </div>
@@ -262,9 +262,12 @@
     <!-- 範本清單 -->
     <div class="cfg-tpl-list" v-if="templateList.length > 0">
       <div v-for="t in filteredSortedTemplates" :key="t.slug" class="cfg-tpl-item"
-           :class="{ 'cfg-tpl-item-auto': t.name && t.name.startsWith('🤖') }">
+           :class="{ 'cfg-tpl-item-auto': t.name && t.name.startsWith('🤖'),
+                     'cfg-tpl-item-builtin': t.builtin }">
         <div class="cfg-tpl-info">
-          <div class="cfg-tpl-name">{{ t.name }}</div>
+          <div class="cfg-tpl-name">{{ t.name }}<span v-if="t.builtin"
+                class="cfg-tpl-badge-builtin"
+                title="內建示範範本:不佔範本額度、不可刪除;載入後可任意修改再另存為自己的範本">內建</span></div>
           <div class="cfg-tpl-desc" v-if="t.description">{{ t.description }}</div>
           <div class="cfg-tpl-meta">
             <span>建立 {{ t.created.slice(0,10) }}</span>
@@ -285,7 +288,7 @@
           <button class="cfg-tpl-action"
                   @click="exportTemplateFile(t)"
                   title="下載為 JSON 檔(可分享給他人)">⇩ 匯出</button>
-          <button class="cfg-tpl-action cfg-tpl-delete"
+          <button v-if="!t.builtin" class="cfg-tpl-action cfg-tpl-delete"
                   @click="deleteTemplateConfirm(t)"
                   title="刪除此範本">✕ 刪除</button>
         </div>
@@ -466,94 +469,16 @@
           </div>
         </details>
 
-        <!-- 區塊 4:進階參數(可折疊,預設收起 — 通常不需修改)
-             v3.1 合併原「腳本控制」尾段 + 「統計設定」 -->
-        <details class="cfg-section cfg-section-collapsible">
-          <summary class="cfg-section-summary">
-            <span class="cfg-section-title cfg-section-title-inline">進階參數</span>
-            <span class="cfg-section-summary-preview">遞迴 {{ g.max_chain_depth }}/{{ g.max_chain_per_rule }} · 大獎 {{ g.big_win_thresholds || '—' }} · 死局桶 {{ g.dead_spin_buckets || '—' }}</span>
-          </summary>
-          <div class="cfg-section-body">
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              腳本最大遞迴深度 <span class="cfg-key">max_chain_depth</span>
-            </label>
-            <input class="input input-center" type="number" min="10" max="1000" v-model.number="g.max_chain_depth">
-            <div class="cfg-hint">EMIT_EVENT 鏈式觸發的安全上限,防止死循環</div>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              單規則最大觸發 <span class="cfg-key">max_chain_per_rule</span>
-            </label>
-            <input class="input input-center" type="number" min="5" max="500" v-model.number="g.max_chain_per_rule">
-            <div class="cfg-hint">同一規則在一局內最多觸發次數</div>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              大獎門檻(倍數) <span class="cfg-key">big_win_thresholds</span>
-            </label>
-            <input class="input" type="text" v-model.trim="g.big_win_thresholds" placeholder="100,500">
-            <div class="cfg-hint">逗號分隔多個門檻,例:100,500,1000;B 文件會列各門檻命中率</div>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              連續死局統計分桶 <span class="cfg-key">dead_spin_buckets</span>
-            </label>
-            <input class="input" type="text" v-model.trim="g.dead_spin_buckets" placeholder="2,3,4,5">
-            <div class="cfg-hint">逗號分隔整數,例:2,3,4,5;統計連續 N 局零分的頻率</div>
-          </div>
-          </div>
-        </details>
-
-        <!-- 區塊 5:模擬參數(v3.1 移到最末 — 全部設好再決定跑多少局)-->
-        <div class="cfg-section cfg-section-runtime">
-          <div class="cfg-section-title cfg-section-title-runtime">
-            <span class="cfg-section-runtime-icon">▶</span>
-            <span>模擬參數</span>
-            <span class="cfg-section-runtime-sub">— 全部設定完成後,在此決定如何執行模擬</span>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              模擬局數 <span class="cfg-key">simulation_count</span>
-            </label>
-            <div class="cfg-chip-row" style="margin-bottom:6px;">
-              <button type="button" class="cfg-chip cfg-chip-sm"
-                      :class="{ active: g.simulation_count === 10000 }"
-                      @click="g.simulation_count = 10000" title="快速冒煙測試 ~10 秒">10K 冒煙</button>
-              <button type="button" class="cfg-chip cfg-chip-sm"
-                      :class="{ active: g.simulation_count === 100000 }"
-                      @click="g.simulation_count = 100000" title="開發迭代 ~1 分鐘">100K 開發</button>
-              <button type="button" class="cfg-chip cfg-chip-sm"
-                      :class="{ active: g.simulation_count === 1000000 }"
-                      @click="g.simulation_count = 1000000" title="正式分析 ~10 分鐘">1M 正式</button>
-              <button type="button" class="cfg-chip cfg-chip-sm"
-                      :class="{ active: g.simulation_count === 10000000 }"
-                      @click="g.simulation_count = 10000000" title="嚴謹收斂(耗時)">10M 嚴謹</button>
-            </div>
-            <input class="input input-center" type="number" min="100" step="10000"
-                   v-model.number="g.simulation_count">
-            <div class="cfg-hint">建議 1,000,000;冒煙測試可改 10,000 加速</div>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              隨機種子 <span class="cfg-key">random_seed</span>
-            </label>
-            <input class="input input-center" type="number" v-model.number="g.random_seed">
-            <div class="cfg-hint">同種子 = 同結果可重現;改種子驗證穩健性</div>
-          </div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              輸出檔名前綴 <span class="cfg-key">output_prefix</span>
-            </label>
-            <input class="input" type="text" v-model.trim="g.output_prefix">
-            <div class="cfg-hint">B.xlsx 的檔名前綴,實際輸出會加上時間戳</div>
+        <!-- v4.9-b:原「區塊 4 進階參數」與「區塊 5 模擬參數」已自 UI 移除 —
+             模擬改由外部程式執行(simulation_count / random_seed / output_prefix /
+             max_chain_depth / max_chain_per_rule / big_win_thresholds / dead_spin_buckets)。
+             LS 與 A.xlsx 匯出契約「不變」:aconfig-xlsx 仍照 LS 既有值(或預設值)寫入
+             01_Global,外部模擬器讀到的欄位與舊版完全一致。 -->
+        <div class="cfg-section cfg-section-extparams-note">
+          <div class="cfg-extparams-note">
+            <span class="cfg-extparams-note-icon">ℹ️</span>
+            <span>模擬執行參數(局數 / 種子 / 遞迴護欄 / 統計分桶)已改由<strong>外部模擬器</strong>管理;
+            匯出 A.xlsx 時仍會以既定值寫入 01_Global,設定檔契約不變。</span>
           </div>
         </div>
 
@@ -4417,7 +4342,7 @@
 
       <div class="cfg-search-results">
         <div v-if="searchResults.length === 0" class="cfg-search-empty">
-          沒有結果。試試模式名(FG1)、符號名(WILD)、分頁名(規則)、或欄位 key(random_seed)。
+          沒有結果。試試模式名(FG1)、符號名(WILD)、分頁名(規則)、或欄位 key(pay_type)。
         </div>
         <div v-else>
           <div v-for="(item, idx) in searchResults" :key="item.id"

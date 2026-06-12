@@ -14,7 +14,7 @@
 @import url('modules/scrollbar.css');
 @import url('modules/theme_v34.css');
 @import url('modules/glass-overrides.css');
-@import url('modules/sim-page.css');
+/* v4.9-b:sim-page.css 已停用(模擬引擎下架;檔案可自 repo 移除) */
 
 /* ============================================================
    theme.css 新增區塊 — v2
@@ -9139,3 +9139,204 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-aux-row-panel {}
 .cfg-diff-pair-b { opacity: 0.92; }
 .cfg-diff-pick-badge-a { /* A 徽章用基底 accent 實心 */ }
+
+/* ════════════════════════════════════════════════════════════
+   v4.9-a:內建示範範本(builtin template)
+   - 清單項目左側 accent 粗邊 + 「內建」pill 徽章
+   - 徽章為主色實心(比照 v4.5 active 契約:實心 accent + 白字 + 細陰影)
+   ════════════════════════════════════════════════════════════ */
+.cfg-tpl-item-builtin {
+  border-left: 3px solid var(--accent-hex);
+}
+.cfg-tpl-badge-builtin {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #fff;
+  background: var(--accent-hex);
+  border-radius: var(--r-pill);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent)/0.30);
+  vertical-align: 1px;
+}
+/* 暗色:accent 轉為淺暖色(#e0a070),白字對比不足 → 改深字 */
+:root[data-theme="dark"] .cfg-tpl-badge-builtin {
+  color: #1d1b18;
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   v4.9-b:A/B 結果比較(bcompare)
+   - 語義色沿用 SimPage 比較模式:A 橘 #c95810 / B 青綠 #0f6e56
+     (屬「結構標記語義色」,比照規則 23 保留,不與主色按鈕契約衝突)
+   - 按鈕遵 v4.5 三態契約(中性玻璃 idle + accent hover)
+   - 表格 cell 無 backdrop-filter(規則 14)
+   ════════════════════════════════════════════════════════════ */
+.bcmp { display: flex; flex-direction: column; gap: 16px; }
+
+.bcmp-intro {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px;
+  background: rgb(var(--tint-accent)/0.07);
+  border: 1px solid rgb(var(--tint-accent)/0.18);
+  border-radius: var(--r-md);
+  font-size: 13px; line-height: 1.6; color: var(--text-light);
+}
+.bcmp-intro strong { color: var(--accent-hex); }
+.bcmp-intro-icon { font-size: 16px; line-height: 1.4; }
+
+/* ── 上傳槽 ── */
+.bcmp-slots { display: flex; align-items: stretch; gap: 12px; }
+.bcmp-slot {
+  flex: 1 1 0; min-width: 0;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.55);
+  border: 1.5px dashed var(--glass-brd);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+}
+.bcmp-slot:hover { background: var(--accent); border-color: var(--accent-brd); }
+.bcmp-slot.loaded { border-style: solid; background: rgba(255,255,255,0.68); }
+.bcmp-slot.loading { opacity: 0.7; pointer-events: none; }
+.bcmp-slot-a.loaded { border-color: #c95810; }
+.bcmp-slot-b.loaded { border-color: #0f6e56; }
+.bcmp-slot-tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  margin-bottom: 6px; color: var(--text-light);
+}
+.bcmp-slot-a .bcmp-slot-tag { color: #c95810; }
+.bcmp-slot-b .bcmp-slot-tag { color: #0f6e56; }
+.bcmp-slot-file {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bcmp-slot-meta { font-size: 12px; color: var(--text-light); margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace; }
+.bcmp-slot-empty { font-size: 13px; color: var(--text-light); padding: 6px 0; }
+.bcmp-swap {
+  align-self: center; flex: 0 0 auto;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  color: var(--text-light); cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.bcmp-swap:hover:not(:disabled) { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); }
+.bcmp-swap:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.bcmp-error {
+  padding: 10px 14px; font-size: 13px;
+  color: #c0392b;
+  background: rgba(192,57,43,0.08);
+  border: 1px solid rgba(192,57,43,0.25);
+  border-radius: var(--r-md);
+}
+
+/* ── 結果區 ── */
+.bcmp-results { display: flex; flex-direction: column; gap: 14px; }
+.bcmp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bcmp-pair { display: flex; align-items: center; gap: 8px; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; min-width: 0; flex-wrap: wrap; }
+.bcmp-pair-a { color: #c95810; font-weight: 600; }
+.bcmp-pair-b { color: #0f6e56; font-weight: 600; }
+.bcmp-pair-vs { color: var(--text-light); }
+.bcmp-shot-btn {
+  padding: 7px 14px; font-size: 13px; font-weight: 600;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  color: var(--text-light); cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.bcmp-shot-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); }
+.bcmp-shot-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.bcmp-card {
+  padding: 14px 16px;
+  background: var(--glass-2, rgba(255,255,255,0.5));
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-lg);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+}
+.bcmp-card-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.bcmp-card-details > summary { cursor: pointer; list-style: none; }
+.bcmp-card-details > summary::-webkit-details-marker { display: none; }
+.bcmp-card-title-sum { margin-bottom: 0; }
+.bcmp-card-details[open] .bcmp-card-title-sum { margin-bottom: 10px; }
+.bcmp-sum-count { font-weight: 400; color: var(--text-light); font-size: 12px; }
+
+.bcmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bcmp-table th {
+  text-align: right; padding: 6px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+  color: var(--text-light);
+  border-bottom: 1px solid var(--glass-brd);
+  white-space: nowrap;
+}
+.bcmp-th-label { text-align: left; }
+.bcmp-th-a { color: #c95810; }
+.bcmp-th-b { color: #0f6e56; }
+.bcmp-th-d { color: var(--accent-hex); }
+.bcmp-table td { padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.bcmp-table tbody tr:last-child td { border-bottom: none; }
+.bcmp-td-label { color: var(--text); }
+.bcmp-unit { margin-left: 4px; font-size: 11px; color: var(--text-light); }
+.bcmp-td-num, .bcmp-td-delta {
+  text-align: right; font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.bcmp-td-delta { font-weight: 700; color: var(--accent-hex); }
+.bcmp-td-delta.is-zero { font-weight: 400; color: var(--text-light); opacity: 0.6; }
+.bcmp-row-hot .bcmp-td-label { font-weight: 700; }
+.bcmp-row-changed { background: rgb(var(--tint-accent)/0.05); }
+.bcmp-row-missing { opacity: 0.65; }
+.bcmp-missing-tag {
+  margin-left: 6px; padding: 0 6px;
+  font-size: 10px; font-weight: 600;
+  color: #b87c10;
+  background: rgba(184,124,16,0.10);
+  border: 1px solid rgba(184,124,16,0.30);
+  border-radius: var(--r-pill);
+}
+
+/* ── 空狀態 ── */
+.bcmp-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 44px 20px; text-align: center;
+}
+.bcmp-empty-icon { font-size: 34px; opacity: 0.8; }
+.bcmp-empty-text { font-size: 14px; font-weight: 600; color: var(--text); }
+.bcmp-empty-sub { font-size: 12.5px; color: var(--text-light); }
+
+/* ── RWD:窄視窗上傳槽縱向堆疊 ── */
+@media (max-width: 760px) {
+  .bcmp-slots { flex-direction: column; }
+  .bcmp-swap { align-self: flex-end; }
+  .bcmp-table { font-size: 12px; }
+  .bcmp-table th, .bcmp-table td { padding: 5px 6px; }
+}
+
+/* ── 暗色模式 ── */
+:root[data-theme="dark"] .bcmp-slot,
+:root[data-theme="dark"] .bcmp-swap,
+:root[data-theme="dark"] .bcmp-shot-btn {
+  background: var(--glass-2, rgba(255,255,255,0.06));
+}
+:root[data-theme="dark"] .bcmp-slot-a.loaded { border-color: #e8824a; }
+:root[data-theme="dark"] .bcmp-slot-b.loaded { border-color: #3fae8c; }
+:root[data-theme="dark"] .bcmp-slot-a .bcmp-slot-tag,
+:root[data-theme="dark"] .bcmp-pair-a,
+:root[data-theme="dark"] .bcmp-th-a { color: #e8824a; }
+:root[data-theme="dark"] .bcmp-slot-b .bcmp-slot-tag,
+:root[data-theme="dark"] .bcmp-pair-b,
+:root[data-theme="dark"] .bcmp-th-b { color: #3fae8c; }
+:root[data-theme="dark"] .bcmp-table td { border-bottom-color: rgba(255,255,255,0.05); }
+:root[data-theme="dark"] .bcmp-row-changed { background: rgb(var(--tint-accent)/0.10); }

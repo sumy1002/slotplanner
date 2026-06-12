@@ -429,6 +429,10 @@
       global:       'slotplanner.aconfig.global.v1',
       modes:        'slotplanner.aconfig.modes.v1',
       layout:       'slotplanner.aconfig.layout.v1',
+      // v4.9:補納 panels / symbolsets(v4.7 新增的 LS keys,先前範本快照漏列,
+      //       導致存範本會丟失自由副盤與符號集設定)
+      panels:       'slotplanner.aconfig.panels.v1',
+      symbolsets:   'slotplanner.aconfig.symbolsets.v1',
       bins:         'slotplanner.aconfig.bins.v1',
       paylines:     'slotplanner.aconfig.paylines.v1',
       constraints:  'slotplanner.aconfig.constraints.v1',
@@ -454,6 +458,11 @@
       global:       'slotplanner.aconfig.global.v1',
       modes:        'slotplanner.aconfig.modes.v1',
       layout:       'slotplanner.aconfig.layout.v1',
+      // v4.9:與 _snapshotAllLS 同步補 panels / symbolsets。
+      //       舊範本快照無這兩個 key → 還原時會 removeItem 清空,
+      //       語義正確(範本代表完整狀態,沒存 = 沒有副盤)。
+      panels:       'slotplanner.aconfig.panels.v1',
+      symbolsets:   'slotplanner.aconfig.symbolsets.v1',
       bins:         'slotplanner.aconfig.bins.v1',
       paylines:     'slotplanner.aconfig.paylines.v1',
       constraints:  'slotplanner.aconfig.constraints.v1',
@@ -489,6 +498,10 @@
     if (!name || !name.trim()) throw new Error('範本名稱不可空白');
     const slug = _slugify(name);
     if (!slug) throw new Error('範本名稱含過多特殊字元,無法產生有效 slug');
+    // v4.9:'builtin-' 為內建範本保留字,擋下撞名(避免清單出現重複 slug key)
+    if (slug.startsWith(BUILTIN_SLUG_PREFIX)) {
+      throw new Error('「builtin-」開頭為內建範本保留字,請換個名稱');
+    }
     const snap = _snapshotAllLS();
     const payload = { version: 1, savedAt: new Date().toISOString(), data: snap.data };
     localStorage.setItem(_tplKey(slug), JSON.stringify(payload));
@@ -516,6 +529,13 @@
 
   // 公開:載入範本(覆寫所有 LS keys),回傳被載入的 metadata
   function loadTemplate(slug) {
+    // v4.9:內建範本不在 LS,直接還原 builder 資料
+    if (_isBuiltinSlug(slug)) {
+      const p = _builtinPayload(slug);
+      if (!p) throw new Error(`內建範本不存在:${slug}`);
+      _restoreAllLS(p.data);
+      return _builtinMeta(slug);
+    }
     const raw = localStorage.getItem(_tplKey(slug));
     if (!raw) throw new Error(`範本不存在:${slug}`);
     let payload;
@@ -528,6 +548,8 @@
 
   // 公開:刪除範本
   function deleteTemplate(slug) {
+    // v4.9:內建範本不可刪除
+    if (_isBuiltinSlug(slug)) throw new Error('內建範本無法刪除');
     localStorage.removeItem(_tplKey(slug));
     const list = listTemplates().filter(t => t.slug !== slug);
     _saveTemplateList(list);
@@ -535,6 +557,13 @@
 
   // 公開:把範本匯出成 JSON(讓使用者下載,給別人使用)
   function exportTemplateJSON(slug) {
+    // v4.9:內建範本即時組 payload(允許匯出分享)
+    if (_isBuiltinSlug(slug)) {
+      const meta = _builtinMeta(slug);
+      const payload = _builtinPayload(slug);
+      if (!meta || !payload) throw new Error(`內建範本不存在:${slug}`);
+      return JSON.stringify({ meta, payload }, null, 2);
+    }
     const raw = localStorage.getItem(_tplKey(slug));
     if (!raw) throw new Error(`範本不存在:${slug}`);
     const meta = listTemplates().find(t => t.slug === slug);
@@ -552,8 +581,13 @@
     }
     const name = overrideName || (obj.meta && obj.meta.name) || `匯入_${new Date().toISOString().slice(0,10)}`;
     const description = (obj.meta && obj.meta.description) || '從 JSON 匯入';
-    const slug = _slugify(name);
+    let slug = _slugify(name);
     if (!slug) throw new Error('範本名稱含過多特殊字元');
+    // v4.9:匯入檔若撞到內建保留字 slug(例如匯入別人分享的內建範本 JSON),
+    //       自動改名為使用者副本,而非直接報錯
+    if (slug.startsWith(BUILTIN_SLUG_PREFIX)) {
+      slug = 'copy-' + slug.slice(BUILTIN_SLUG_PREFIX.length);
+    }
     localStorage.setItem(_tplKey(slug), JSON.stringify(obj.payload));
     const list = listTemplates();
     const idx = list.findIndex(t => t.slug === slug);
@@ -576,14 +610,254 @@
     return meta;
   }
 
+  // ──────────────────────────────────────────────────────────
+  //  v4.9-a:內建示範範本(builtin)
+  //  - 不存 LS、不可刪除;按「▶ 載入」即套用一套完整、零驗證錯誤、
+  //    用到所有分頁的遊戲設定,供新使用者/新案子一鍵起步。
+  //  - slug 一律以 'builtin-' 開頭(保留字;saveTemplate / importTemplateJSON
+  //    會擋下撞名,避免 LS 範本與內建範本 slug 衝突造成清單重複 key)。
+  //  - 資料以 builder 程式化生成(而非巨大字面值),保證 04/05 權重 key
+  //    對「每輪 × 每符號」完整覆蓋,不會漏格。
+  // ──────────────────────────────────────────────────────────
+  const BUILTIN_SLUG_PREFIX = 'builtin-';
+  const BUILTIN_DEMO_SLUG = 'builtin-demo-jade';
+  const BUILTIN_DEMO_STAMP = '2026-06-12T00:00:00.000Z';
+
+  function _buildBuiltinDemoData() {
+    const REELS = 5;
+
+    // ── 03_Symbols(SymbolRegistry toJSON 格式;name = symbol_id,
+    //    確保 04/07/09 以名稱引用符號時與 03 完全對齊、零孤兒警告)──
+    const SYM_DEFS = [
+      { sid: 'WILD', type: 'WILD',    p: [20, 60, 200],  wild: true,
+        reels: [false, true, true, true, false], sw: ['#7a3c20', '#ffffff'] },
+      { sid: 'SCAT', type: 'SCATTER', p: [2, 10, 50],    scatter: true, sw: ['#b87c10', '#ffffff'] },
+      { sid: 'MEGA', type: 'SPECIAL', p: [30, 100, 300], mw: 2, mh: 2,  sw: ['#27ae60', '#ffffff'] },
+      { sid: 'H1',   type: 'HIGH',    p: [10, 30, 100],  sw: ['#c0392b', '#ffffff'] },
+      { sid: 'H2',   type: 'HIGH',    p: [8, 24, 80],    sw: ['#c95810', '#ffffff'] },
+      { sid: 'H3',   type: 'HIGH',    p: [6, 18, 60],    sw: ['#4a93ee', '#ffffff'] },
+      { sid: 'H4',   type: 'HIGH',    p: [5, 14, 45],    sw: ['#7a5a3a', '#ffffff'] },
+      { sid: 'L1',   type: 'LOW',     p: [3, 8, 20],     sw: ['#EDD9C0', '#7a5a3a'] },
+      { sid: 'L2',   type: 'LOW',     p: [2.5, 7, 18],   sw: ['#e7e3da', '#5a5650'] },
+      { sid: 'L3',   type: 'LOW',     p: [2, 6, 15],     sw: ['#d9e8df', '#2f6e4f'] },
+      { sid: 'L4',   type: 'LOW',     p: [1.5, 5, 12],   sw: ['#dfe6ee', '#3a5a7a'] },
+    ];
+    const registry = {
+      version: 2,
+      reel_count: REELS,
+      symbols: SYM_DEFS.map((d, i) => ({
+        id: i + 1,
+        name: d.sid,
+        number: String(i + 1),
+        weight: 100,
+        max_count: 0,
+        use_max: false,
+        reel_limit: d.reels ? [...d.reels] : new Array(REELS).fill(true),
+        enabled: true,
+        symbol_id: d.sid,
+        type: d.type,
+        pay_3x: d.p[0], pay_4x: d.p[1], pay_5x: d.p[2], pay_6x: 0,
+        mega_w: d.mw || 1, mega_h: d.mh || 1,
+        is_wild: !!d.wild, is_scatter: !!d.scatter,
+        swatch: [...d.sw],
+      })),
+    };
+
+    // ── 01_Global + 11_Mode_Config ──
+    const global = {
+      simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
+      pay_type: 'LINE', ways_direction: 'LTR', payline_direction: 'LTR',
+      megaways: false, cluster_min_size: 5, starting_mode: 'NG',
+      max_chain_depth: 100, max_chain_per_rule: 50,
+      big_win_thresholds: '100,500', dead_spin_buckets: '2,3,4,5',
+    };
+    const modes = [
+      { mode: 'NG',  trigger_condition: '', spin_count: 0,
+        inherit_globals: false, on_enter_reset_vars: '', notes: '基本遊戲(起始模式)' },
+      { mode: 'FG1', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 10,
+        inherit_globals: false, on_enter_reset_vars: 'fg_combo_count', notes: '10 局免費遊戲' },
+    ];
+
+    // ── 02_Layout:5×3;R3 帶一個 STACK 副輪(沿用母輪權重 → 零警告)──
+    const layout = [];
+    for (let r = 1; r <= REELS; r++) {
+      layout.push({
+        reel_id: r, y_offset: 0, max_rows: 3,
+        has_subreel: r === 3,
+        subreel_position: r === 3 ? 'BOTTOM' : '',
+        subreel_rows: r === 3 ? 1 : 0,
+        subreel_inherit_weight: r === 3,
+        subreel_kind: 'STACK',
+      });
+    }
+    // ── 02b_Panels + 03b_Symbol_Sets:頂部 3×1 收集盤,獨立符號集
+    //    (symbol_set 非空 → 有權重來源,零警告;join_payline=false → 零警告)──
+    const panels = [{
+      panel_id: 'HW1', col: 1, row: -2, width: 3, height: 1,
+      scroll: false, symbol_set: 'HWSET',
+      inherit_weight: false, join_payline: false,
+      note: '頂部收集盤(獨立符號集示範)',
+    }];
+    const symbolsets = { HWSET: ['SCAT', 'H1', 'L1'] };
+
+    // ── 04_Reel_Weights:NG / FG1 兩套完整權重
+    //    WILD 在 R1/R5 權重 0,與 C001(REEL_RESTRICT WILD 2,3,4)語義一致 ──
+    const BASE_W = { WILD: 16, SCAT: 10, MEGA: 4, H1: 22, H2: 26, H3: 30, H4: 34, L1: 58, L2: 62, L3: 66, L4: 70 };
+    const FG_W   = { WILD: 30, SCAT: 8,  MEGA: 6, H1: 26, H2: 30, H3: 34, H4: 38, L1: 50, L2: 54, L3: 58, L4: 62 };
+    const sidList = SYM_DEFS.map(d => d.sid);
+    function _mkWeights(map) {
+      const w = {};
+      for (let r = 1; r <= REELS; r++) {
+        for (const sid of sidList) {
+          let v = (map[sid] != null) ? map[sid] : 100;
+          if (sid === 'WILD' && (r === 1 || r === REELS)) v = 0;
+          w[`${r}-${sid}`] = v;
+        }
+      }
+      return w;
+    }
+    const reelweights = {
+      NG:  { symbol_ids: [...sidList], weights: _mkWeights(BASE_W),
+             notes: 'NG 基礎權重(WILD 僅 2–4 輪)', sub_weights: {}, panel_weights: {} },
+      FG1: { symbol_ids: [...sidList], weights: _mkWeights(FG_W),
+             notes: 'FG 提高 WILD / MEGA 出現率', sub_weights: {}, panel_weights: {} },
+    };
+
+    // ── 05_Grid_Size_Weights:固定 3 列(非 Megaways,示範表結構)──
+    function _mkGrid() {
+      const w = {};
+      for (let r = 1; r <= REELS; r++) w[`${r}-3`] = 100;
+      return { grid_sizes: [3], weights: w, notes: '固定 3 列(非 Megaways)' };
+    }
+    const gridweights = { NG: _mkGrid(), FG1: _mkGrid() };
+
+    // ── 06_Paylines:10 線(全部落在 1..3 列、1..5 輪 → 驗證全過)──
+    const paylines = [
+      { line_id: 1,  path: '(1,1)-(2,1)-(3,1)-(4,1)-(5,1)', direction: 'LTR', notes: '頂列' },
+      { line_id: 2,  path: '(1,2)-(2,2)-(3,2)-(4,2)-(5,2)', direction: 'LTR', notes: '中列' },
+      { line_id: 3,  path: '(1,3)-(2,3)-(3,3)-(4,3)-(5,3)', direction: 'LTR', notes: '底列' },
+      { line_id: 4,  path: '(1,1)-(2,2)-(3,3)-(4,2)-(5,1)', direction: 'LTR', notes: 'V 型' },
+      { line_id: 5,  path: '(1,3)-(2,2)-(3,1)-(4,2)-(5,3)', direction: 'LTR', notes: '倒 V 型' },
+      { line_id: 6,  path: '(1,1)-(2,2)-(3,1)-(4,2)-(5,1)', direction: 'LTR', notes: '上鋸齒' },
+      { line_id: 7,  path: '(1,3)-(2,2)-(3,3)-(4,2)-(5,3)', direction: 'LTR', notes: '下鋸齒' },
+      { line_id: 8,  path: '(1,2)-(2,1)-(3,2)-(4,1)-(5,2)', direction: 'LTR', notes: '中上鋸齒' },
+      { line_id: 9,  path: '(1,2)-(2,3)-(3,2)-(4,3)-(5,2)', direction: 'LTR', notes: '中下鋸齒' },
+      { line_id: 10, path: '(1,1)-(2,1)-(3,2)-(4,3)-(5,3)', direction: 'LTR', notes: '左上→右下階梯' },
+    ];
+
+    // ── 07_Constraints ──
+    const constraints = [
+      { constraint_id: 'C001', ctype: 'REEL_RESTRICT', symbol_id: 'WILD',
+        reels_allowed: '2,3,4', threshold: 0, mode_scope: 'ALL', notes: 'Wild 只出現在中間 3 輪' },
+      { constraint_id: 'C002', ctype: 'GLOBAL_MAX', symbol_id: 'SCAT',
+        reels_allowed: '', threshold: 3, mode_scope: 'NG', notes: 'NG 全盤最多 3 個 Scatter' },
+      { constraint_id: 'C003', ctype: 'GLOBAL_MAX', symbol_id: 'MEGA',
+        reels_allowed: '', threshold: 1, mode_scope: 'ALL', notes: 'MEGA(2×2)全盤最多 1 個' },
+    ];
+
+    // ── 09_Puzzle_Rules(trigger / atype / 必填參數均對齊 catalog → 零錯誤)──
+    const rules = [
+      { rule_id: 'P001', mode_scope: 'ALL', trigger: 'ON_GRID_GENERATED',
+        condition: 'symbol_count.SCAT >= 3',
+        actions: [
+          { atype: 'EMIT_EVENT',  params: { name: 'fg_trigger' } },
+          { atype: 'SWITCH_MODE', params: { target: 'FG1', inherit_globals: false } },
+        ],
+        emits: ['fg_trigger'], enabled: true, priority: 100,
+        description: 'Scatter ≥ 3 觸發免費遊戲並切到 FG1' },
+      { rule_id: 'P002', mode_scope: 'FG1', trigger: 'ON_COMBO_END',
+        condition: 'mode == FG1 AND combo_step >= 2',
+        actions: [{ atype: 'AWARD_FREE_SPIN', params: { count: 5, mode: 'FG1' } }],
+        emits: [], enabled: true, priority: 80,
+        description: 'FG 內連 2 爆以上追加 5 局' },
+      { rule_id: 'P003', mode_scope: 'NG', trigger: 'ON_DEAD_SPIN',
+        condition: 'mode == NG',
+        actions: [{ atype: 'UPDATE_GLOBAL', params: { var: 'dead_count', op: 'add', value: 1 } }],
+        emits: [], enabled: true, priority: 50,
+        description: '死局累計到 global.dead_count(救濟用)' },
+      { rule_id: 'P004', mode_scope: 'ALL', trigger: 'ON_COMBO_END',
+        condition: 'total_multiplier >= 100',
+        actions: [{ atype: 'EMIT_EVENT', params: { name: 'big_win' } }],
+        emits: ['big_win'], enabled: true, priority: 90,
+        description: '累計 100 倍以上廣播 big_win 事件' },
+    ];
+
+    // ── 10_Discard_Rules ──
+    const discards = [
+      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL',
+        condition: 'symbol_count.SCAT >= 5', notes: '全盤 Scatter 過多,視為異常局(風控)' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',
+        condition: 'total_multiplier > 0 AND total_multiplier < 0.5', notes: '極小中獎,體感差' },
+      { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'FG1',
+        condition: 'spin_locals.fg_combo_count == 0', notes: 'FG 完全沒中,體感極差' },
+    ];
+
+    // ── 12_Distribution_Bins ──
+    const bins = {
+      NG:  { bin_edges: '0, 0.001, 2, 10, 50',        notes: 'NG 倍數分佈區間' },
+      FG1: { bin_edges: '0, 0.001, 20, 60, 120, 600', notes: 'FG 倍數分佈區間' },
+    };
+
+    // 鍵名對齊 _snapshotAllLS / _restoreAllLS 的 snapshot key
+    // (comboweights 刻意不含 → 還原時清空,與 v4.0 #14 移除一致)
+    return { global, modes, layout, panels, symbolsets, bins, paylines,
+             constraints, reelweights, gridweights, discards, rules, registry };
+  }
+
+  const BUILTIN_TEMPLATES = [{
+    slug: BUILTIN_DEMO_SLUG,
+    builtin: true,
+    name: '📦 示範:翡翠之路 5×3',
+    description: '內建完整示範:5×3 LINE、NG+FG1 雙模式、11 符號(含 MEGA 2×2)、'
+      + 'R3 副輪 + 自由副盤 HW1、10 線、3 約束、4 規則、3 棄牌、雙模式分佈區間。'
+      + '零驗證錯誤,可直接匯出 A.xlsx。',
+    created: BUILTIN_DEMO_STAMP,
+    modified: BUILTIN_DEMO_STAMP,
+    counts: { modes: 2, rules: 4, discards: 3, symbols: 11,
+              layout: 5, paylines: 10, constraints: 3 },
+  }];
+
+  function _isBuiltinSlug(slug) {
+    return typeof slug === 'string' && slug.startsWith(BUILTIN_SLUG_PREFIX);
+  }
+  function _builtinMeta(slug) {
+    return BUILTIN_TEMPLATES.find(t => t.slug === slug) || null;
+  }
+  function _builtinPayload(slug) {
+    if (slug !== BUILTIN_DEMO_SLUG) return null;
+    return { version: 1, savedAt: BUILTIN_DEMO_STAMP, data: _buildBuiltinDemoData() };
+  }
+  // 公開:完整清單 = 內建(置頂)+ LS 使用者範本
+  function listAllTemplates() {
+    return [
+      ...BUILTIN_TEMPLATES.map(t => ({ ...t, counts: { ...t.counts } })),
+      ...listTemplates(),
+    ];
+  }
+  // 公開:取範本 data(內建走 builder,LS 範本走原路;diff / 預覽共用)
+  function getTemplateData(slug) {
+    if (_isBuiltinSlug(slug)) {
+      const p = _builtinPayload(slug);
+      return p ? p.data : null;
+    }
+    try {
+      const raw = localStorage.getItem(_tplKey(slug));
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj.data || null;
+    } catch (e) { return null; }
+  }
+
   // 暴露
   window.SlotPlanner.Templates = {
-    list:   listTemplates,
+    list:   listAllTemplates,   // v4.9:內建範本置頂 + LS 使用者範本
     save:   saveTemplate,
     load:   loadTemplate,
     remove: deleteTemplate,
     exportJSON: exportTemplateJSON,
     importJSON: importTemplateJSON,
+    getData:   getTemplateData,   // v4.9:diff / 載入預覽共用(支援內建)
+    isBuiltin: _isBuiltinSlug,    // v4.9
   };
 
   console.log('[aconfig-xlsx] loaded');
