@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .schemas import (
-    ReelLayout, LayoutConfig,
+    ReelLayout, LayoutConfig, PanelDef,
     SymbolDef, SymbolType,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
     Constraint, ConstraintType,
@@ -85,11 +85,16 @@ class ReelGenerator:
         grid_size_weights: list[GridSizeWeight],
         constraints: list[Constraint],
         combo_weights: list[ComboWeightOverride] | None = None,
+        symbol_sets: dict[str, list[str]] | None = None,
     ):
         self._layout = layout
         self._symbols = symbols
         self._constraints = constraints
         self._combo_weights = combo_weights or []
+        self._symbol_sets = symbol_sets or {}   # v4.7（D）
+
+        # v4.7:panel 抽樣池 key = (mode, panel_id)（在 _build_pools 內填）
+        self._panel_pools: dict[tuple[str, str], _WeightPool] = {}
 
         # 建主抽樣池：key = (mode, reel_id, is_subreel)
         self._pools: dict[tuple[str, int, bool], _WeightPool] = {}
@@ -112,22 +117,35 @@ class ReelGenerator:
     # ────────────────────────────────────────────────────────────
 
     def _build_pools(self, reel_weights: list[ReelWeight]) -> None:
-        """依 (mode, reel_id, is_subreel) 分組建 _WeightPool"""
+        """依 (mode, reel_id, is_subreel) 分組建主輪/副輪 _WeightPool。
+        v4.7:panel 權重（panel_id 非空）另建 self._panel_pools[(mode, panel_id)]。
+        """
         groups: dict[tuple, list[ReelWeight]] = {}
+        panel_groups: dict[tuple, list[ReelWeight]] = {}
         for w in reel_weights:
-            key = (w.mode, w.reel_id, w.is_subreel)
-            groups.setdefault(key, []).append(w)
+            if getattr(w, "panel_id", ""):
+                panel_groups.setdefault((w.mode, w.panel_id), []).append(w)
+            else:
+                groups.setdefault((w.mode, w.reel_id, w.is_subreel), []).append(w)
 
-        for key, ws in groups.items():
+        def _mk(ws):
             sym_list, wt_list = [], []
             for w in ws:
                 sym = self._symbols.get(w.symbol_id)
                 if sym is None:
-                    continue           # 已在 a_loader 驗證，保險起見跳過
+                    continue
                 sym_list.append(sym)
                 wt_list.append(w.weight)
-            if sym_list:
-                self._pools[key] = _WeightPool(sym_list, wt_list)
+            return _WeightPool(sym_list, wt_list) if sym_list else None
+
+        for key, ws in groups.items():
+            pool = _mk(ws)
+            if pool:
+                self._pools[key] = pool
+        for key, ws in panel_groups.items():
+            pool = _mk(ws)
+            if pool:
+                self._panel_pools[key] = pool
 
     def _build_gsize_pools(self, grid_size_weights: list[GridSizeWeight]) -> None:
         groups: dict[tuple, list[GridSizeWeight]] = {}
@@ -220,6 +238,10 @@ class ReelGenerator:
             if reel.has_subreel:
                 self._fill_subreel(grid, mode, reel, rng, combo_step, sticky_cells)
 
+        # ── v4.7:填自由副盤 (Panel) ──
+        for panel in self._layout.panels:
+            self._fill_panel(grid, mode, panel, rng, combo_step, sticky_cells)
+
         return grid
 
     def _get_active_rows(
@@ -280,13 +302,64 @@ class ReelGenerator:
             else:
                 grid[k] = pool.draw(rng)
 
+    def _panel_pool(self, mode: str, panel: "PanelDef"):
+        """取 panel 的抽樣池。優先序:
+        1) panel 專屬權重池 (mode, panel_id)
+        2) 若 panel 指定 symbol_set → 以該符號集等權建臨時池（D）
+        3) inherit_weight=True → 沿用主輪 reel 1 的池（保底）
+        回傳 _WeightPool 或 None。
+        """
+        pool = self._panel_pools.get((mode, panel.panel_id))
+        if pool is not None:
+            return pool
+        # symbol_set 等權臨時池
+        if panel.symbol_set:
+            members = self._symbol_sets.get(panel.symbol_set, [])
+            syms = [self._symbols[s] for s in members if s in self._symbols]
+            if syms:
+                return _WeightPool(syms, [1.0] * len(syms))
+        # 保底:沿用主輪 reel 1
+        if panel.inherit_weight:
+            return self._pools.get((mode, 1, False))
+        return None
+
+    def _fill_panel(
+        self,
+        grid: dict,
+        mode: str,
+        panel: "PanelDef",
+        rng: random.Random,
+        combo_step: int,
+        sticky_cells: dict,
+    ) -> None:
+        """v4.7:填自由副盤 (Panel)。
+
+        - 格子 key = (panel_id, local_index)，local_index = r*width + c（與主輪 int key 不衝突）。
+        - scroll=False:每 spin 靜態抽滿整個 width×height（雙盤面 / pick 格）。
+        - scroll=True:同樣抽滿（P1 不模擬逐欄滾動動畫，僅落盤結果相同）。
+        - 權重來源見 _panel_pool（專屬池 / symbol_set / 保底）。
+        """
+        pool = self._panel_pool(mode, panel)
+        if pool is None:
+            return
+        w = max(0, panel.width)
+        h = max(0, panel.height)
+        for r in range(h):
+            for c in range(w):
+                local = r * w + c
+                k = (panel.panel_id, local)
+                if k in sticky_cells:
+                    grid[k] = sticky_cells[k]
+                else:
+                    grid[k] = pool.draw(rng)
+
     def _get_pool(
         self,
         mode: str,
         reel_id: int,
         is_subreel: bool,
         combo_step: int,
-    ) -> _WeightPool | None:
+    ) -> "_WeightPool | None":
         """依優先順序取抽樣池：combo 覆蓋 > 一般池"""
         # 找 combo 覆蓋：取 after_combo <= combo_step 中最大的那個
         best_combo = -1

@@ -28,7 +28,7 @@ from collections import defaultdict
 from typing import Any
 
 from core.schemas import (
-    AConfig, GlobalConfig, LayoutConfig, ReelLayout,
+    AConfig, GlobalConfig, LayoutConfig, ReelLayout, PanelDef,
     SymbolDef, SymbolType,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
     Payline, Constraint, ConstraintType,
@@ -64,6 +64,9 @@ def load_a_config(path: str | Path) -> AConfig:
 
     global_cfg = _parse_global(sheets["01_Global"])
     layout = _parse_layout(sheets["02_Layout"])
+    # v4.7/v4.8:02b_Panels 與 03b_Symbol_Sets 皆為選用分頁（純加法,舊檔無此 sheet → 空）
+    layout.panels = _parse_panels(sheets.get("02b_Panels"))
+    symbol_sets = _parse_symbol_sets(sheets.get("03b_Symbol_Sets"))
     symbols = _parse_symbols(sheets["03_Symbols"])
     reel_weights = _parse_reel_weights(sheets["04_Reel_Weights"], symbols, layout)
     grid_size_weights = _parse_grid_size_weights(
@@ -92,6 +95,7 @@ def load_a_config(path: str | Path) -> AConfig:
         discard_rules=discard_rules,
         modes=modes,
         distribution_bins=distribution_bins,
+        symbol_sets=symbol_sets,   # v4.7:panel 獨立符號集
         raw_dataframes=sheets,   # 留存用於 B 文件「A 參數回填」
     )
 
@@ -103,6 +107,21 @@ def load_a_config(path: str | Path) -> AConfig:
 # ============================================================
 # 各分頁解析
 # ============================================================
+def _col(r, *names, default=None):
+    """欄名別名容錯讀取:依序嘗試多個欄名,回傳第一個非 NaN 的值。
+
+    v4.8:前端 aconfig-xlsx.js 匯出的標頭與舊版 loader 期望的欄名
+    曾經分裂（Mode_Scope vs Mode、Mega_W vs Mega_Width、
+    Discard_ID vs Rule_ID 等）,造成整張表被靜默跳過或硬炸。
+    此 helper 讓兩種命名都吃,維持新舊 A.xlsx 完全相容。
+    """
+    for n in names:
+        v = r.get(n)
+        if v is not None and not (isinstance(v, float) and pd.isna(v)) and not pd.isna(v):
+            return v
+    return default
+
+
 def _parse_global(df: pd.DataFrame) -> GlobalConfig:
     sheet = "01_Global"
     if "Key" not in df.columns or "Value" not in df.columns:
@@ -151,8 +170,7 @@ def _parse_layout(df: pd.DataFrame) -> LayoutConfig:
                 subreel_position=_to_str(r.get("SubReel_Position")),
                 subreel_rows=int(r.get("SubReel_Rows", 0) or 0),
                 subreel_inherit_weight=_to_bool(r.get("SubReel_Inherit_Weight")),
-                # v4.6: 新欄位，舊檔無此欄 → 預設 STACK（向後相容）
-                subreel_kind=(_to_str(r.get("SubReel_Kind")) or "STACK"),
+                subreel_kind=(_to_str(r.get("SubReel_Kind")) or "STACK"),  # v4.6:空→STACK 向後相容
             ))
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
@@ -170,6 +188,66 @@ def _parse_layout(df: pd.DataFrame) -> LayoutConfig:
         if r.max_rows < 1:
             raise ConfigValidationError(sheet, f"Reel {r.reel_id} 的 Max_Rows 必須 >= 1")
     return LayoutConfig(reels=reels)
+
+
+def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
+    """v4.7:02b_Panels 自由副盤。選用分頁,缺 sheet → []（向後相容）。"""
+    if df is None:
+        return []
+    sheet = "02b_Panels"
+    out: list[PanelDef] = []
+    seen: set[str] = set()
+    for idx, r in df.iterrows():
+        pid = r.get("Panel_ID")
+        if pd.isna(pid):
+            continue
+        pid = str(pid).strip()
+        if not pid:
+            continue
+        if pid in seen:
+            raise ConfigValidationError(sheet, f"Panel_ID 重複: {pid}", row=idx + 2)
+        seen.add(pid)
+        try:
+            p = PanelDef(
+                panel_id=pid,
+                col=int(r.get("Col", 0) or 0),
+                row=int(r.get("Row", 0) or 0),
+                width=int(r.get("Width", 3) or 3),
+                height=int(r.get("Height", 3) or 3),
+                scroll=_to_bool(r.get("Scroll")),
+                symbol_set=_to_str(r.get("Symbol_Set")),
+                inherit_weight=_to_bool(r.get("Inherit_Weight")),
+                join_payline=_to_bool(r.get("Join_Payline")),
+                note=_to_str(r.get("Note")),
+            )
+        except (ValueError, KeyError) as e:
+            raise ConfigValidationError(sheet, f"Panel {pid} 解析失敗: {e}", row=idx + 2)
+        if p.width < 1 or p.height < 1:
+            raise ConfigValidationError(
+                sheet, f"Panel {pid} 的 Width/Height 必須 >= 1", row=idx + 2
+            )
+        out.append(p)
+    return out
+
+
+def _parse_symbol_sets(df: pd.DataFrame | None) -> dict[str, list[str]]:
+    """v4.7:03b_Symbol_Sets 符號集（panel 獨立符號集用）。選用分頁。"""
+    if df is None:
+        return {}
+    out: dict[str, list[str]] = {}
+    for _, r in df.iterrows():
+        name = r.get("Set_Name")
+        sid = r.get("Symbol_ID")
+        if pd.isna(name) or pd.isna(sid):
+            continue
+        name = str(name).strip()
+        sid = str(sid).strip()
+        if not name or not sid:
+            continue
+        out.setdefault(name, [])
+        if sid not in out[name]:
+            out[name].append(sid)
+    return out
 
 
 def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
@@ -194,8 +272,8 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 display_name=str(r.get("Display_Name") or sid),
                 sym_type=SymbolType(str(r["Type"]).strip().upper()),
                 pay_table=pay_table,
-                mega_width=int(r.get("Mega_Width", 1) or 1),
-                mega_height=int(r.get("Mega_Height", 1) or 1),
+                mega_width=int(_col(r, "Mega_Width", "Mega_W", default=1) or 1),
+                mega_height=int(_col(r, "Mega_Height", "Mega_H", default=1) or 1),
                 is_wild=_to_bool(r.get("Is_Wild")),
                 is_scatter=_to_bool(r.get("Is_Scatter")),
                 notes=_to_str(r.get("Notes")),
@@ -213,18 +291,20 @@ def _parse_reel_weights(
 ) -> list[ReelWeight]:
     sheet = "04_Reel_Weights"
     valid_reels = {r.reel_id for r in layout.reels}
+    valid_panels = {p.panel_id for p in layout.panels}
     out = []
     for idx, r in df.iterrows():
-        if pd.isna(r.get("Mode")) or pd.isna(r.get("Reel_ID")):
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        if mode_val is None or pd.isna(r.get("Reel_ID")):
             continue
         try:
+            mode = str(mode_val).strip()
+            if mode.startswith("#"):
+                continue   # 註解列
             reel_id_raw = str(r["Reel_ID"]).strip()
-            is_subreel = reel_id_raw.endswith(".sub")
-            reel_id = int(reel_id_raw.replace(".sub", ""))
-            if reel_id not in valid_reels:
-                raise ConfigValidationError(
-                    sheet, f"Reel_ID {reel_id} 不在 02_Layout 定義範圍", row=idx + 2
-                )
+            # 浮點殘渣容錯:pandas 可能把數字欄讀成 "3.0"
+            if re.fullmatch(r"\d+\.0", reel_id_raw):
+                reel_id_raw = reel_id_raw[:-2]
             sid = str(r["Symbol_ID"]).strip()
             if sid not in symbols:
                 raise ConfigValidationError(
@@ -233,13 +313,32 @@ def _parse_reel_weights(
             weight = float(r["Weight"])
             if weight < 0:
                 raise ConfigValidationError(sheet, "Weight 不可為負", row=idx + 2)
-            out.append(ReelWeight(
-                mode=str(r["Mode"]).strip(),
-                reel_id=reel_id,
-                is_subreel=is_subreel,
-                symbol_id=sid,
-                weight=weight,
-            ))
+
+            # v4.7:Reel_ID 三種定址 — 純數字=主輪、<n>.sub=副輪、其他字串=Panel ID
+            is_subreel = reel_id_raw.endswith(".sub")
+            numeric_part = reel_id_raw[:-4] if is_subreel else reel_id_raw
+            if re.fullmatch(r"\d+", numeric_part):
+                reel_id = int(numeric_part)
+                if reel_id not in valid_reels:
+                    raise ConfigValidationError(
+                        sheet, f"Reel_ID {reel_id} 不在 02_Layout 定義範圍", row=idx + 2
+                    )
+                out.append(ReelWeight(
+                    mode=mode, reel_id=reel_id, is_subreel=is_subreel,
+                    symbol_id=sid, weight=weight,
+                ))
+            else:
+                # panel 字串 ID
+                if reel_id_raw not in valid_panels:
+                    raise ConfigValidationError(
+                        sheet,
+                        f"Reel_ID '{reel_id_raw}' 既非主輪編號也不在 02b_Panels 定義",
+                        row=idx + 2,
+                    )
+                out.append(ReelWeight(
+                    mode=mode, reel_id=0, is_subreel=False,
+                    symbol_id=sid, weight=weight, panel_id=reel_id_raw,
+                ))
         except ConfigValidationError:
             raise
         except (ValueError, KeyError) as e:
@@ -259,10 +358,11 @@ def _parse_grid_size_weights(
     layout_max = {r.reel_id: r.max_rows for r in layout.reels}
     out = []
     for idx, r in df.iterrows():
-        if pd.isna(r.get("Mode")) or pd.isna(r.get("Reel_ID")):
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        if mode_val is None or pd.isna(r.get("Reel_ID")):
             continue
         try:
-            mode = str(r["Mode"]).strip()
+            mode = str(mode_val).strip()
             if mode.startswith("#"):
                 continue   # 註解列
             reel_id = int(r["Reel_ID"])
@@ -403,10 +503,12 @@ def _parse_combo_weights(
     valid_reels = {r.reel_id for r in layout.reels}
     out = []
     for idx, r in df.iterrows():
-        if pd.isna(r.get("Mode")) or pd.isna(r.get("After_Combo")):
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        after_val = _col(r, "After_Combo", "Combo_Step")
+        if mode_val is None or after_val is None:
             continue
         try:
-            mode = str(r["Mode"]).strip()
+            mode = str(mode_val).strip()
             if mode.startswith("#"):
                 continue
             reel_id = int(r["Reel_ID"])
@@ -417,7 +519,7 @@ def _parse_combo_weights(
                 continue
             out.append(ComboWeightOverride(
                 mode=mode,
-                after_combo=int(r["After_Combo"]),
+                after_combo=int(after_val),
                 reel_id=reel_id,
                 symbol_id=sid,
                 weight=float(r["Weight"]),
@@ -472,13 +574,17 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
     sheet = "10_Discard_Rules"
     out = []
     for idx, r in df.iterrows():
-        if pd.isna(r.get("Rule_ID")):
+        rid_val = _col(r, "Rule_ID", "Discard_ID")
+        if rid_val is None:
             continue
         try:
             cond = parse_condition(_to_str(r.get("Condition")))
+            dtype_val = _col(r, "Type", "Discard_Kind")
+            if dtype_val is None:
+                raise KeyError("Type / Discard_Kind")
             out.append(DiscardRule(
-                rule_id=str(r["Rule_ID"]).strip(),
-                dtype=DiscardType(str(r["Type"]).strip().upper()),
+                rule_id=str(rid_val).strip(),
+                dtype=DiscardType(str(dtype_val).strip().upper()),
                 mode_scope=_to_str(r.get("Mode_Scope"), "ALL"),
                 condition=cond,
                 reason_label=_to_str(r.get("Reason_Label")),
@@ -571,9 +677,14 @@ def _cross_validate(cfg: AConfig):
             )
 
     # 每個 Mode × Reel 至少要有一筆權重 (若該 Mode 在 Reel_Weights 出現)
+    # v4.7:panel 權重(panel_id 非空)另行分組,不混入主輪/副輪檢查
     weight_groups = defaultdict(list)
+    panel_weight_groups = defaultdict(list)
     for w in cfg.reel_weights:
-        weight_groups[(w.mode, w.reel_id, w.is_subreel)].append(w)
+        if getattr(w, "panel_id", ""):
+            panel_weight_groups[(w.mode, w.panel_id)].append(w)
+        else:
+            weight_groups[(w.mode, w.reel_id, w.is_subreel)].append(w)
     for (mode, reel_id, is_sub), ws in weight_groups.items():
         total = sum(w.weight for w in ws)
         if total <= 0:
@@ -582,6 +693,30 @@ def _cross_validate(cfg: AConfig):
                 "04_Reel_Weights",
                 f"Mode={mode} Reel={reel_id}{tag} 的權重總和必須 > 0",
             )
+    for (mode, pid), ws in panel_weight_groups.items():
+        if sum(w.weight for w in ws) <= 0:
+            raise ConfigValidationError(
+                "04_Reel_Weights",
+                f"Mode={mode} Panel={pid} 的權重總和必須 > 0",
+            )
+
+    # v4.7:panel 交叉驗證
+    panels_with_weights = {pid for (_, pid) in panel_weight_groups}
+    for p in cfg.layout.panels:
+        # symbol_set 引用必須存在且非空
+        if p.symbol_set:
+            members = cfg.symbol_sets.get(p.symbol_set)
+            if not members:
+                raise ConfigValidationError(
+                    "02b_Panels",
+                    f"Panel {p.panel_id} 引用的符號集 '{p.symbol_set}' "
+                    f"未在 03b_Symbol_Sets 定義或為空",
+                )
+        # 完全沒有權重來源(無專屬池、無符號集、不沿用) → 模擬會整片空白,提早警告
+        if (p.panel_id not in panels_with_weights
+                and not p.symbol_set and not p.inherit_weight):
+            print(f"⚠ [02b_Panels] Panel {p.panel_id} 沒有任何權重來源"
+                  f"(04 無專屬權重、無符號集、未沿用保底),模擬時此副盤會是空白。")
 
     # AWARD_FREE_SPIN(mode=X) 引用的 X 必須在 Mode_Config 存在
     for rule in cfg.puzzle_rules:

@@ -106,6 +106,11 @@
             });
             pyodideStatus.value = ws.isPyReady() ? 'ready' : 'loading';
             ws.ensureWorker();
+            // v4.8:補上 v4.4 待辦 — worker 預熱後緊接抓 py/ 原始碼暖機
+            //   (module 層 Promise 快取,首次模擬省掉 9 個 fetch 的等待)
+            if (typeof ws.preloadPython === 'function') {
+              ws.preloadPython().catch(() => { /* 失敗會清快取,模擬時自動重試 */ });
+            }
             console.log('[app] Pyodide worker 啟動（on-demand）');
           }
         } catch (e) {

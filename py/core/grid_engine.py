@@ -53,6 +53,9 @@ class Cell:
     reel_id: int
     row_idx: int
     is_subreel: bool = False
+    is_panel: bool = False       # v4.7:屬於自由副盤 (Panel)
+    panel_id: str = ""           # v4.7:所屬 Panel 的 ID（is_panel 時有效）
+    join_payline: bool = False   # v4.7:此 panel 是否參與主盤連線（否則不計入主盤統計）
 
     # 狀態旗標（在 Combo 連爆過程中由 action 修改）
     sticky: bool = False        # STICKY action 鎖定
@@ -83,11 +86,16 @@ class SpinResult:
     fail_reason: str = ""
 
     def symbol_counts(self) -> dict[str, int]:
-        """統計盤面各符號出現次數（已消除格子不計）"""
+        """統計盤面各符號出現次數（已消除格子不計）。
+        v4.7:不參與連線的 panel 格子（join_payline=False）不計入主盤統計。
+        """
         counts: dict[str, int] = {}
         for cell in self.grid.values():
-            if not cell.destroyed:
-                counts[cell.symbol_id] = counts.get(cell.symbol_id, 0) + 1
+            if cell.destroyed:
+                continue
+            if cell.is_panel and not cell.join_payline:
+                continue
+            counts[cell.symbol_id] = counts.get(cell.symbol_id, 0) + 1
         return counts
 
     def cells_by_reel(self, reel_id: int) -> list[Cell]:
@@ -176,7 +184,10 @@ class GridEngine:
                 )
 
         # ── 轉換為 Cell dict ──
-        grid = self._sym_grid_to_cells(final_sym_grid, self._gen.last_active_rows)
+        grid = self._sym_grid_to_cells(
+            final_sym_grid, self._gen.last_active_rows,
+            {p.panel_id: p.join_payline for p in self._gen._layout.panels},
+        )
 
         # ── SOFT 棄牌評估（記錄但不重產）──
         for rule in self._discard_rules:
@@ -403,11 +414,14 @@ class GridEngine:
             return True
 
         from .logic_parser import evaluate_condition
-        # 先把 symbol_count 更新到 ctx
+        # 先把 symbol_count 更新到 ctx（v4.7:不參與連線的 panel 格子不計）
         counts: dict[str, int] = {}
         for cell in grid.values():
-            if not cell.destroyed:
-                counts[cell.symbol_id] = counts.get(cell.symbol_id, 0) + 1
+            if cell.destroyed:
+                continue
+            if cell.is_panel and not cell.join_payline:
+                continue
+            counts[cell.symbol_id] = counts.get(cell.symbol_id, 0) + 1
         ctx.symbol_count = counts
 
         return evaluate_condition(rule.condition, ctx)
@@ -420,10 +434,25 @@ class GridEngine:
     def _sym_grid_to_cells(
         sym_grid: dict[tuple[int, int], SymbolDef],
         active_rows: dict[int, int],
+        panel_join: dict[str, bool] | None = None,
     ) -> dict[tuple[int, int], Cell]:
         """SymbolDef grid → Cell grid"""
+        panel_join = panel_join or {}
         cells: dict[tuple[int, int], Cell] = {}
-        for (reel_id, row_idx), sym in sym_grid.items():
+        for (first, row_idx), sym in sym_grid.items():
+            # v4.7:panel 格子 key 第一維是字串 panel_id;主輪是 int reel_id
+            if isinstance(first, str):
+                cells[(first, row_idx)] = Cell(
+                    symbol=sym,
+                    reel_id=-1,
+                    row_idx=row_idx,
+                    is_subreel=False,
+                    is_panel=True,
+                    panel_id=first,
+                    join_payline=bool(panel_join.get(first, False)),
+                )
+                continue
+            reel_id = first
             main_rows = active_rows.get(reel_id, 0)
             is_sub = row_idx >= main_rows
             cells[(reel_id, row_idx)] = Cell(

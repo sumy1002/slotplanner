@@ -168,7 +168,8 @@ def run_and_return(a_path: str) -> dict:
 
     rng     = random.Random(cfg.global_cfg.random_seed)
     gen     = ReelGenerator(cfg.layout, cfg.symbols, cfg.reel_weights,
-                             cfg.grid_size_weights, cfg.constraints, cfg.combo_weights)
+                             cfg.grid_size_weights, cfg.constraints, cfg.combo_weights,
+                             symbol_sets=cfg.symbol_sets)
     engine  = GridEngine(gen, cfg.discard_rules, max_hard_retry=200)
     resolver= PayResolver(cfg.global_cfg, cfg.symbols, cfg.paylines)
     combo   = ComboEngine(resolver, engine, gen)

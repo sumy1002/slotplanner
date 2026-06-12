@@ -643,6 +643,53 @@
     }
   }
 
+  // ─── v4.7:自由副盤 (Panel) + 符號集 ───
+  const LS_PANELS_KEY = 'slotplanner.aconfig.panels.v1';
+  const LS_SYMBOLSETS_KEY = 'slotplanner.aconfig.symbolsets.v1';
+
+  function makePanel(panel_id) {
+    return {
+      panel_id: panel_id || 'P1',
+      col: 0, row: 0, width: 3, height: 3,
+      scroll: false,
+      symbol_set: '',
+      inherit_weight: true,   // 預設沿用主輪保底，避免空盤
+      join_payline: false,    // 預設不參與主盤連線（你的決策:可自行選）
+      note: '',
+    };
+  }
+  function loadPanels() {
+    try {
+      const raw = localStorage.getItem(LS_PANELS_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(p => ({ ...makePanel(p.panel_id), ...p }));
+    } catch (e) {
+      console.warn('[config-editor] loadPanels failed:', e);
+      return [];
+    }
+  }
+  function savePanels(panels) {
+    try { localStorage.setItem(LS_PANELS_KEY, JSON.stringify(panels)); return true; }
+    catch (e) { console.warn('[config-editor] savePanels failed:', e); return false; }
+  }
+  function loadSymbolSets() {
+    try {
+      const raw = localStorage.getItem(LS_SYMBOLSETS_KEY);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+    } catch (e) {
+      console.warn('[config-editor] loadSymbolSets failed:', e);
+      return {};
+    }
+  }
+  function saveSymbolSets(sets) {
+    try { localStorage.setItem(LS_SYMBOLSETS_KEY, JSON.stringify(sets)); return true; }
+    catch (e) { console.warn('[config-editor] saveSymbolSets failed:', e); return false; }
+  }
+
   // ──────────────────────────────────────────────────────────
   //  12_Distribution_Bins 預設值與驗證
   // ──────────────────────────────────────────────────────────
@@ -1987,6 +2034,8 @@
     makeMode, DEFAULT_MODES, loadModes, saveModes,
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
+    LS_PANELS_KEY, makePanel, loadPanels, savePanels,
+    LS_SYMBOLSETS_KEY, loadSymbolSets, saveSymbolSets,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,

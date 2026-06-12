@@ -139,16 +139,51 @@ class ReelLayout:
         return self.has_subreel and self.effective_kind == "DUAL_PANEL"
 
 
+# ============================================================
+# v4.7:自由副盤 (Panel) — 與主輪平行的一級實體
+#   - 自己的 ID 命名空間（panel_id 字串），不掛任何主輪
+#   - 自由擺放（col/row）+ 自由尺寸（width/height）
+#   - 可指定獨立符號集（symbol_set）
+#   - join_payline:是否參與主盤連線判定（P1 僅儲存旗標，
+#     實際 payline 套用到 panel 屬 P5;此處先存意圖，避免二次 migration）
+# ============================================================
+@dataclass
+class PanelDef:
+    panel_id: str               # 獨立 ID（例 "P1" / "BONUS"）
+    col: int = 0                # 畫布左上 X（格，可負）
+    row: int = 0                # 畫布左上 Y（格，可負）
+    width: int = 3              # 欄數
+    height: int = 3             # 列數
+    scroll: bool = False        # 是否滾動（False=靜態盤，如雙盤面/pick 格）
+    symbol_set: str = ""        # 符號集名稱（空=用全域符號）
+    inherit_weight: bool = False  # 無獨立權重時是否沿用全域第一輪池（保底）
+    join_payline: bool = False  # 是否參與主盤連線（P1 僅存旗標）
+    note: str = ""
+
+    @property
+    def cell_count(self) -> int:
+        return max(0, self.width) * max(0, self.height)
+
+
 @dataclass
 class LayoutConfig:
     reels: list[ReelLayout]
+    panels: list["PanelDef"] = field(default_factory=list)   # v4.7
 
     @property
     def reel_count(self) -> int:
+        # 維持只算「主輪」,B 輸出 reel_count 語意不變
         return len(self.reels)
+
+    @property
+    def panel_count(self) -> int:
+        return len(self.panels)
 
     def get(self, reel_id: int) -> ReelLayout:
         return next(r for r in self.reels if r.reel_id == reel_id)
+
+    def get_panel(self, panel_id: str) -> "PanelDef":
+        return next(p for p in self.panels if p.panel_id == panel_id)
 
 
 # ============================================================
@@ -181,6 +216,7 @@ class ReelWeight:
     is_subreel: bool
     symbol_id: str
     weight: float
+    panel_id: str = ""      # v4.7:非空 → 此權重屬於某 Panel（reel_id 此時無意義）
 
 
 @dataclass
@@ -328,6 +364,9 @@ class AConfig:
     discard_rules: list[DiscardRule]
     modes: dict[str, ModeConfig]              # 用 mode 名稱索引
     distribution_bins: dict[str, DistributionBin]   # 用 mode_scope 索引
+
+    # v4.7:符號集（D）{set_name: [symbol_id, ...]};舊檔無 → {}
+    symbol_sets: dict[str, list[str]] = field(default_factory=dict)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

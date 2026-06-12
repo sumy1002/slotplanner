@@ -87,6 +87,8 @@
     const g           = readLS('slotplanner.aconfig.global.v1',       {});
     const modes       = readLS('slotplanner.aconfig.modes.v1',        []);
     const layoutRows  = readLS('slotplanner.aconfig.layout.v1',       []);
+    const panelRows   = readLS('slotplanner.aconfig.panels.v1',       []);   // v4.7
+    const symbolSets  = readLS('slotplanner.aconfig.symbolsets.v1',   {});   // v4.7
     const bins        = readLS('slotplanner.aconfig.bins.v1',         {});
     const paylines    = readLS('slotplanner.aconfig.paylines.v1',     []);
     const constraints = readLS('slotplanner.aconfig.constraints.v1',  []);
@@ -150,6 +152,32 @@
     }
     boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22]);
 
+    // 02b_Panels(v4.7:自由副盤;無 panel → 仍寫表頭，引擎讀到空 → panels=[])
+    const wsPnl = wb.addWorksheet("02b_Panels");
+    wsPnl.addRow(['Panel_ID', 'Col', 'Row', 'Width', 'Height',
+                'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note']);
+    for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
+      if (!p || !p.panel_id) continue;
+      wsPnl.addRow([
+        p.panel_id, p.col || 0, p.row || 0, p.width || 3, p.height || 3,
+        !!p.scroll, p.symbol_set || '', !!p.inherit_weight, !!p.join_payline, p.note || '',
+      ]);
+    }
+    boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20]);
+
+    // 03b_Symbol_Sets(v4.7:符號集 D;{set: [sym,...]} 攤平成多列)
+    const wsSS = wb.addWorksheet('03b_Symbol_Sets');
+    wsSS.addRow(['Set_Name', 'Symbol_ID']);
+    if (symbolSets && typeof symbolSets === 'object') {
+      for (const [setName, members] of Object.entries(symbolSets)) {
+        if (!Array.isArray(members)) continue;
+        for (const sid of members) {
+          if (sid) wsSS.addRow([setName, sid]);
+        }
+      }
+    }
+    boldHdr(wsSS); setCols(wsSS, [18, 16]);
+
     // 03_Symbols(含擴充欄位)
     const wsS = wb.addWorksheet('03_Symbols');
     wsS.addRow([
@@ -192,6 +220,37 @@
           const w = e.weights ? e.weights[`${r}-${sid}`] : null;
           if (typeof w === 'number' && w > 0) {
             wsRW.addRow([m, r, sid, w, '']);
+          }
+        }
+      }
+    }
+    // v4.8:副輪獨立權重(Reel_ID = "<n>.sub")。LS 結構:reelWeights[mode].sub_weights[`${rid}-${sid}`]
+    //   只寫「has_subreel 且非沿用主輪」的 reel;a_loader 既有支援 .sub 後綴。
+    for (const m of modeNames) {
+      const e = reelWeights[m];
+      if (!e || !e.sub_weights) continue;
+      for (const r of layoutRows) {
+        if (!r || !r.has_subreel || r.subreel_inherit_weight) continue;
+        for (const sid of (e.symbol_ids || [])) {
+          if (!enabledIds.has(sid)) continue;
+          const w = e.sub_weights[`${r.reel_id}-${sid}`];
+          if (typeof w === 'number' && w > 0) {
+            wsRW.addRow([m, `${r.reel_id}.sub`, sid, w, 'subreel']);
+          }
+        }
+      }
+    }
+    // v4.7:panel 權重(Reel_ID = panel_id)。LS 結構:reelWeights[mode].panel_weights[`${pid}-${sid}`]
+    for (const m of modeNames) {
+      const e = reelWeights[m];
+      if (!e || !e.panel_weights) continue;
+      for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
+        if (!p || !p.panel_id) continue;
+        for (const sid of (e.symbol_ids || [])) {
+          if (!enabledIds.has(sid)) continue;
+          const w = e.panel_weights[`${p.panel_id}-${sid}`];
+          if (typeof w === 'number' && w > 0) {
+            wsRW.addRow([m, p.panel_id, sid, w, 'panel']);
           }
         }
       }

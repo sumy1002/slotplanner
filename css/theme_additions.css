@@ -8300,3 +8300,842 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   stroke: rgba(205,90,135,0.92);
   stroke-dasharray: 2 1.5;
 }
+
+/* ════════════════════════════════════════════════════════════
+   v4.7 · 自由副盤 (Panel) — 與主輪平行的一級實體
+   - Panel chip 群組（遵 v4.5 三態契約:idle 中性玻璃 / active 實心 accent）
+   - Panel 詳情欄
+   - 預覽 SVG panel 格（結構語義色:獨立=青、參與連線=accent 框）
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Panel chip 群組 ── */
+.cfg-panel-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--glass-brd);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cfg-panel-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  letter-spacing: 0.03em;
+  padding-left: 2px;
+}
+.cfg-panel-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-ios),
+              border-color var(--t-fast) var(--ease-ios),
+              color var(--t-fast) var(--ease-ios);
+}
+.cfg-panel-chip:hover {
+  background: var(--accent);
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
+.cfg-panel-chip.active {
+  background: var(--accent-hex);
+  border-color: var(--accent-hex);
+  color: #fff;
+  box-shadow: 0 1px 4px rgb(var(--tint-accent)/0.30);
+}
+.cfg-panel-chip-id { font-weight: 700; font-size: 12px; }
+.cfg-panel-chip-size {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  opacity: 0.85;
+}
+.cfg-panel-chip-join { font-size: 11px; margin-left: auto; }
+.cfg-panel-chip-del {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  padding: 0 2px;
+}
+.cfg-panel-chip-join + .cfg-panel-chip-del { margin-left: 4px; }
+.cfg-panel-chip-del:hover { opacity: 1; color: #c0392b; }
+.cfg-panel-add { margin-top: 2px; font-size: 12px; }
+
+:root[data-theme="dark"] .cfg-panel-chip {
+  background: var(--glass-3);
+  border-color: var(--glass-brd);
+  color: var(--text-light);
+}
+:root[data-theme="dark"] .cfg-panel-chip:hover { background: var(--accent); color: var(--accent-hex); }
+:root[data-theme="dark"] .cfg-panel-chip.active { background: var(--accent-hex); color: #fff; }
+
+/* ── Panel 詳情欄 ── */
+.cfg-panel-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-hex);
+}
+
+/* ── 預覽 SVG:panel 格（結構語義色） ── */
+.cfg-layout-cell-panel {
+  fill: rgba(120,200,170,0.50);     /* 獨立 panel:青綠 */
+  stroke: rgba(60,160,120,0.90);
+  stroke-width: 1.2;
+  stroke-dasharray: 2.5 1.5;          /* 虛線=與主盤分離 */
+}
+.cfg-layout-cell-panel-join {
+  /* 參與主盤連線:實線 accent 框，提示「併入主盤」 */
+  fill: rgb(var(--tint-accent)/0.20);
+  stroke: var(--accent-hex);
+  stroke-dasharray: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   v4.8 批次 A:盤面結構 v2 三欄版面 — 補齊缺失的結構 CSS
+   (template 自 v4.0 起使用 .cfg-layout-v2-detail / -preview /
+    -fields / -nav-hint / -tips 等 class,但僅 glass-overrides 補了
+    index/chip;detail 與 preview 欄位完全沒有尺寸規則,導致:
+    ① 三欄無 flex 配置 → 內容把預覽欄擠出可視範圍
+    ② 輪數一多 SVG 沒有伸縮容器 → 「看不到後續新增的輪」
+    本批為結構性修復,全部走 token,遵 v4.5 三態契約。)
+   ════════════════════════════════════════════════════════════ */
+
+/* 中欄:選中 Reel / Panel 的詳情 */
+.cfg-layout-v2-detail {
+  flex: 1 1 360px;
+  min-width: 0;                 /* 關鍵:允許 flex 收縮,不擠壓預覽欄 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--glass-2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  overflow-y: auto;
+  min-height: 0;
+}
+.cfg-layout-v2-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-edge);
+  flex-shrink: 0;
+}
+.cfg-layout-v2-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.cfg-layout-v2-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cfg-layout-sub-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255,200,150,0.55);
+  border: 1px solid rgba(220,140,80,0.85);
+  color: #8a4a14;
+  letter-spacing: 0.04em;
+}
+.cfg-layout-v2-fields { flex: 1; min-height: 0; }
+.cfg-layout-v2-fields-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cfg-layout-v2-field-group {
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.40);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-sm);
+}
+.cfg-layout-v2-section-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--text-light);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.cfg-layout-v2-nav-hint {
+  font-size: 10.5px;
+  color: var(--text-light);
+  line-height: 1.7;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.30);
+  border: 1px dashed var(--glass-brd);
+  border-radius: var(--r-xs);
+}
+.cfg-layout-v2-nav-hint > span {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 4px;
+  color: var(--text);
+}
+.cfg-layout-v2-nav-count {
+  display: block;
+  margin-top: 6px;
+  font-weight: 700;
+  color: var(--accent-hex);
+}
+.cfg-layout-v2-debug { margin-top: 4px; flex-shrink: 0; }
+
+/* 右欄:盤面 SVG 預覽 — 修「輪數變多看不到後面的輪」 */
+.cfg-layout-v2-preview {
+  flex: 1.2 1 380px;
+  min-width: 280px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--glass-2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  overflow-y: auto;
+}
+.cfg-layout-v2-preview-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  flex-shrink: 0;
+}
+/* v2 預覽容器內的 SVG:寬度吃滿容器、viewBox 自動縮放,
+   輪數/Panel 增加時整張盤等比縮小但永遠完整可見 */
+.cfg-layout-v2-preview .cfg-layout-svg-wrap {
+  flex: 1;
+  min-height: 180px;
+  align-items: flex-start;
+}
+.cfg-layout-v2-preview .cfg-layout-svg {
+  width: 100%;
+  height: auto;
+  max-height: 460px;
+}
+.cfg-layout-v2-preview-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-light);
+}
+.cfg-layout-v2-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cfg-layout-v2-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cfg-layout-v2-legend-dot.main {
+  background: rgb(var(--tint-1) / 0.55);
+  border: 1px solid rgb(var(--tint-2) / 0.85);
+}
+.cfg-layout-v2-legend-dot.sub {
+  background: rgba(255,200,150,0.65);
+  border: 1px solid rgba(220,140,80,0.90);
+}
+.cfg-layout-v2-legend-dot.active {
+  background: rgb(var(--tint-accent) / 0.55);
+  border: 1px solid var(--accent-hex);
+}
+.cfg-layout-v2-tips {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.30);
+  border: 1px dashed var(--glass-brd);
+  border-radius: var(--r-xs);
+}
+.cfg-layout-v2-tip-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-light);
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.cfg-layout-v2-tip-item {
+  font-size: 10.5px;
+  color: var(--text-light);
+  line-height: 1.7;
+}
+.cfg-layout-preset-chip-label { font-size: 11px; font-weight: 600; }
+
+/* 窄視窗:三欄改縱向堆疊,預覽永遠看得到 */
+@media (max-width: 1100px) {
+  .cfg-layout-v2-body { flex-direction: column; }
+  .cfg-layout-v2-index {
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cfg-layout-v2-index-scroll {
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .cfg-layout-v2-detail, .cfg-layout-v2-preview {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow: visible;
+  }
+}
+
+/* 暗色覆寫:v2 詳情/預覽欄面板 */
+:root[data-theme="dark"] .cfg-layout-v2-detail,
+:root[data-theme="dark"] .cfg-layout-v2-preview {
+  background: var(--glass-2);
+  border-color: var(--glass-edge);
+}
+:root[data-theme="dark"] .cfg-layout-v2-field-group,
+:root[data-theme="dark"] .cfg-layout-v2-nav-hint,
+:root[data-theme="dark"] .cfg-layout-v2-tips {
+  background: rgba(255,255,255,0.06);
+  border-color: var(--glass-edge);
+}
+:root[data-theme="dark"] .cfg-layout-v2-nav-hint > span {
+  background: rgba(255,255,255,0.10);
+  border-color: var(--glass-edge);
+  color: var(--text);
+}
+
+/* ════════════════════════════════════════════════════════════
+   v4.8 批次 B:範本比較 modal(cfg-diff-*)— 補齊整套缺失樣式
+   (theme_v34 只有暗色覆寫引用 .cfg-diff-modal,基底樣式從未存在,
+    導致「範本比較」開出來是無樣式裸 HTML。比照 cfg-tpl-diff modal
+    的視覺語言,全部走 token。)
+   ════════════════════════════════════════════════════════════ */
+.cfg-diff-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(40,36,32,0.38);
+  backdrop-filter: var(--blur-overlay);
+  -webkit-backdrop-filter: var(--blur-overlay);
+}
+.cfg-diff-modal {
+  width: min(720px, 100%);
+  max-height: min(82vh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-5, rgba(255,255,255,0.86));
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+.cfg-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--glass-edge);
+  flex-shrink: 0;
+}
+.cfg-diff-icon { font-size: 16px; color: var(--accent-hex); }
+.cfg-diff-title { font-size: 14px; font-weight: 800; color: var(--text); flex: 1; }
+.cfg-diff-close {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.cfg-diff-close:hover { background: var(--accent); color: var(--accent-hex); }
+
+/* 階段 1:選擇兩個範本 */
+.cfg-diff-pickbar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px 18px 6px;
+  flex-shrink: 0;
+}
+.cfg-diff-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 9px 12px;
+  text-align: left;
+  background: rgba(255,255,255,0.55);
+  border: 1px dashed var(--glass-brd);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.cfg-diff-slot:hover { background: var(--accent); border-color: var(--accent-brd); }
+.cfg-diff-slot.active {
+  border-style: solid;
+  border-color: var(--accent-hex);
+  box-shadow: var(--focus-ring);
+}
+.cfg-diff-slot.filled { border-style: solid; }
+.cfg-diff-slot-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-light);
+  text-transform: uppercase;
+}
+.cfg-diff-slot-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.cfg-diff-slot-arrow { align-self: center; font-size: 16px; color: var(--text-light); }
+.cfg-diff-pick-hint {
+  padding: 4px 18px 8px;
+  font-size: 11px;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+.cfg-diff-pick-hint strong { color: var(--accent-hex); }
+.cfg-diff-pick-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 18px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cfg-diff-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.cfg-diff-pick-item:hover { background: var(--accent); border-color: var(--accent-brd); }
+.cfg-diff-pick-item.is-a, .cfg-diff-pick-item.is-b {
+  border-color: var(--accent-hex);
+  background: rgb(var(--tint-accent) / 0.10);
+}
+.cfg-diff-pick-info { flex: 1; min-width: 0; }
+.cfg-diff-pick-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cfg-diff-pick-meta { font-size: 10.5px; color: var(--text-light); margin-top: 2px; }
+.cfg-diff-pick-badge {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800;
+  color: #fff;
+  border-radius: var(--r-pill);
+  background: var(--accent-hex);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
+  flex-shrink: 0;
+}
+.cfg-diff-pick-badge-b { opacity: 0.72; }
+
+/* 階段 2:diff 結果 */
+.cfg-diff-headerbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--glass-edge);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.cfg-diff-back {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.cfg-diff-back:hover { background: var(--accent); color: var(--accent-hex); }
+.cfg-diff-pair {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cfg-diff-pair-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.50);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.cfg-diff-pair-a { border-color: var(--accent-hex); }
+.cfg-diff-pair-swap {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  color: var(--accent-hex);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t-fast);
+  flex-shrink: 0;
+}
+.cfg-diff-pair-swap:hover { background: var(--accent); }
+.cfg-diff-total {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-hex);
+  white-space: nowrap;
+}
+.cfg-diff-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 18px;
+}
+.cfg-diff-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 0;
+  color: var(--text-light);
+}
+.cfg-diff-empty-emoji { font-size: 30px; }
+.cfg-diff-empty-text { font-size: 13px; font-weight: 700; color: var(--text); }
+.cfg-diff-empty-sub { font-size: 11px; }
+.cfg-diff-tab-group { margin-bottom: 14px; }
+.cfg-diff-tab-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cfg-diff-tab-name {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--accent-hex);
+}
+.cfg-diff-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-hex);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
+}
+.cfg-diff-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: rgba(255,255,255,0.40);
+  border: 1px solid var(--glass-brd);
+  border-left-width: 3px;
+  border-radius: var(--r-xs);
+}
+.cfg-diff-item-icon {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+/* 語義色(綠增/紅減/琥珀改)— 屬 diff 結構語義,比照規則 #23 保留 */
+.cfg-diff-item-add    { border-left-color: #27ae60; }
+.cfg-diff-item-add    .cfg-diff-item-icon { color: #27ae60; }
+.cfg-diff-item-remove { border-left-color: #c0392b; }
+.cfg-diff-item-remove .cfg-diff-item-icon { color: #c0392b; }
+.cfg-diff-item-change { border-left-color: #b87c10; }
+.cfg-diff-item-change .cfg-diff-item-icon { color: #b87c10; }
+.cfg-diff-item-text { flex: 1; min-width: 0; }
+.cfg-diff-item-msg { font-size: 12px; color: var(--text); line-height: 1.5; }
+.cfg-diff-item-detail {
+  font-size: 10.5px;
+  color: var(--text-light);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
+.cfg-diff-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--glass-edge);
+  flex-shrink: 0;
+}
+.cfg-diff-footer-hint {
+  flex: 1;
+  font-size: 10.5px;
+  color: var(--text-light);
+}
+.cfg-diff-action-btn {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 18px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), opacity var(--t-fast);
+}
+.cfg-diff-cancel {
+  color: var(--text-light);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+}
+.cfg-diff-cancel:hover { background: var(--accent); color: var(--accent-hex); }
+.cfg-diff-go {
+  color: #fff;
+  background: var(--accent-hex);
+  border: 1px solid var(--accent-hex);
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
+}
+.cfg-diff-go:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 暗色覆寫(基底;theme_v34 既有的 .cfg-diff-modal 暗色覆寫可疊加) */
+:root[data-theme="dark"] .cfg-diff-slot,
+:root[data-theme="dark"] .cfg-diff-pick-item,
+:root[data-theme="dark"] .cfg-diff-item,
+:root[data-theme="dark"] .cfg-diff-pair-name,
+:root[data-theme="dark"] .cfg-diff-close,
+:root[data-theme="dark"] .cfg-diff-back,
+:root[data-theme="dark"] .cfg-diff-pair-swap,
+:root[data-theme="dark"] .cfg-diff-cancel {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--glass-edge);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-diff-slot:hover,
+:root[data-theme="dark"] .cfg-diff-pick-item:hover,
+:root[data-theme="dark"] .cfg-diff-close:hover,
+:root[data-theme="dark"] .cfg-diff-back:hover,
+:root[data-theme="dark"] .cfg-diff-cancel:hover {
+  background: var(--accent);
+  color: var(--accent-hex);
+}
+
+/* ════════════════════════════════════════════════════════════
+   v4.8 批次 C:零星缺失 class 補齊
+   (cfg-matrix-btn-danger / cfg-matrix-card / cfg-combo-card /
+    cfg-global-col-main / cfg-rules-autopri / cfg-tpl-diffbtn /
+    cfg-tpl-diff-row-zero / cfg-tpl-diff-th-name)
+   ════════════════════════════════════════════════════════════ */
+/* 危險操作鈕(清空):idle 仍走中性玻璃,僅文字/hover 帶危險紅 */
+.cfg-matrix-btn.cfg-matrix-btn-danger { color: #c0392b; }
+.cfg-matrix-btn.cfg-matrix-btn-danger:hover {
+  background: rgba(192,57,43,0.10);
+  border-color: rgba(192,57,43,0.45);
+  color: #c0392b;
+}
+:root[data-theme="dark"] .cfg-matrix-btn.cfg-matrix-btn-danger { color: #e8806f; }
+:root[data-theme="dark"] .cfg-matrix-btn.cfg-matrix-btn-danger:hover {
+  background: rgba(232,128,111,0.14);
+  border-color: rgba(232,128,111,0.50);
+}
+
+/* 矩陣卡片宿主(04/05/08 共用):card 內已有 mode-card 樣式,
+   這層只負責讓矩陣可以橫向捲動而不撐破版面 */
+.cfg-matrix-card { min-width: 0; overflow: hidden; }
+.cfg-matrix-card .cfg-matrix-wrap { overflow-x: auto; }
+.cfg-combo-card  { min-width: 0; }
+
+/* 01_Global 主欄(雙欄佈局時的左大欄) */
+.cfg-global-col-main { flex: 2 1 420px; min-width: 0; }
+
+/* 09 規則:自動重排 priority 的 checkbox label */
+.cfg-rules-autopri {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-light);
+  cursor: pointer;
+  user-select: none;
+}
+.cfg-rules-autopri input[type="checkbox"] { accent-color: var(--accent-hex); }
+
+/* 範本卡上的 diff 入口鈕(中性玻璃 idle + accent hover,遵三態契約) */
+.cfg-tpl-diffbtn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  color: var(--text-light);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.cfg-tpl-diffbtn:hover { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); }
+:root[data-theme="dark"] .cfg-tpl-diffbtn {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--glass-edge);
+  color: var(--text);
+}
+
+/* 範本載入 diff 表:零變更列淡化 + 名稱欄 */
+.cfg-tpl-diff-row-zero { opacity: 0.45; }
+.cfg-tpl-diff-th-name { text-align: left; }
+
+/* ════════════════════════════════════════════════════════════
+   v4.8 批次 D:04 副盤權重區(副輪 .sub + 自由副盤 Panel)
+   結構語義色比照規則 #23:副輪琥珀、Panel 青綠(同預覽格)。
+   ════════════════════════════════════════════════════════════ */
+.cfg-aux-weights {
+  margin-top: 14px;
+  padding: 10px 12px 12px;
+  background: rgba(255,255,255,0.34);
+  border: 1px dashed var(--glass-brd);
+  border-radius: var(--r-sm);
+}
+.cfg-aux-weights-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.cfg-aux-weights-hint {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+.cfg-aux-weights-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 0 4px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  border-radius: 4px;
+}
+.cfg-aux-matrix { width: 100%; }
+/* 列頭:副輪琥珀 / Panel 青綠 — 與盤面預覽的結構語義色一致 */
+.cfg-aux-rowhead-sub {
+  border-left: 3px solid rgba(220,140,80,0.85) !important;
+  white-space: nowrap;
+}
+.cfg-aux-rowhead-panel {
+  border-left: 3px solid rgba(20,160,150,0.75) !important;
+  white-space: nowrap;
+}
+.cfg-aux-src-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-brd);
+  color: var(--text-light);
+  vertical-align: 1px;
+}
+.cfg-aux-src-badge.warn {
+  background: rgba(184,124,16,0.12);
+  border-color: rgba(184,124,16,0.50);
+  color: #8a5c0a;
+}
+.cfg-aux-ops-head { font-size: 10px; color: var(--text-light); }
+.cfg-aux-ops {
+  white-space: nowrap;
+  padding: 2px 6px;
+}
+.cfg-aux-ops .cfg-matrix-btn { margin-right: 4px; }
+
+/* layout 分頁:前往 04 的快速入口 chip(中性玻璃 idle + accent hover) */
+.cfg-chip-go-weights {
+  margin-top: 6px;
+  font-weight: 700;
+  color: var(--accent-hex);
+  border-color: var(--accent-brd);
+}
+.cfg-chip-go-weights:hover {
+  background: var(--accent-hex);
+  color: #fff;
+  box-shadow: 0 1px 4px rgb(var(--tint-accent) / 0.30);
+}
+
+:root[data-theme="dark"] .cfg-aux-weights {
+  background: rgba(255,255,255,0.05);
+  border-color: var(--glass-edge);
+}
+:root[data-theme="dark"] .cfg-aux-weights-hint code,
+:root[data-theme="dark"] .cfg-aux-src-badge {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--glass-edge);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-aux-src-badge.warn {
+  background: rgba(224,160,112,0.14);
+  border-color: rgba(224,160,112,0.50);
+  color: #e0a070;
+}
+
+/* v4.8:結構 hook class(明確定義,供未來覆寫與掃描完整性) */
+.cfg-aux-row-sub   {}
+.cfg-aux-row-panel {}
+.cfg-diff-pair-b { opacity: 0.92; }
+.cfg-diff-pick-badge-a { /* A 徽章用基底 accent 實心 */ }

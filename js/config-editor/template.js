@@ -887,10 +887,106 @@
                 <span>＋</span>
               </button>
             </div>
+
+            <!-- v4.7:自由副盤 (Panel) 群組（與主輪分開）-->
+            <div class="cfg-panel-group">
+              <div class="cfg-panel-group-title">🧩 自由副盤</div>
+              <div v-for="(p, pi) in panels" :key="'pnl'+pi"
+                   class="cfg-panel-chip"
+                   :class="{ active: activePanelIdx === pi }"
+                   @click="selectPanel(pi)"
+                   :title="p.panel_id + ' · ' + p.width + '×' + p.height + (p.join_payline ? ' · 參與連線' : ' · 獨立')">
+                <span class="cfg-panel-chip-id">{{ p.panel_id }}</span>
+                <span class="cfg-panel-chip-size">{{ p.width }}×{{ p.height }}</span>
+                <span v-if="p.join_payline" class="cfg-panel-chip-join" title="參與主盤連線">🔗</span>
+                <button class="cfg-panel-chip-del" @click.stop="removePanel(pi)" title="移除">×</button>
+              </div>
+              <button class="cfg-layout-v2-add-btn cfg-panel-add" @click="addPanel" title="新增自由副盤">
+                <span>＋ 副盤</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- v4.7:選中 Panel 的詳情欄位（與主輪詳情並列，二擇一）-->
+          <div class="cfg-layout-v2-detail cfg-panel-detail" v-if="activePanel && activePanelIdx >= 0">
+            <div class="cfg-layout-v2-detail-header">
+              <span class="cfg-panel-detail-title">🧩 自由副盤 {{ activePanel.panel_id }}</span>
+              <button class="cfg-chip" @click="activePanelIdx = -1" title="回到主輪編輯">← 編主輪</button>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Panel ID <span class="cfg-key">Panel_ID</span></label>
+              <input class="input" :value="activePanel.panel_id"
+                     @change="renamePanel(activePanelIdx, $event.target.value)">
+            </div>
+
+            <div class="cfg-mode-grid">
+              <div class="cfg-field cfg-field-compact">
+                <label class="cfg-label">X 位置 <span class="cfg-key">Col</span></label>
+                <input class="input" type="number" v-model.number="activePanel.col">
+              </div>
+              <div class="cfg-field cfg-field-compact">
+                <label class="cfg-label">Y 位置 <span class="cfg-key">Row</span></label>
+                <input class="input" type="number" v-model.number="activePanel.row">
+                <div class="cfg-hint">與主盤同座標:X=0 最左欄、Y=0 基準列,皆可負;預覽會自動擴張涵蓋。</div>
+              </div>
+              <div class="cfg-field cfg-field-compact">
+                <label class="cfg-label">寬 <span class="cfg-key">Width</span></label>
+                <input class="input" type="number" min="1" max="12" v-model.number="activePanel.width">
+              </div>
+              <div class="cfg-field cfg-field-compact">
+                <label class="cfg-label">高 <span class="cfg-key">Height</span></label>
+                <input class="input" type="number" min="1" max="12" v-model.number="activePanel.height">
+              </div>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">是否參與主盤連線 <span class="cfg-key">Join_Payline</span></label>
+              <div class="cfg-chip-row">
+                <button class="cfg-chip" :class="{ active: !activePanel.join_payline }"
+                        @click="activePanel.join_payline = false">獨立（不參與）</button>
+                <button class="cfg-chip" :class="{ active: activePanel.join_payline }"
+                        @click="activePanel.join_payline = true">參與主盤連線</button>
+              </div>
+              <div class="cfg-hint">獨立時此副盤符號不計入主盤連線/統計;參與時併入主盤計算。</div>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">滾動 <span class="cfg-key">Scroll</span></label>
+              <div class="cfg-chip-row">
+                <button class="cfg-chip" :class="{ active: !activePanel.scroll }"
+                        @click="activePanel.scroll = false">靜態（無滾動）</button>
+                <button class="cfg-chip" :class="{ active: activePanel.scroll }"
+                        @click="activePanel.scroll = true">滾動</button>
+              </div>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">符號集 <span class="cfg-key">Symbol_Set</span></label>
+              <select class="input" v-model="activePanel.symbol_set">
+                <option value="">（沿用全域符號）</option>
+                <option v-for="nm in symbolSetNames" :key="nm" :value="nm">{{ nm }}</option>
+              </select>
+              <div class="cfg-hint">指定後此副盤只用該集符號（與主盤不同）;空＝用全域符號。</div>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">權重來源 <span class="cfg-key">Inherit_Weight</span></label>
+              <div class="cfg-chip-row">
+                <button class="cfg-chip" :class="{ active: activePanel.inherit_weight }"
+                        @click="activePanel.inherit_weight = true">沿用主輪保底</button>
+                <button class="cfg-chip" :class="{ active: !activePanel.inherit_weight }"
+                        @click="activePanel.inherit_weight = false">獨立（需在 04 設權重）</button>
+              </div>
+              <div class="cfg-hint">引擎優先序:04 專屬權重 → 符號集等權 → 沿用保底;三者皆無時此副盤模擬會整片空白。</div>
+              <button class="cfg-chip cfg-chip-go-weights"
+                      @click="active='reel_weights'"
+                      title="跳到 04_Reel_Weights 的副盤權重區">→ 前往 04 設定此副盤權重</button>
+            </div>
           </div>
 
           <!-- 中欄：選中 Reel 的詳情欄位 -->
-          <div class="cfg-layout-v2-detail" v-if="activeReel">
+          <div class="cfg-layout-v2-detail" v-if="activeReel && activePanelIdx < 0">
             <!-- 詳情 header -->
             <div class="cfg-layout-v2-detail-header">
               <div class="cfg-layout-v2-detail-title">
@@ -1026,7 +1122,11 @@
                       <button class="cfg-chip" :class="{ active: activeReel.subreel_inherit_weight }"
                               @click="activeReel.subreel_inherit_weight = true">沿用主輪</button>
                     </div>
-                    <div class="cfg-hint">獨立時須在 04_Reel_Weights 用「{{ activeReel.reel_id }}.sub」另設此副盤權重表;沿用主輪則複用主輪抽樣池。</div>
+                    <div class="cfg-hint">獨立時於 04_Reel_Weights 下方「副盤權重」區的「R{{ activeReel.reel_id }}·副」列設定(匯出為 {{ activeReel.reel_id }}.sub);沿用主輪則複用主輪抽樣池。</div>
+                    <button v-if="!activeReel.subreel_inherit_weight"
+                            class="cfg-chip cfg-chip-go-weights"
+                            @click="active='reel_weights'"
+                            title="跳到 04_Reel_Weights 的副盤權重區">→ 前往 04 設定「R{{ activeReel.reel_id }}·副」權重</button>
                   </div>
 
                   <!-- 雙盤面提醒 -->
@@ -1082,6 +1182,19 @@
                       ]"
                       @pointerdown="onPreviewPointerDown(c.reel - 1, $event)"
                       @pointerenter="onPreviewPointerEnter(c.reel - 1)"
+                      rx="3" />
+                <!-- v4.7:自由副盤格子 -->
+                <rect v-for="(pc, i) in panelCells" :key="'pc'+i"
+                      :x="pc.x" :y="pc.y"
+                      :width="LAYOUT_CELL_SIZE" :height="LAYOUT_CELL_SIZE"
+                      :class="[
+                        'cfg-layout-cell',
+                        'cfg-layout-cell-interactive',
+                        'cfg-layout-cell-panel',
+                        pc.join ? 'cfg-layout-cell-panel-join' : '',
+                        pc.panel_idx === activePanelIdx ? 'cfg-layout-cell-active' : ''
+                      ]"
+                      @click="selectPanel(pc.panel_idx)"
                       rx="3" />
               </svg>
             </div>
@@ -1458,6 +1571,71 @@
                     </tr>
                   </tbody>
                 </table>
+
+                <!-- ── v4.8:副盤權重(副輪 .sub + 自由副盤 Panel)──
+                     回應「副輪權重不知道在哪調」:獨立權重副輪與所有 Panel
+                     在此各佔一列,欄序與上表相同。副輪列匯出為 Reel_ID = "<n>.sub";
+                     Panel 列匯出為 Reel_ID = Panel ID。 -->
+                <div v-if="hasAuxWeightRows" class="cfg-aux-weights">
+                  <div class="cfg-aux-weights-title">
+                    <span>🧩 副盤權重</span>
+                    <span class="cfg-aux-weights-hint">
+                      副輪(獨立權重)每列匯出為「<code>Reel.sub</code>」;Panel 全 0 = 不建專屬池,改走「符號集等權 → 沿用保底」fallback
+                    </span>
+                  </div>
+                  <table class="cfg-matrix cfg-aux-matrix">
+                    <thead>
+                      <tr>
+                        <th class="cfg-matrix-corner">盤 \\ Sym</th>
+                        <th v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'aux'+sid">{{ sid }}</th>
+                        <th class="cfg-matrix-total">合計</th>
+                        <th class="cfg-aux-ops-head">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <!-- 副輪列(獨立權重者) -->
+                      <tr v-for="r in independentSubReels" :key="'auxsub'+r.reel_id" class="cfg-aux-row cfg-aux-row-sub">
+                        <td class="cfg-matrix-rowhead cfg-aux-rowhead-sub"
+                            :title="'R' + r.reel_id + ' 的副輪(' + (r.subreel_kind || 'STACK') + ')獨立權重;匯出 Reel_ID=' + r.reel_id + '.sub'">
+                          R{{ r.reel_id }}·副
+                        </td>
+                        <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxsub'+r.reel_id+sid"
+                            class="cfg-matrix-cell-wrap"
+                            :style="{ backgroundColor: reelHeatColor(reelActiveMode, auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid] || 0) }">
+                          <input class="cfg-matrix-cell" type="number" min="0"
+                                 v-model.number.lazy="auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid]"
+                                 @click.stop>
+                        </td>
+                        <td class="cfg-matrix-total-cell">{{ auxRowTotal('sub', reelActiveMode, r.reel_id) }}</td>
+                        <td class="cfg-aux-ops">
+                          <button class="cfg-matrix-btn" @click="auxFillRow('sub', reelActiveMode, r.reel_id, 100)" title="整列填 100">⇶100</button>
+                          <button class="cfg-matrix-btn" @click="auxNormalizeRow('sub', reelActiveMode, r.reel_id)" title="整列正規化至 100">⚖</button>
+                        </td>
+                      </tr>
+                      <!-- 自由副盤列 -->
+                      <tr v-for="p in panels" :key="'auxpnl'+p.panel_id" class="cfg-aux-row cfg-aux-row-panel">
+                        <td class="cfg-matrix-rowhead cfg-aux-rowhead-panel"
+                            :title="'自由副盤 ' + p.panel_id + ' · 目前來源:' + panelWeightSourceLabel(p, reelActiveMode)">
+                          {{ p.panel_id }}
+                          <span class="cfg-aux-src-badge" :class="{ warn: panelWeightSourceLabel(p, reelActiveMode).indexOf('⚠') === 0 }">{{ panelWeightSourceLabel(p, reelActiveMode) }}</span>
+                        </td>
+                        <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxpnl'+p.panel_id+sid"
+                            class="cfg-matrix-cell-wrap"
+                            :style="{ backgroundColor: reelHeatColor(reelActiveMode, auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid] || 0) }">
+                          <input class="cfg-matrix-cell" type="number" min="0"
+                                 v-model.number.lazy="auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid]"
+                                 @click.stop>
+                        </td>
+                        <td class="cfg-matrix-total-cell">{{ auxRowTotal('panel', reelActiveMode, p.panel_id) }}</td>
+                        <td class="cfg-aux-ops">
+                          <button class="cfg-matrix-btn" @click="auxFillRow('panel', reelActiveMode, p.panel_id, 100)" title="整列填 100(建立專屬池)">⇶100</button>
+                          <button class="cfg-matrix-btn" @click="auxNormalizeRow('panel', reelActiveMode, p.panel_id)" title="整列正規化至 100">⚖</button>
+                          <button class="cfg-matrix-btn" @click="auxFillRow('panel', reelActiveMode, p.panel_id, 0)" title="整列歸 0(改走 fallback)">∅</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <!-- v3.6 / #5:reel 並排模式(所有模式並列,當前可編輯,其他唯讀) -->

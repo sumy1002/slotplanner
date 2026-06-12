@@ -30,6 +30,7 @@
     makeMode, DEFAULT_MODES, loadModes, saveModes,
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
+    makePanel, loadPanels, savePanels, loadSymbolSets, saveSymbolSets,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
@@ -579,6 +580,9 @@
           kind: 'reel', mode,
           symbol_ids: e.symbol_ids.slice(),
           weights: JSON.parse(JSON.stringify(e.weights)),
+          // v4.8:副盤權重一併入快照,undo/redo 不會丟副輪/panel 編輯
+          sub_weights: e.sub_weights ? JSON.parse(JSON.stringify(e.sub_weights)) : {},
+          panel_weights: e.panel_weights ? JSON.parse(JSON.stringify(e.panel_weights)) : {},
           label: `reel.${mode}`,
           ts: Date.now(),
         };
@@ -665,6 +669,9 @@
           const e = reelW(snap.mode);
           e.symbol_ids = snap.symbol_ids.slice();
           e.weights = JSON.parse(JSON.stringify(snap.weights));
+          // v4.8:副盤權重一併還原(舊快照無此欄位時保持現狀)
+          if (snap.sub_weights)   e.sub_weights   = JSON.parse(JSON.stringify(snap.sub_weights));
+          if (snap.panel_weights) e.panel_weights = JSON.parse(JSON.stringify(snap.panel_weights));
         } else if (snap.kind === 'grid') {
           const e = gridW(snap.mode);
           e.grid_sizes = snap.grid_sizes.slice();
@@ -703,6 +710,9 @@
           const e = reelW(snap.mode);
           e.symbol_ids = snap.symbol_ids.slice();
           e.weights = JSON.parse(JSON.stringify(snap.weights));
+          // v4.8:副盤權重一併還原(舊快照無此欄位時保持現狀)
+          if (snap.sub_weights)   e.sub_weights   = JSON.parse(JSON.stringify(snap.sub_weights));
+          if (snap.panel_weights) e.panel_weights = JSON.parse(JSON.stringify(snap.panel_weights));
         } else if (snap.kind === 'grid') {
           const e = gridW(snap.mode);
           e.grid_sizes = snap.grid_sizes.slice();
@@ -1040,6 +1050,113 @@
       const activeReelIdx = ref(0);
       const activeReel = computed(() => layout[activeReelIdx.value] || null);
 
+      // ── v4.7:自由副盤 (Panel) + 符號集狀態 ──
+      const panels = reactive(loadPanels());
+      const symbolSets = reactive(loadSymbolSets());
+      const activePanelIdx = ref(-1);   // -1 = 未選 panel（在編主輪）
+      const activePanel = computed(() =>
+        (activePanelIdx.value >= 0 && activePanelIdx.value < panels.length)
+          ? panels[activePanelIdx.value] : null);
+      const panelsDebugJson = computed(() => JSON.stringify(panels, null, 2));
+
+      function _nextPanelId() {
+        let n = panels.length + 1;
+        const ids = new Set(panels.map(p => p.panel_id));
+        while (ids.has('P' + n)) n++;
+        return 'P' + n;
+      }
+      function addPanel() {
+        const p = makePanel(_nextPanelId());
+        // v4.8:預設擺在「整個視覺盤面」右側(含副盤借欄),留 1 欄間隙
+        p.col = layoutTotalCols.value + 1; p.row = 0;
+        panels.push(p);
+        activePanelIdx.value = panels.length - 1;
+        emit('status', { type: 'ok', msg: `已新增自由副盤 ${p.panel_id}` });
+      }
+      function removePanel(idx) {
+        if (idx < 0 || idx >= panels.length) return;
+        const pid = panels[idx].panel_id;
+        panels.splice(idx, 1);
+        if (activePanelIdx.value >= panels.length) activePanelIdx.value = panels.length - 1;
+        // v4.8:清掉所有模式中此 panel 的孤兒權重鍵
+        for (const mode in reelWeights) {
+          const pw = reelWeights[mode] && reelWeights[mode].panel_weights;
+          if (!pw) continue;
+          for (const k of Object.keys(pw)) {
+            if (k.startsWith(pid + '-')) delete pw[k];
+          }
+        }
+        emit('status', { type: 'ok', msg: `已移除自由副盤 ${pid}` });
+      }
+      function selectPanel(idx) { activePanelIdx.value = idx; }
+      function renamePanel(idx, newId) {
+        if (idx < 0 || idx >= panels.length) return;
+        const clean = String(newId || '').trim();
+        if (!clean) return;
+        if (panels.some((p, i) => i !== idx && p.panel_id === clean)) {
+          emit('status', { type: 'err', msg: `Panel ID「${clean}」重複` });
+          return;
+        }
+        // v4.8:避免與主輪數字 Reel_ID 撞名(04 以「純數字=主輪」定址)
+        if (/^\d+$/.test(clean)) {
+          emit('status', { type: 'err', msg: 'Panel ID 不可為純數字(會與主輪 Reel_ID 混淆),請加字母,如 P' + clean });
+          return;
+        }
+        const oldId = panels[idx].panel_id;
+        panels[idx].panel_id = clean;
+        // v4.8:各模式 panel_weights key 跟著改名,權重不遺失
+        if (oldId && oldId !== clean) {
+          for (const mode in reelWeights) {
+            const pw = reelWeights[mode] && reelWeights[mode].panel_weights;
+            if (!pw) continue;
+            for (const k of Object.keys(pw)) {
+              if (k.startsWith(oldId + '-')) {
+                pw[clean + k.slice(oldId.length)] = pw[k];
+                delete pw[k];
+              }
+            }
+          }
+        }
+      }
+      // panel 預覽幾何（自身 col/row/width/height → SVG 矩形格）
+      // v4.8:與主盤同座標空間 — X 以「視覺欄 0 = 最左欄」對齊,
+      //   Y 減去 layoutMetrics.minTop 與主格同基準(修 panel 與主盤錯位)。
+      const LAYOUT_STEP = (typeof LAYOUT_CELL_SIZE !== 'undefined' ? LAYOUT_CELL_SIZE : 30)
+                        + (typeof LAYOUT_CELL_GAP !== 'undefined' ? LAYOUT_CELL_GAP : 4);
+      const panelCells = computed(() => {
+        const minTop = layoutMetrics.value.minTop;   // lazy 取值,宣告順序無虞
+        const out = [];
+        panels.forEach((p, pi) => {
+          for (let r = 0; r < (p.height || 0); r++) {
+            for (let c = 0; c < (p.width || 0); c++) {
+              out.push({
+                x: (p.col + c) * LAYOUT_STEP,
+                y: (p.row + r - minTop) * LAYOUT_STEP,
+                panel_idx: pi,
+                panel_id: p.panel_id,
+                join: !!p.join_payline,
+              });
+            }
+          }
+        });
+        return out;
+      });
+
+      // 符號集 CRUD
+      function addSymbolSet(name) {
+        const clean = String(name || '').trim();
+        if (!clean) return;
+        if (!symbolSets[clean]) symbolSets[clean] = [];
+      }
+      function removeSymbolSet(name) { delete symbolSets[name]; }
+      function toggleSymbolInSet(name, symbolId) {
+        if (!symbolSets[name]) symbolSets[name] = [];
+        const i = symbolSets[name].indexOf(symbolId);
+        if (i >= 0) symbolSets[name].splice(i, 1);
+        else symbolSets[name].push(symbolId);
+      }
+      const symbolSetNames = computed(() => Object.keys(symbolSets));
+
       // v4.0 / #9:格數權重(每 reel 的列數分佈權重)只有「列高不一致」的盤面
       //   (Megaways 類)才有意義。等高盤(所有 reel max_rows 相同)隱藏該分頁。
       //   註:Batch 5 盤面結構重構後,會改由明確的機制選擇來驅動,此處先以資料判斷。
@@ -1104,6 +1221,20 @@
               if (nid !== undefined) nw[`${nid}-${rest}`] = w[key];
             }
             table[mode].weights = nw;
+            // v4.8:副輪權重(僅 reelWeights 有)同步重映射,避免刪輪後副輪權重黏到錯的輪
+            const sw = table[mode] && table[mode].sub_weights;
+            if (sw) {
+              const nsw = {};
+              for (const key in sw) {
+                const dash = key.indexOf('-');
+                if (dash < 0) continue;
+                const reel = parseInt(key.slice(0, dash), 10);
+                const rest = key.slice(dash + 1);
+                const nid = newForOld[reel];
+                if (nid !== undefined) nsw[`${nid}-${rest}`] = sw[key];
+              }
+              table[mode].sub_weights = nsw;
+            }
           }
         }
         // combo:key 格式 `${step}-${reel}-${rest}`
@@ -1133,21 +1264,26 @@
       const _dragReelIdx = ref(-1);
       const _dragOverIdx = ref(-1);
       function _swapReelWeightKeys(ra, rb) {
+        const _swapMap = (w) => {
+          const nw = {};
+          for (const key in w) {
+            const dash = key.indexOf('-');
+            if (dash < 0) { nw[key] = w[key]; continue; }
+            const reel = parseInt(key.slice(0, dash), 10);
+            const rest = key.slice(dash + 1);
+            if (reel === ra)      nw[`${rb}-${rest}`] = w[key];
+            else if (reel === rb) nw[`${ra}-${rest}`] = w[key];
+            else                  nw[key] = w[key];
+          }
+          return nw;
+        };
         for (const table of [reelWeights, gridWeights]) {
           for (const mode in table) {
-            const w = table[mode] && table[mode].weights;
-            if (!w) continue;
-            const nw = {};
-            for (const key in w) {
-              const dash = key.indexOf('-');
-              if (dash < 0) { nw[key] = w[key]; continue; }
-              const reel = parseInt(key.slice(0, dash), 10);
-              const rest = key.slice(dash + 1);
-              if (reel === ra)      nw[`${rb}-${rest}`] = w[key];
-              else if (reel === rb) nw[`${ra}-${rest}`] = w[key];
-              else                  nw[key] = w[key];
-            }
-            table[mode].weights = nw;
+            const e = table[mode];
+            if (!e) continue;
+            if (e.weights) e.weights = _swapMap(e.weights);
+            // v4.8:副輪權重跟著互換(「連列高/副輪/權重一起換」名實相符)
+            if (e.sub_weights) e.sub_weights = _swapMap(e.sub_weights);
           }
         }
       }
@@ -2062,13 +2198,29 @@
       });
 
       const layoutViewBox = computed(() => {
-        if (layout.length === 0) return '0 0 100 100';
+        if (layout.length === 0 && panels.length === 0) return '0 0 100 100';
         const STEP = LAYOUT_CELL_SIZE + LAYOUT_CELL_GAP;
-        const w = layoutTotalCols.value * STEP + 2 * LAYOUT_SUBREEL_GAP;
         const { minTop, maxBot } = layoutMetrics.value;
-        const h = (maxBot - minTop + 1) * STEP
+        // v4.8:viewBox 同時涵蓋主盤(含副盤借欄)與所有自由副盤,
+        //   panel 擺到負座標或盤面右側更遠處也不會被裁掉。
+        let minCol = 0, maxCol = layoutTotalCols.value - 1;
+        let minRowS = 0, maxRowS = maxBot - minTop;      // shifted row 空間(主盤已含 minTop 平移)
+        for (const p of panels) {
+          const w = Math.max(1, Math.floor(p.width || 1));
+          const h = Math.max(1, Math.floor(p.height || 1));
+          const c0 = Math.floor(p.col || 0);
+          const r0 = Math.floor(p.row || 0) - minTop;
+          if (c0 < minCol) minCol = c0;
+          if (c0 + w - 1 > maxCol) maxCol = c0 + w - 1;
+          if (r0 < minRowS) minRowS = r0;
+          if (r0 + h - 1 > maxRowS) maxRowS = r0 + h - 1;
+        }
+        const x0 = minCol * STEP - LAYOUT_SUBREEL_GAP;
+        const y0 = minRowS * STEP - LAYOUT_LABEL_HEIGHT - LAYOUT_SUBREEL_GAP;
+        const w = (maxCol - minCol + 1) * STEP + 2 * LAYOUT_SUBREEL_GAP;
+        const h = (maxRowS - minRowS + 1) * STEP
                   + 2 * LAYOUT_SUBREEL_GAP + LAYOUT_LABEL_HEIGHT;
-        return `${-LAYOUT_SUBREEL_GAP} ${-LAYOUT_LABEL_HEIGHT - LAYOUT_SUBREEL_GAP} ${w} ${h}`;
+        return `${x0} ${y0} ${w} ${h}`;
       });
 
       const totalCells = computed(() =>
@@ -2731,6 +2883,81 @@
         _fillSigReel[name] = sig;
       }
       function reelW(mode) { ensureReelWeightsForMode(mode); return reelWeights[mode]; }
+
+      // ──────────────────────────────────────────────────────────
+      //  v4.8:04 副盤權重(副輪 .sub + 自由副盤 Panel)資料層
+      //  - 副輪:layout 上 has_subreel 且「獨立權重」的 reel,在 04 顯示
+      //    一列「R<n>·副」;LS 存於 reelWeights[mode].sub_weights['<rid>-<sid>']。
+      //    匯出時寫成 Reel_ID = "<rid>.sub"(a_loader 既有支援)。
+      //  - Panel:每個自由副盤一列;LS 存於 panel_weights['<pid>-<sid>']
+      //    (aconfig-xlsx 既有讀取此結構匯出)。全 0 = 不寫專屬池,
+      //    引擎 fallback 到符號集等權 / 沿用保底。
+      // ──────────────────────────────────────────────────────────
+      function _ensureAuxWeights(mode) {
+        const e = reelW(mode);
+        if (!e.sub_weights)   e.sub_weights = {};
+        if (!e.panel_weights) e.panel_weights = {};
+        // 獨立權重副輪:lazy 初始化 100 均勻(與主輪一致),避免匯出後副輪整片空白
+        for (const r of layout) {
+          if (!r.has_subreel || r.subreel_inherit_weight) continue;
+          for (const sid of e.symbol_ids) {
+            const k = `${r.reel_id}-${sid}`;
+            if (!(k in e.sub_weights)) e.sub_weights[k] = 100;
+          }
+        }
+        // panel:lazy 初始化 0(全 0 = 不建專屬池,走符號集/保底 fallback)
+        for (const p of panels) {
+          for (const sid of e.symbol_ids) {
+            const k = `${p.panel_id}-${sid}`;
+            if (!(k in e.panel_weights)) e.panel_weights[k] = 0;
+          }
+        }
+        return e;
+      }
+      function auxW(mode) { return _ensureAuxWeights(mode); }
+      // 需要在 04 顯示副輪權重列的 reel(獨立權重者)
+      const independentSubReels = computed(() =>
+        layout.filter(r => r.has_subreel && !r.subreel_inherit_weight));
+      const hasAuxWeightRows = computed(() =>
+        independentSubReels.value.length > 0 || panels.length > 0);
+      function auxRowTotal(kind, mode, id) {
+        const e = auxW(mode);
+        const table = kind === 'sub' ? e.sub_weights : e.panel_weights;
+        let s = 0;
+        for (const sid of e.symbol_ids) {
+          const v = table[`${id}-${sid}`];
+          if (typeof v === 'number') s += v;
+        }
+        return s;
+      }
+      function auxFillRow(kind, mode, id, v) {
+        _pushUndo('reel', mode);
+        const e = auxW(mode);
+        const table = kind === 'sub' ? e.sub_weights : e.panel_weights;
+        for (const sid of e.symbol_ids) table[`${id}-${sid}`] = v;
+      }
+      function auxNormalizeRow(kind, mode, id, target = 100) {
+        _pushUndo('reel', mode);
+        const e = auxW(mode);
+        const table = kind === 'sub' ? e.sub_weights : e.panel_weights;
+        let s = 0;
+        for (const sid of e.symbol_ids) {
+          const v = table[`${id}-${sid}`];
+          if (typeof v === 'number') s += v;
+        }
+        if (s <= 0) return;
+        for (const sid of e.symbol_ids) {
+          const v = Number(table[`${id}-${sid}`]) || 0;
+          table[`${id}-${sid}`] = Math.round((v / s) * target);
+        }
+      }
+      // panel 的權重來源描述(熱力/提示用)
+      function panelWeightSourceLabel(p, mode) {
+        if (auxRowTotal('panel', mode, p.panel_id) > 0) return '專屬權重';
+        if (p.symbol_set) return `符號集「${p.symbol_set}」等權`;
+        if (p.inherit_weight) return '沿用主輪 R1 保底';
+        return '⚠ 無權重來源(模擬時會空白)';
+      }
       // 解析 "WILD, H1, H2" 等格式,失敗回 null
       function parseSymbolIds(str) {
         if (!str || !str.trim()) return null;
@@ -5710,6 +5937,8 @@
         '全域設定':   'global',
         '模式設定':   'global',           // v3.1:模式設定已合進 01_Global,共用同一個 dirty 旗標
         '盤面結構':   'layout',
+        '自由副盤':   'layout',           // v4.7:panel 歸 layout tab
+        '符號集':     'layout',           // v4.7:符號集歸 layout tab
         '分佈區間':   'distribution_bins',
         '中獎線':     'paylines',
         '硬約束':     'constraints',
@@ -5745,6 +5974,8 @@
           case '全域設定': return () => saveGlobal({ ...g });
           case '模式設定': return () => saveModes(modes.map(m => ({ ...m })));
           case '盤面結構': return () => saveLayout(layout.map(r => ({ ...r })));
+          case '自由副盤': return () => savePanels(panels.map(p => ({ ...p })));
+          case '符號集':   return () => saveSymbolSets(JSON.parse(JSON.stringify(symbolSets)));
           case '分佈區間': return () => saveBins(JSON.parse(JSON.stringify(bins)));
           case '中獎線':   return () => savePaylines(paylines.map(p => ({ ...p })));
           case '硬約束':   return () => saveConstraints(constraints.map(c => ({ ...c })));
@@ -5785,6 +6016,8 @@
       watch(g,            () => scheduleSave('全域設定'), { deep: true });
       watch(modes,        () => scheduleSave('模式設定'), { deep: true });
       watch(layout,       () => scheduleSave('盤面結構'), { deep: true });
+      watch(panels,       () => scheduleSave('自由副盤'), { deep: true });
+      watch(symbolSets,   () => scheduleSave('符號集'),   { deep: true });
       watch(bins,         () => scheduleSave('分佈區間'), { deep: true });
       watch(paylines,     () => scheduleSave('中獎線'),   { deep: true });
       watch(constraints,  () => scheduleSave('硬約束'),   { deep: true });
@@ -5832,6 +6065,67 @@
             add('error', 'layout', `Reel ID 重複:${r.reel_id}`);
           } else {
             reelIdSeen.add(r.reel_id);
+          }
+        }
+
+        // ─── 02b 自由副盤 (Panel) v4.8 ───
+        const panelIdSeen = new Set();
+        for (const p of panels) {
+          const pid = (p.panel_id || '').trim();
+          if (!pid) {
+            add('error', 'layout', '有自由副盤的 Panel ID 為空');
+            continue;
+          }
+          if (panelIdSeen.has(pid)) add('error', 'layout', `Panel ID 重複:${pid}`);
+          panelIdSeen.add(pid);
+          if (/^\d+$/.test(pid)) {
+            add('error', 'layout', `Panel ID「${pid}」為純數字`,
+              '04 權重以「純數字=主輪」定址,純數字 Panel ID 會與主輪 Reel_ID 混淆。請加字母前綴。');
+          }
+          if (!(p.width >= 1) || !(p.height >= 1)) {
+            add('error', 'layout', `副盤 ${pid} 的寬/高必須 >= 1`);
+          }
+          // 符號集引用存在且非空
+          if (p.symbol_set && (!symbolSets[p.symbol_set] || symbolSets[p.symbol_set].length === 0)) {
+            add('warn', 'layout', `副盤 ${pid} 引用的符號集「${p.symbol_set}」不存在或為空`,
+              '引擎找不到可用符號時會跳過此副盤(整片空白)。');
+          }
+          // 權重來源三段皆無 → 模擬空白
+          let hasPanelW = false;
+          for (const mode of Object.keys(reelWeights)) {
+            if (!validModeSet.has(mode)) continue;
+            const pw = reelWeights[mode] && reelWeights[mode].panel_weights;
+            if (!pw) continue;
+            for (const k of Object.keys(pw)) {
+              if (k.startsWith(pid + '-') && Number(pw[k]) > 0) { hasPanelW = true; break; }
+            }
+            if (hasPanelW) break;
+          }
+          if (!hasPanelW && !p.symbol_set && !p.inherit_weight) {
+            add('warn', 'reel_weights', `副盤 ${pid} 沒有任何權重來源`,
+              '04 無專屬權重、未指定符號集、未沿用保底 → 模擬時此副盤會整片空白。請在 04 的「副盤權重」列填權重,或回盤面結構改權重來源。');
+          }
+          if (p.join_payline) {
+            add('warn', 'layout', `副盤 ${pid} 已開「參與主盤連線」`,
+              '目前版本僅將其符號併入主盤統計;實際 payline 算線(P5)尚未實作。');
+          }
+        }
+        // 獨立權重副輪:檢查 04 是否已有正權重
+        for (const r of layout) {
+          if (!r.has_subreel || r.subreel_inherit_weight) continue;
+          let hasSubW = false;
+          for (const mode of Object.keys(reelWeights)) {
+            if (!validModeSet.has(mode)) continue;
+            const sw = reelWeights[mode] && reelWeights[mode].sub_weights;
+            if (!sw) continue;
+            for (const k of Object.keys(sw)) {
+              if (k.startsWith(r.reel_id + '-') && Number(sw[k]) > 0) { hasSubW = true; break; }
+            }
+            if (hasSubW) break;
+          }
+          if (!hasSubW) {
+            add('warn', 'reel_weights', `R${r.reel_id} 的副輪設「獨立權重」但 04 尚無權重`,
+              '請到 04_Reel_Weights 下方「副盤權重」區為「R' + r.reel_id + '·副」填權重,否則模擬時副輪格會空白。');
           }
         }
 
@@ -6463,7 +6757,14 @@
         addReel, removeReel, swapReels,
         // v4.6 副輪種類
         SUBREEL_KINDS, setSubreelKind, activeSubreelKindDef,
-        _dragReelIdx, _dragOverIdx,
+        // v4.7 自由副盤 + 符號集
+        panels, panelsDebugJson, activePanelIdx, activePanel, panelCells,
+        addPanel, removePanel, selectPanel, renamePanel,
+        symbolSets, symbolSetNames, addSymbolSet, removeSymbolSet, toggleSymbolInSet,
+        // v4.8 04 副盤權重(副輪 .sub + Panel)
+        auxW, independentSubReels, hasAuxWeightRows,
+        auxRowTotal, auxFillRow, auxNormalizeRow, panelWeightSourceLabel,
+        // v4.8:移除冗餘底線匯出(_dragReelIdx/_dragOverIdx 已以別名匯出,底線名觸發 Vue 保留前綴警告)
         onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
         bins, binsFor, binsValid, binTickPercent, binsDebugJson,
@@ -6607,7 +6908,7 @@
         exportXlsx, onImportFile,
         dirtyTabs,
         showTemplatePanel, templateList, newTemplateName, newTemplateDesc,
-        tplSaveOpen, _handleSaveAsTemplate,
+        tplSaveOpen,   // v4.8:_handleSaveAsTemplate 改僅以別名 handleSaveAsTemplate 匯出
         // ── #16 範本 diff ──
         diffOpen, diffSelecting, diffPickA, diffPickB, diffPickFor,
         diffComparisonResult, diffTotalCount,
