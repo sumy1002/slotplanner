@@ -9406,3 +9406,248 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 @media (max-width: 860px) {
   .cfg-constraints-v2-ctype-row { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   v5.0 / v5.1 批次 — UI 全面優化
+   A:CJK 防直排 nowrap 批次(全站根因修補)
+   B:01_Global 模式卡 accordion + grid3 對齊
+   C:符號頁外觀/識別壓縮
+   D:矩陣熱力 class bucket(取代 inline style)+ 拖曳框選
+   E:06 中獎線 path/備註移到棋盤下方
+   F:07/09 拼圖列欄寬固定
+   G:JP 定義(01_Global 區塊 4 → 13_Jackpots)
+   H:docgen JP 自動帶入 UI
+   I:暗色補洞(symbol / docgen / bcompare)
+   ============================================================ */
+
+/* ── A:CJK 防直排批次 ──
+   根因:chips / 按鈕 / 標籤在 flex 擠壓下中文逐字換行變直排。
+   chips 與按鈕一律整顆不換行;標籤用 keep-all(詞間可換、字內不拆)。 */
+.cfg-chip,
+.cfg-matrix-btn,
+.cfg-mode-add-btn,
+.cfg-mode-name-label,
+.cfg-paylines-overview-toggle,
+.cfg-paylines-svg-toggle,
+.cfg-paylines-guide-toggle,
+.cfg-paylines-svg-clear,
+.sym-type-chip,
+.cfg-matrix-symbols-label,
+.cfg-matrix-sort-v2-label {
+  white-space: nowrap;
+}
+.cfg-label,
+.cfg-key,
+.field-label-sm,
+.cfg-mqb-label {
+  word-break: keep-all;
+}
+.cfg-chip-row { min-width: 0; }
+
+/* ── B:01_Global ── */
+.cfg-mode-grid3 { align-items: start; }
+
+/* 模式卡 accordion(v5.0-d) */
+.cfg-mode-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--r-card);
+  transition: background 0.12s;
+  min-width: 0;
+}
+.cfg-mode-summary:hover { background: rgba(255,255,255,0.45); }
+.cfg-mode-summary-caret {
+  flex: 0 0 12px;
+  font-size: 11px;
+  color: var(--text-light);
+}
+.cfg-mode-summary-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cfg-mode-summary-name.err { color: #b0483d; }
+.cfg-mode-summary-badge.start {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-hex);
+  color: #fff;
+  white-space: nowrap;
+}
+.cfg-mode-summary-meta {
+  font-size: 11px;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.cfg-mode-summary-trigger {
+  flex: 1;
+  min-width: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cfg-mode-summary-warn { color: #b0483d; flex-shrink: 0; }
+.cfg-mode-summary-spacer { flex: 0 0 0; }
+.cfg-mode-summary .cfg-mode-delete-btn { flex-shrink: 0; }
+.cfg-mode-card-expand {
+  border-top: 1px dashed var(--glass-brd);
+}
+.cfg-mode-card.is-collapsed { box-shadow: none; }
+
+/* ── C:符號頁外觀/識別壓縮(v5.0-a)── */
+.sym-appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.swatch-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.swatch-strip .swatch-cell { width: 23px; height: 23px; }
+.sym-id-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(150px, 230px) minmax(150px, 230px);
+  gap: 12px;
+  align-items: start;
+}
+.sym-id-grid .input { width: 100%; }
+@media (max-width: 820px) {
+  .sym-id-grid { grid-template-columns: 110px 1fr; }
+}
+
+/* ── D:矩陣熱力 class bucket + 拖曳框選 ──
+   alpha 對齊原 reelHeatColor:0.08 + 0.50 × (bucket/9) */
+.cfg-heat-zero { background-color: rgb(var(--tint-muted) / 0.10); }
+.cfg-heat-1 { background-color: rgb(var(--tint-accent) / 0.136); }
+.cfg-heat-2 { background-color: rgb(var(--tint-accent) / 0.191); }
+.cfg-heat-3 { background-color: rgb(var(--tint-accent) / 0.247); }
+.cfg-heat-4 { background-color: rgb(var(--tint-accent) / 0.302); }
+.cfg-heat-5 { background-color: rgb(var(--tint-accent) / 0.358); }
+.cfg-heat-6 { background-color: rgb(var(--tint-accent) / 0.413); }
+.cfg-heat-7 { background-color: rgb(var(--tint-accent) / 0.469); }
+.cfg-heat-8 { background-color: rgb(var(--tint-accent) / 0.524); }
+.cfg-heat-9 { background-color: rgb(var(--tint-accent) / 0.580); }
+:root[data-theme="dark"] .cfg-heat-zero { background-color: rgba(255,255,255,0.05); }
+:root[data-theme="dark"] .cfg-heat-1 { background-color: rgb(var(--tint-accent) / 0.18); }
+:root[data-theme="dark"] .cfg-heat-2 { background-color: rgb(var(--tint-accent) / 0.24); }
+:root[data-theme="dark"] .cfg-heat-3 { background-color: rgb(var(--tint-accent) / 0.30); }
+:root[data-theme="dark"] .cfg-heat-4 { background-color: rgb(var(--tint-accent) / 0.36); }
+:root[data-theme="dark"] .cfg-heat-5 { background-color: rgb(var(--tint-accent) / 0.42); }
+:root[data-theme="dark"] .cfg-heat-6 { background-color: rgb(var(--tint-accent) / 0.48); }
+:root[data-theme="dark"] .cfg-heat-7 { background-color: rgb(var(--tint-accent) / 0.54); }
+:root[data-theme="dark"] .cfg-heat-8 { background-color: rgb(var(--tint-accent) / 0.60); }
+:root[data-theme="dark"] .cfg-heat-9 { background-color: rgb(var(--tint-accent) / 0.66); }
+
+/* 拖曳框選中:整表禁選字 + cell input 暫停事件,pointerenter 穩定命中 td */
+.cfg-matrix.is-dragging,
+.cfg-matrix.is-dragging * { user-select: none; }
+.cfg-matrix.is-dragging .cfg-matrix-cell { pointer-events: none; }
+/* 矩陣 cell 大量節點:transition 只留 hover 中的格,捲動不再整表跑動畫 */
+.cfg-matrix-cell-wrap { transition: none; }
+.cfg-matrix-cell-wrap:hover { transition: outline 0.1s; }
+
+/* ── E:06 中獎線 path/備註移到棋盤下方 ── */
+.cfg-paylines-v2-fields-under {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px 12px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.40);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  margin-top: 8px;
+}
+.cfg-paylines-v2-fields-under .cfg-paylines-v2-field { flex: 2 1 320px; }
+.cfg-paylines-v2-fields-under .cfg-paylines-v2-field-notes { flex: 1 1 200px; }
+.cfg-paylines-v2-fields-under .cfg-paylines-v2-path-input,
+.cfg-paylines-v2-fields-under .cfg-paylines-v2-notes-input { width: 100%; max-width: none; }
+/* fields 移出後 topbar 改兩欄:左 meta / 右 actions */
+.cfg-paylines-v2-topbar { grid-template-columns: auto 1fr; }
+.cfg-paylines-v2-topbar-actions { justify-content: flex-end; }
+
+/* ── F:07/09 拼圖列欄寬 — 改可換行 + 合理 min-width,窄幕不再擠成直排 ── */
+.cfg-puzzle-row { flex-wrap: wrap; }
+.cfg-puzzle-piece-var      { flex: 0 0 150px; }
+.cfg-puzzle-piece-subkey   { flex: 1 1 130px; min-width: 110px; }
+.cfg-puzzle-piece-op       { flex: 0 0 92px; }
+.cfg-puzzle-piece-value    { flex: 1 1 150px; min-width: 110px; }
+.cfg-puzzle-piece .cfg-puzzle-select,
+.cfg-puzzle-piece .cfg-puzzle-input { width: 100%; }
+
+/* ── G:JP 定義(01_Global → 13_Jackpots)── */
+.cfg-jp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cfg-jp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-jp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.cfg-jp-cell .input { width: 100%; }
+.cfg-jp-cell-grow  { flex: 1 1 220px; }
+.cfg-jp-cell-modes { flex: 1 1 100%; }
+.cfg-jp-del { margin-left: auto; flex-shrink: 0; }
+:root[data-theme="dark"] .cfg-jp-row {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+}
+
+/* ── H:docgen JP 自動帶入 ── */
+.docgen-sec-h .docgen-jp-sync {
+  margin-left: 10px;
+  font-size: 11px;
+  padding: 3px 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.docgen-hint-line {
+  font-size: 11px;
+  color: var(--text-light);
+  margin: 4px 0 8px;
+  word-break: keep-all;
+}
+
+/* ── I:暗色補洞(symbol / docgen / bcompare 主要容器)── */
+:root[data-theme="dark"] .sym-edit-section,
+:root[data-theme="dark"] .docgen-sec,
+:root[data-theme="dark"] .bcmp-card,
+:root[data-theme="dark"] .bcmp-slot {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+  color: var(--text);
+}
+:root[data-theme="dark"] .swatch-cell { border-color: rgba(255,255,255,0.22); }
+:root[data-theme="dark"] .field-label-sm,
+:root[data-theme="dark"] .docgen-hint-line { color: rgba(235,228,220,0.62); }

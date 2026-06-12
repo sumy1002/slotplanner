@@ -33,13 +33,7 @@
 
     <!-- 群組 2:狀態徽章(健康度 + 變更回顧)-->
     <div class="cfg-source-status">
-      <!-- v3.4 / C12:暗色模式切換 -->
-      <button class="cfg-theme-toggle"
-              @click="cycleThemeMode"
-              :title="'目前:' + themeModeLabel + '(點擊切換 auto → light → dark)'">
-        <span class="cfg-theme-toggle-icon">{{ themeModeIcon }}</span>
-        <span class="cfg-theme-toggle-label">{{ themeModeLabel }}</span>
-      </button>
+      <!-- v5.0-b:主題切換移除,唯一入口在 sidebar(app 層級全站有效)-->
 
       <!-- ── #15 搜尋按鈕 ── -->
       <button class="cfg-search-btn"
@@ -519,9 +513,31 @@
           </div>
           <div class="cfg-modes-list">
             <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
-                 :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode }">
+                 :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode,
+                           'is-collapsed': !isModeExpanded(m) }">
 
-              <!-- 卡片頂部:模式名稱 + 刪除 -->
+              <!-- v5.0-d:摘要列(預設收合;點擊展開編輯)-->
+              <div class="cfg-mode-summary" @click="toggleModeExpanded(m)"
+                   :title="isModeExpanded(m) ? '點擊收合' : '點擊展開編輯'">
+                <span class="cfg-mode-summary-caret">{{ isModeExpanded(m) ? '▾' : '▸' }}</span>
+                <span class="cfg-mode-summary-name"
+                      :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }">
+                  {{ m.mode || '(未命名)' }}</span>
+                <span v-if="g.starting_mode === m.mode && m.mode" class="cfg-mode-summary-badge start" title="起始模式">起始</span>
+                <span class="cfg-mode-summary-meta">局數 {{ m.spin_count }}</span>
+                <span class="cfg-mode-summary-trigger" :title="m.trigger_condition || '無觸發條件'">
+                  {{ m.trigger_condition || '無條件' }}</span>
+                <span v-if="!m.mode.trim() || duplicateNames.has(m.mode)" class="cfg-mode-summary-warn" title="名稱為空或重複">⚠</span>
+                <span class="cfg-mode-summary-spacer"></span>
+                <button class="cfg-mode-delete-btn"
+                        @click.stop="removeMode(idx)"
+                        :disabled="modes.length <= 1"
+                        :title="modes.length <= 1 ? '至少需要保留一個模式' : '刪除此模式'">✕</button>
+              </div>
+
+              <div v-show="isModeExpanded(m)" class="cfg-mode-card-expand">
+
+              <!-- 卡片頂部:模式名稱 -->
               <div class="cfg-mode-card-header">
                 <div class="cfg-mode-name-wrap">
                   <label class="cfg-mode-name-label">模式名稱</label>
@@ -531,10 +547,6 @@
                          placeholder="NG"
                          maxlength="20">
                 </div>
-                <button class="cfg-mode-delete-btn"
-                        @click="removeMode(idx)"
-                        :disabled="modes.length <= 1"
-                        :title="modes.length <= 1 ? '至少需要保留一個模式' : '刪除此模式'">✕</button>
               </div>
 
               <div v-if="!m.mode.trim()" class="cfg-warn cfg-warn-inline">⚠ 模式名稱不能為空</div>
@@ -729,6 +741,7 @@
                 </details><!-- /trigger_condition details -->
 
               </div>
+              </div><!-- /cfg-mode-card-expand (v5.0-d) -->
             </div>
 
             <button class="cfg-mode-add-btn" @click="addMode">
@@ -736,6 +749,73 @@
               <span>新增模式</span>
             </button>
           </div>
+        </div>
+
+          <!-- 區塊 4(v5.1):JP 定義 — 匯出至 13_Jackpots(選用分頁,引擎忽略;
+               文件生成的 JACKPOT 表會自動帶入此處內容) -->
+        <div class="cfg-section">
+          <div class="cfg-section-title">JP 定義 <span class="cfg-key">13_Jackpots</span></div>
+          <div class="cfg-modes-inline-hint">
+            定義 JACKPOT 名稱與倍數;<strong>文件生成</strong>會自動帶入,匯出 A.xlsx 時寫入選用分頁 13_Jackpots(模擬引擎忽略此分頁)。
+          </div>
+
+          <div v-if="jackpots.length === 0" class="cfg-hint" style="margin-bottom:8px;">
+            尚未定義 JP;沒有 JP 的遊戲可留空,文件生成將不出現 JACKPOT 表。
+          </div>
+
+          <div class="cfg-jp-list">
+            <div v-for="(j, ji) in jackpots" :key="'jp' + ji" class="cfg-jp-row">
+              <div class="cfg-jp-cell">
+                <label class="cfg-label">JP_ID</label>
+                <input class="input input-w-num cfg-mono" type="text" v-model.trim="j.jp_id" placeholder="JP1" maxlength="10">
+              </div>
+              <div class="cfg-jp-cell">
+                <label class="cfg-label">名稱</label>
+                <input class="input input-w-id" type="text" v-model.trim="j.name" placeholder="GRAND">
+              </div>
+              <div class="cfg-jp-cell">
+                <label class="cfg-label">類型 <span class="cfg-key">Kind</span></label>
+                <div class="cfg-chip-row">
+                  <button class="cfg-chip cfg-chip-sm" :class="{ active: j.kind !== 'PROGRESSIVE' }"
+                          @click="j.kind = 'FIXED'" title="固定倍數 JP(×注額)">固定</button>
+                  <button class="cfg-chip cfg-chip-sm" :class="{ active: j.kind === 'PROGRESSIVE' }"
+                          @click="j.kind = 'PROGRESSIVE'" title="累積彩池 JP(seed + 注金抽成)">累積</button>
+                </div>
+              </div>
+              <div class="cfg-jp-cell">
+                <label class="cfg-label">{{ j.kind === 'PROGRESSIVE' ? '起始彩池' : '倍數' }} <span class="cfg-key">×注額</span></label>
+                <input class="input input-center input-w-num" type="number" min="0" step="any" v-model.number="j.mult">
+              </div>
+              <div v-if="j.kind === 'PROGRESSIVE'" class="cfg-jp-cell">
+                <label class="cfg-label">抽成 <span class="cfg-key">% / 注</span></label>
+                <input class="input input-center input-w-num" type="number" min="0" max="100" step="any" v-model.number="j.increment_pct">
+              </div>
+              <div v-if="j.kind === 'PROGRESSIVE'" class="cfg-jp-cell">
+                <label class="cfg-label">必開上限 <span class="cfg-key">×注額,0=無</span></label>
+                <input class="input input-center input-w-num" type="number" min="0" step="any" v-model.number="j.must_hit_by">
+              </div>
+              <div class="cfg-jp-cell cfg-jp-cell-grow">
+                <label class="cfg-label">觸發說明</label>
+                <input class="input input-w-name" type="text" v-model.trim="j.trigger_desc" placeholder="集滿 6 顆金幣">
+              </div>
+              <div class="cfg-jp-cell cfg-jp-cell-modes">
+                <label class="cfg-label">適用模式</label>
+                <div class="cfg-chip-row">
+                  <button class="cfg-chip cfg-chip-sm" :class="{ active: jackpotHasMode(j, 'ALL') }"
+                          @click="toggleJackpotMode(j, 'ALL')">全部</button>
+                  <button v-for="mn in modeNames" :key="mn"
+                          class="cfg-chip cfg-chip-sm" :class="{ active: jackpotHasMode(j, mn) }"
+                          @click="toggleJackpotMode(j, mn)">{{ mn }}</button>
+                </div>
+              </div>
+              <button class="cfg-mode-delete-btn cfg-jp-del" @click="removeJackpot(ji)" title="刪除此 JP">✕</button>
+            </div>
+          </div>
+
+          <button class="cfg-mode-add-btn" @click="addJackpot">
+            <span style="font-size: 16px;">+</span>
+            <span>新增 JP</span>
+          </button>
         </div>
         </div>
               </div><!-- /cfg-global-flow -->
@@ -1055,6 +1135,21 @@
                             title="跳到 04_Reel_Weights 的副盤權重區">→ 前往 04 設定「R{{ activeReel.reel_id }}·副」權重</button>
                   </div>
 
+                  <!-- v5.1:附掛副盤符號集(契約加法欄位 SubReel_Symbol_Set)-->
+                  <div class="cfg-field" style="margin-top:6px;">
+                    <label class="cfg-label">
+                      副盤符號集 <span class="cfg-key">SubReel_Symbol_Set</span>
+                    </label>
+                    <select class="input input-w-id" v-model="activeReel.subreel_symbol_set">
+                      <option value="">（不指定）</option>
+                      <option v-for="nm in symbolSetNames" :key="nm" :value="nm">{{ nm }}</option>
+                    </select>
+                    <div class="cfg-hint">
+                      引擎優先序:04 副盤專屬權重 → 此符號集等權 → 沿用主輪保底。
+                      符號集在 <a href="#" @click.prevent="active='symbols'" class="cfg-link">03b_Symbol_Sets</a> 定義。
+                    </div>
+                  </div>
+
                   <!-- 雙盤面提醒 -->
                   <div v-if="(activeReel.subreel_kind||'STACK') === 'DUAL_PANEL'" class="cfg-subreel-dual-note">
                     ▦ 雙盤面：模擬時會在主輪同欄產生一張同尺寸、每次 spin 靜態重抽（無滾動）的第二盤。引擎已支援，B 結果中以 <code>is_subreel</code> 標記。
@@ -1371,7 +1466,7 @@
                     <button class="cfg-matrix-btn cfg-matrix-btn-danger" @click="matrixClearAll('reel', reelActiveMode, null)" title="整表清空為 0">清空</button>
                   </div>
                   <div class="cfg-mqb-spacer"></div>
-                  <span class="cfg-mqb-hint">點欄頭=選整欄 · 點列頭=選整列 · Shift/Ctrl=範圍/多選</span>
+                  <span class="cfg-mqb-hint">點格=選取並編輯 · 按住拖曳=框選 · Shift=範圍 · Ctrl/⌘=多選 · 欄頭/列頭=整欄/整列</span>
                 </div>
 
                 <!-- v3.3:範圍選取浮動操作條(僅在有 selection 時顯示) -->
@@ -1386,10 +1481,10 @@
                     <button class="cfg-matrix-btn" @click="applyMatrixSelOp('zero')" title="全部歸 0">歸 0</button>
                     <button class="cfg-matrix-btn cfg-matrix-btn-close" @click="clearMatrixSelection" title="取消選取">✕</button>
                   </div>
-                  <span class="cfg-matrix-sel-hint">Shift+Click=範圍 · Ctrl/⌘+Click=多選 · Click=單選</span>
+                  <span class="cfg-matrix-sel-hint">拖曳=框選 · Shift=範圍 · Ctrl/⌘=多選</span>
                 </div>
 
-                <table class="cfg-matrix">
+                <table class="cfg-matrix" :class="{ 'is-dragging': matrixDrag.active }">
                   <thead>
                     <tr>
                       <th class="cfg-matrix-corner">R \ Sym</th>
@@ -1448,17 +1543,18 @@
                             reelW(reelActiveMode).weights[r.reel_id + '-' + sid],
                             isMatrixCellSelected('reel', reelActiveMode, r.reel_id, sid),
                             reelIsTopWeight(reelActiveMode, r.reel_id, sid),
+                            reelHeatClass(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0),
                             cellPercent('reel', reelActiveMode, r.reel_id, sid),
                             getMatrixDisplayMode('reel', reelActiveMode)
                           ]"
                           :class="['cfg-matrix-cell-wrap',
+                                   reelHeatClass(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0),
                                    { 'is-selected': isMatrixCellSelected('reel', reelActiveMode, r.reel_id, sid),
                                      'is-top': reelIsTopWeight(reelActiveMode, r.reel_id, sid) }]"
-                          :style="{ backgroundColor: reelHeatColor(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0) }"
-                          @click.stop="toggleMatrixCell('reel', reelActiveMode, r.reel_id, sid, $event)">
+                          @pointerdown="onMatrixCellPointerDown('reel', reelActiveMode, r.reel_id, sid, $event)"
+                          @pointerenter="onMatrixCellPointerEnter('reel', reelActiveMode, r.reel_id, sid, $event)">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number.lazy="reelW(reelActiveMode).weights[r.reel_id + '-' + sid]"
-                               @click.stop>
+                               v-model.number.lazy="reelW(reelActiveMode).weights[r.reel_id + '-' + sid]">
                         <span v-if="cellPercent('reel', reelActiveMode, r.reel_id, sid)"
                               class="cfg-matrix-cell-pct"
                               :class="'is-' + getMatrixDisplayMode('reel', reelActiveMode)">{{ cellPercent('reel', reelActiveMode, r.reel_id, sid) }}</span>
@@ -1532,7 +1628,7 @@
                         </td>
                         <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxsub'+r.reel_id+sid"
                             class="cfg-matrix-cell-wrap"
-                            :style="{ backgroundColor: reelHeatColor(reelActiveMode, auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid] || 0) }">
+                            :class="reelHeatClass(reelActiveMode, auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid] || 0)">
                           <input class="cfg-matrix-cell" type="number" min="0"
                                  v-model.number.lazy="auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid]"
                                  @click.stop>
@@ -1540,6 +1636,8 @@
                         <td class="cfg-matrix-total-cell">{{ auxRowTotal('sub', reelActiveMode, r.reel_id) }}</td>
                         <td class="cfg-aux-ops">
                           <button class="cfg-matrix-btn" @click="auxFillRow('sub', reelActiveMode, r.reel_id, 100)" title="整列填 100">⇶100</button>
+                          <button class="cfg-matrix-btn" @click="auxFillFromSet('sub', reelActiveMode, r.reel_id)"
+                                  :title="'依 02 指定的副盤符號集帶入(成員 100/其餘 0)' + (r.subreel_symbol_set ? ':' + r.subreel_symbol_set : ';尚未指定')">⇆集</button>
                           <button class="cfg-matrix-btn" @click="auxNormalizeRow('sub', reelActiveMode, r.reel_id)" title="整列正規化至 100">⚖</button>
                         </td>
                       </tr>
@@ -1552,7 +1650,7 @@
                         </td>
                         <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxpnl'+p.panel_id+sid"
                             class="cfg-matrix-cell-wrap"
-                            :style="{ backgroundColor: reelHeatColor(reelActiveMode, auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid] || 0) }">
+                            :class="reelHeatClass(reelActiveMode, auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid] || 0)">
                           <input class="cfg-matrix-cell" type="number" min="0"
                                  v-model.number.lazy="auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid]"
                                  @click.stop>
@@ -1560,6 +1658,8 @@
                         <td class="cfg-matrix-total-cell">{{ auxRowTotal('panel', reelActiveMode, p.panel_id) }}</td>
                         <td class="cfg-aux-ops">
                           <button class="cfg-matrix-btn" @click="auxFillRow('panel', reelActiveMode, p.panel_id, 100)" title="整列填 100(建立專屬池)">⇶100</button>
+                          <button class="cfg-matrix-btn" @click="auxFillFromSet('panel', reelActiveMode, p.panel_id)"
+                                  :title="'依 02 指定的符號集帶入(成員 100/其餘 0)' + (p.symbol_set ? ':' + p.symbol_set : ';尚未指定')">⇆集</button>
                           <button class="cfg-matrix-btn" @click="auxNormalizeRow('panel', reelActiveMode, p.panel_id)" title="整列正規化至 100">⚖</button>
                           <button class="cfg-matrix-btn" @click="auxFillRow('panel', reelActiveMode, p.panel_id, 0)" title="整列歸 0(改走 fallback)">∅</button>
                         </td>
@@ -1651,7 +1751,7 @@
                             <td v-for="sid in reelW(m).symbol_ids" :key="sid"
                                 v-memo="[reelW(m).weights[r.reel_id + '-' + sid]]"
                                 class="cfg-matrix-cell-wrap"
-                                :style="{ backgroundColor: reelHeatColor(m, reelW(m).weights[r.reel_id + '-' + sid] || 0) }">
+                                :class="reelHeatClass(m, reelW(m).weights[r.reel_id + '-' + sid] || 0)">
                               <input class="cfg-matrix-cell" type="number" min="0"
                                      v-model.number.lazy="reelW(m).weights[r.reel_id + '-' + sid]"
                                      @click.stop>
@@ -1662,7 +1762,7 @@
                             <td v-for="sid in reelW(m).symbol_ids" :key="sid"
                                 v-memo="[reelW(m).weights[r.reel_id + '-' + sid]]"
                                 class="cfg-mode-multi-cell-ro"
-                                :style="{ backgroundColor: reelHeatColor(m, reelW(m).weights[r.reel_id + '-' + sid] || 0) }">
+                                :class="reelHeatClass(m, reelW(m).weights[r.reel_id + '-' + sid] || 0)">
                               {{ reelW(m).weights[r.reel_id + '-' + sid] || 0 }}
                             </td>
                           </template>
@@ -1671,7 +1771,7 @@
                             <td v-for="sid in reelW(m).symbol_ids" :key="sid"
                                 v-memo="[reelW(m).weights[r.reel_id + '-' + sid]]"
                                 class="cfg-mode-multi-cell-ro cfg-mode-multi-cell-base"
-                                :style="{ backgroundColor: reelHeatColor(m, reelW(m).weights[r.reel_id + '-' + sid] || 0) }">
+                                :class="reelHeatClass(m, reelW(m).weights[r.reel_id + '-' + sid] || 0)">
                               {{ reelW(m).weights[r.reel_id + '-' + sid] || 0 }}
                             </td>
                           </template>
@@ -1949,10 +2049,10 @@
                     <button class="cfg-matrix-btn" @click="applyMatrixSelOp('zero')" title="全部歸 0">歸 0</button>
                     <button class="cfg-matrix-btn cfg-matrix-btn-close" @click="clearMatrixSelection" title="取消選取">✕</button>
                   </div>
-                  <span class="cfg-matrix-sel-hint">Shift+Click=範圍 · Ctrl/⌘+Click=多選 · Click=單選</span>
+                  <span class="cfg-matrix-sel-hint">拖曳=框選 · Shift=範圍 · Ctrl/⌘=多選</span>
                 </div>
 
-                <table class="cfg-matrix">
+                <table class="cfg-matrix" :class="{ 'is-dragging': matrixDrag.active }">
                   <thead>
                     <tr>
                       <th class="cfg-matrix-corner">R \ 格</th>
@@ -2010,15 +2110,17 @@
                           v-memo="[
                             gridW(gridActiveMode).weights[r.reel_id + '-' + sz],
                             isMatrixCellSelected('grid', gridActiveMode, r.reel_id, sz),
+                            gridHeatClass(gridActiveMode, gridW(gridActiveMode).weights[r.reel_id + '-' + sz] || 0),
                             cellPercent('grid', gridActiveMode, r.reel_id, sz),
                             getMatrixDisplayMode('grid', gridActiveMode)
                           ]"
                           :class="['cfg-matrix-cell-wrap',
+                                   gridHeatClass(gridActiveMode, gridW(gridActiveMode).weights[r.reel_id + '-' + sz] || 0),
                                    { 'is-selected': isMatrixCellSelected('grid', gridActiveMode, r.reel_id, sz) }]"
-                          @click.stop="toggleMatrixCell('grid', gridActiveMode, r.reel_id, sz, $event)">
+                          @pointerdown="onMatrixCellPointerDown('grid', gridActiveMode, r.reel_id, sz, $event)"
+                          @pointerenter="onMatrixCellPointerEnter('grid', gridActiveMode, r.reel_id, sz, $event)">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number.lazy="gridW(gridActiveMode).weights[r.reel_id + '-' + sz]"
-                               @click.stop>
+                               v-model.number.lazy="gridW(gridActiveMode).weights[r.reel_id + '-' + sz]">
                         <span v-if="cellPercent('grid', gridActiveMode, r.reel_id, sz)"
                               class="cfg-matrix-cell-pct"
                               :class="'is-' + getMatrixDisplayMode('grid', gridActiveMode)">{{ cellPercent('grid', gridActiveMode, r.reel_id, sz) }}</span>
@@ -2142,7 +2244,7 @@
                             <td v-for="sz in gridW(m).grid_sizes" :key="sz"
                                 v-memo="[gridW(m).weights[r.reel_id + '-' + sz]]"
                                 class="cfg-matrix-cell-wrap"
-                                :style="{ backgroundColor: gridHeatColor ? gridHeatColor(m, gridW(m).weights[r.reel_id + '-' + sz] || 0) : '' }">
+                                :class="gridHeatClass(m, gridW(m).weights[r.reel_id + '-' + sz] || 0)">
                               <input class="cfg-matrix-cell" type="number" min="0"
                                      v-model.number.lazy="gridW(m).weights[r.reel_id + '-' + sz]"
                                      @click.stop>
@@ -2152,7 +2254,7 @@
                             <td v-for="sz in gridW(m).grid_sizes" :key="sz"
                                 v-memo="[gridW(m).weights[r.reel_id + '-' + sz]]"
                                 class="cfg-mode-multi-cell-ro"
-                                :style="{ backgroundColor: gridHeatColor ? gridHeatColor(m, gridW(m).weights[r.reel_id + '-' + sz] || 0) : '' }">
+                                :class="gridHeatClass(m, gridW(m).weights[r.reel_id + '-' + sz] || 0)">
                               {{ gridW(m).weights[r.reel_id + '-' + sz] || 0 }}
                             </td>
                           </template>
@@ -2160,7 +2262,7 @@
                             <td v-for="sz in gridW(m).grid_sizes" :key="sz"
                                 v-memo="[gridW(m).weights[r.reel_id + '-' + sz]]"
                                 class="cfg-mode-multi-cell-ro cfg-mode-multi-cell-base"
-                                :style="{ backgroundColor: gridHeatColor ? gridHeatColor(m, gridW(m).weights[r.reel_id + '-' + sz] || 0) : '' }">
+                                :class="gridHeatClass(m, gridW(m).weights[r.reel_id + '-' + sz] || 0)">
                               {{ gridW(m).weights[r.reel_id + '-' + sz] || 0 }}
                             </td>
                           </template>
@@ -2380,24 +2482,6 @@
                   </div>
                 </div>
 
-                <!-- 中:欄位(path / direction / notes 緊湊排)-->
-                <div class="cfg-paylines-v2-topbar-fields">
-                  <div class="cfg-paylines-v2-field">
-                    <label>path</label>
-                    <input class="input cfg-mono cfg-paylines-v2-path-input" type="text"
-                           :class="{ err: paylines[selectedPaylineIdx].path && !paylineValid(paylines[selectedPaylineIdx]).valid }"
-                           v-model.trim="paylines[selectedPaylineIdx].path"
-                           placeholder="(1,1)-(2,1)-(3,1)-(4,1)-(5,1)">
-                  </div>
-
-                  <div class="cfg-paylines-v2-field cfg-paylines-v2-field-notes">
-                    <label>備註</label>
-                    <input class="input cfg-paylines-v2-notes-input" type="text"
-                           v-model.trim="paylines[selectedPaylineIdx].notes"
-                           placeholder="(選填)">
-                  </div>
-                </div>
-
                 <!-- 右:點選模式 + 清空 + 刪除 -->
                 <div class="cfg-paylines-v2-topbar-actions">
                   <button class="cfg-paylines-svg-toggle"
@@ -2494,6 +2578,23 @@
                     </g>
                   </template>
                 </svg>
+              </div>
+
+              <!-- v5.0-d:path / 備註移到棋盤下方 — 棋盤位置不再被欄位換行推擠 -->
+              <div class="cfg-paylines-v2-fields-under">
+                <div class="cfg-paylines-v2-field">
+                  <label>path</label>
+                  <input class="input cfg-mono cfg-paylines-v2-path-input" type="text"
+                         :class="{ err: paylines[selectedPaylineIdx].path && !paylineValid(paylines[selectedPaylineIdx]).valid }"
+                         v-model.trim="paylines[selectedPaylineIdx].path"
+                         placeholder="(1,1)-(2,1)-(3,1)-(4,1)-(5,1)">
+                </div>
+                <div class="cfg-paylines-v2-field cfg-paylines-v2-field-notes">
+                  <label>備註</label>
+                  <input class="input cfg-paylines-v2-notes-input" type="text"
+                         v-model.trim="paylines[selectedPaylineIdx].notes"
+                         placeholder="(選填)">
+                </div>
               </div>
 
               <!-- debug 折疊 -->
@@ -3015,10 +3116,10 @@
                     <button class="cfg-matrix-btn" @click="applyMatrixSelOp('zero')" title="全部歸 0">歸 0</button>
                     <button class="cfg-matrix-btn cfg-matrix-btn-close" @click="clearMatrixSelection" title="取消選取">✕</button>
                   </div>
-                  <span class="cfg-matrix-sel-hint">Shift+Click=範圍 · Ctrl/⌘+Click=多選 · Click=單選</span>
+                  <span class="cfg-matrix-sel-hint">拖曳=框選 · Shift=範圍 · Ctrl/⌘=多選</span>
                 </div>
 
-                <table class="cfg-matrix">
+                <table class="cfg-matrix" :class="{ 'is-dragging': matrixDrag.active }">
                   <thead>
                     <tr>
                       <th class="cfg-matrix-corner">第 {{ comboActiveStep[comboActiveModeBar] }} 爆 · R \ Sym</th>
@@ -3077,18 +3178,19 @@
                             comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid],
                             isMatrixCellSelected('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar]),
                             comboIsTopWeight(comboActiveModeBar, comboActiveStep[comboActiveModeBar], r.reel_id, sid),
+                            comboHeatClass(comboActiveModeBar, comboActiveStep[comboActiveModeBar], comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid] || 0),
                             cellPercent('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar]),
                             comboActiveStep[comboActiveModeBar],
                             getMatrixDisplayMode('combo', comboActiveModeBar)
                           ]"
                           :class="['cfg-matrix-cell-wrap',
+                                   comboHeatClass(comboActiveModeBar, comboActiveStep[comboActiveModeBar], comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid] || 0),
                                    { 'is-selected': isMatrixCellSelected('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar]),
                                      'is-top': comboIsTopWeight(comboActiveModeBar, comboActiveStep[comboActiveModeBar], r.reel_id, sid) }]"
-                          :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, comboActiveStep[comboActiveModeBar], comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid] || 0) }"
-                          @click.stop="toggleMatrixCell('combo', comboActiveModeBar, r.reel_id, sid, $event, comboActiveStep[comboActiveModeBar])">
+                          @pointerdown="onMatrixCellPointerDown('combo', comboActiveModeBar, r.reel_id, sid, $event, comboActiveStep[comboActiveModeBar])"
+                          @pointerenter="onMatrixCellPointerEnter('combo', comboActiveModeBar, r.reel_id, sid, $event, comboActiveStep[comboActiveModeBar])">
                         <input class="cfg-matrix-cell" type="number" min="0"
-                               v-model.number.lazy="comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid]"
-                               @click.stop>
+                               v-model.number.lazy="comboW(comboActiveModeBar).weights[comboActiveStep[comboActiveModeBar] + '-' + r.reel_id + '-' + sid]">
                         <span v-if="cellPercent('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar])"
                               class="cfg-matrix-cell-pct"
                               :class="'is-' + getMatrixDisplayMode('combo', comboActiveModeBar)">{{ cellPercent('combo', comboActiveModeBar, r.reel_id, sid, comboActiveStep[comboActiveModeBar]) }}</span>
@@ -3219,7 +3321,7 @@
                             <td v-for="sid in comboW(comboActiveModeBar).symbol_ids" :key="sid"
                                 v-memo="[comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]]"
                                 class="cfg-matrix-cell-wrap"
-                                :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0) }">
+                                :class="comboHeatClass(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0)">
                               <input class="cfg-matrix-cell" type="number" min="0"
                                      v-model.number.lazy="comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]"
                                      @click.stop>
@@ -3230,7 +3332,7 @@
                             <td v-for="sid in comboW(comboActiveModeBar).symbol_ids" :key="sid"
                                 v-memo="[comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]]"
                                 class="cfg-combo-multi-cell-ro"
-                                :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0) }">
+                                :class="comboHeatClass(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0)">
                               {{ comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0 }}
                             </td>
                           </template>
@@ -3239,7 +3341,7 @@
                             <td v-for="sid in comboW(comboActiveModeBar).symbol_ids" :key="sid"
                                 v-memo="[comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid]]"
                                 class="cfg-combo-multi-cell-ro cfg-combo-multi-cell-base"
-                                :style="{ backgroundColor: comboHeatColor(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0) }">
+                                :class="comboHeatClass(comboActiveModeBar, step, comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0)">
                               {{ comboW(comboActiveModeBar).weights[step + '-' + r.reel_id + '-' + sid] || 0 }}
                             </td>
                           </template>

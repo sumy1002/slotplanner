@@ -114,6 +114,23 @@
   // ════════════════════════════════════════════════════════════════════
   //  手填敘述（meta）— 預設 / 讀寫 / 補齊
   // ════════════════════════════════════════════════════════════════════
+  // v5.1:從設定檔 LS 讀 JP 定義 → docgen rows;無資料回 null
+  function _jackpotRowsFromConfig() {
+    const arr = _readLS('slotplanner.aconfig.jackpots.v1', null);
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const rows = arr
+      .filter(j => j && (j.name || j.jp_id))
+      .map(j => ({
+        name: j.name || j.jp_id,
+        mult: Number(j.mult) || 0,
+        kind: j.kind || 'FIXED',                       // v5.2
+        increment_pct: Number(j.increment_pct) || 0,   // v5.2
+        must_hit_by: Number(j.must_hit_by) || 0,       // v5.2
+        trigger_desc: j.trigger_desc || '',            // v5.2
+      }));
+    return rows.length ? rows : null;
+  }
+
   function defaultMeta(config) {
     const cfg = config || collectConfig();
     // 各模式一句話描述（預帶 modes.notes）
@@ -136,7 +153,9 @@
       mode_desc: modeDesc,
       special_behavior: specialBehavior,
       jackpot: {
-        rows: [
+        // v5.1:優先自動帶入設定檔的 JP 定義(slotplanner.aconfig.jackpots.v1,
+        //   即 A.xlsx 13_Jackpots);設定檔沒有 JP 才退回通用四級樣板。
+        rows: _jackpotRowsFromConfig() || [
           { name: 'GRAND', mult: 1800 },
           { name: 'MAJOR', mult: 300 },
           { name: 'MINOR', mult: 30 },
@@ -306,10 +325,26 @@
       _cell(ws, R, 1, '名稱', { bold: true, bg: C.th, fg: C.thFg, h: 'center' });
       jr.forEach((j, i) => { if (i + 2 <= NCOL) _cell(ws, R, i + 2, j.name, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }); });
       R++;
-      // 倍數列
+      // 倍數列(累積 JP 此列語義為起始彩池)
       _cell(ws, R, 1, '倍數', { bold: true, bg: C.label, fg: C.labelFg, h: 'center' });
       jr.forEach((j, i) => { if (i + 2 <= NCOL) _cell(ws, R, i + 2, j.mult, { h: 'center' }); });
       R++;
+      // v5.2:有 kind 資訊時補類型列;有累積 JP 時補抽成/必開列
+      const hasKind = jr.some(j => j.kind);
+      const hasProg = jr.some(j => j.kind === 'PROGRESSIVE');
+      if (hasKind) {
+        _cell(ws, R, 1, '類型', { bold: true, bg: C.label, fg: C.labelFg, h: 'center' });
+        jr.forEach((j, i) => { if (i + 2 <= NCOL) _cell(ws, R, i + 2, j.kind === 'PROGRESSIVE' ? '累積' : '固定', { h: 'center' }); });
+        R++;
+      }
+      if (hasProg) {
+        _cell(ws, R, 1, '抽成 %/注', { bold: true, bg: C.label, fg: C.labelFg, h: 'center' });
+        jr.forEach((j, i) => { if (i + 2 <= NCOL) _cell(ws, R, i + 2, j.kind === 'PROGRESSIVE' ? (j.increment_pct || 0) : '—', { h: 'center' }); });
+        R++;
+        _cell(ws, R, 1, '必開上限', { bold: true, bg: C.label, fg: C.labelFg, h: 'center' });
+        jr.forEach((j, i) => { if (i + 2 <= NCOL) _cell(ws, R, i + 2, j.kind === 'PROGRESSIVE' ? (j.must_hit_by ? j.must_hit_by + 'x' : '無') : '—', { h: 'center' }); });
+        R++;
+      }
       kv('JACKPOT 備註', m.jackpot.note);
     }
 
@@ -509,6 +544,13 @@
       L.push('| ' + m.jackpot.rows.map(j => j.name).join(' | ') + ' |');
       L.push('| ' + m.jackpot.rows.map(() => '---').join(' | ') + ' |');
       L.push('| ' + m.jackpot.rows.map(j => j.mult).join(' | ') + ' |');
+      if (m.jackpot.rows.some(j => j.kind)) {
+        L.push('| ' + m.jackpot.rows.map(j => j.kind === 'PROGRESSIVE' ? '累積' : '固定').join(' | ') + ' |');
+      }
+      if (m.jackpot.rows.some(j => j.kind === 'PROGRESSIVE')) {
+        L.push('| ' + m.jackpot.rows.map(j => j.kind === 'PROGRESSIVE' ? `抽成 ${j.increment_pct || 0}%` : '—').join(' | ') + ' |');
+        L.push('| ' + m.jackpot.rows.map(j => j.kind === 'PROGRESSIVE' ? (j.must_hit_by ? `必開 ${j.must_hit_by}x` : '必開:無') : '—').join(' | ') + ' |');
+      }
       if (m.jackpot.note) { L.push(''); L.push(m.jackpot.note); }
       L.push('');
     }
@@ -540,6 +582,7 @@
     buildPlanXlsxBuffer,
     buildMechMarkdown,
     behaviorTemplate,
+    _jackpotRowsFromConfig,   // v5.1
     _isSpecial, _symId, _symRole,
   };
 
@@ -628,7 +671,15 @@
 
     <!-- JACKPOT -->
     <div class="docgen-sec">
-      <div class="docgen-sec-h">JACKPOT</div>
+      <div class="docgen-sec-h">JACKPOT
+        <button class="btn btn-sm docgen-jp-sync" @click="syncJpFromConfig"
+                title="以設定檔(01_Global · JP 定義 → 13_Jackpots)覆蓋下方列表">
+          ⇆ 從設定檔帶入
+        </button>
+      </div>
+      <div class="docgen-hint-line">
+        JP 來源:設定檔編輯器 01_Global「JP 定義」;下方為可覆寫的文件副本,按「從設定檔帶入」重新同步。
+      </div>
       <div class="docgen-jp">
         <div class="docgen-jp-row" v-for="(j, i) in meta.jackpot.rows" :key="i">
           <input class="input" v-model="j.name" placeholder="名稱">
@@ -690,6 +741,13 @@
       }
       function addJp() { meta.jackpot.rows.push({ name: '', mult: 0 }); }
       function removeJp(i) { meta.jackpot.rows.splice(i, 1); }
+      // v5.1:以設定檔 JP 定義覆蓋文件副本
+      function syncJpFromConfig() {
+        const rows = SP.DocGen._jackpotRowsFromConfig ? SP.DocGen._jackpotRowsFromConfig() : null;
+        if (!rows) { setHint('設定檔尚未定義 JP(01_Global → JP 定義)', 'warn'); return; }
+        meta.jackpot.rows.splice(0, meta.jackpot.rows.length, ...rows);
+        setHint(`已自設定檔帶入 ${rows.length} 個 JP`, 'ok');
+      }
 
       function fillBehavior(s) {
         const id = symId(s);
@@ -740,7 +798,7 @@
         } finally { busy.value = false; }
       }
 
-      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, fillBehavior, exportXlsx, exportMd, refreshConfig };
+      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, refreshConfig };
     },
   };
 

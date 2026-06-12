@@ -593,6 +593,7 @@
       subreel_rows: 0,
       subreel_inherit_weight: false,
       subreel_kind: 'STACK',   // v4.6:STACK / SIDE_VERTICAL / TOP_HORIZONTAL / DUAL_PANEL
+      subreel_symbol_set: '',  // v5.1:附掛副盤符號集(契約加法欄 SubReel_Symbol_Set;空=不指定)
     };
   }
 
@@ -639,6 +640,43 @@
       return true;
     } catch (e) {
       console.warn('[config-editor] saveLayout failed:', e);
+      return false;
+    }
+  }
+
+  // ─── v5.1:JP 定義(13_Jackpots;選用分頁,引擎忽略;文件生成自動帶入)───
+  const LS_JACKPOTS_KEY = 'slotplanner.aconfig.jackpots.v1';
+  function makeJackpot(jp_id) {
+    return {
+      jp_id: jp_id || 'JP1',
+      name: '',            // 顯示名(GRAND / MAJOR / ...)
+      kind: 'FIXED',       // v5.2:FIXED 固定倍數 / PROGRESSIVE 累積彩池
+      mult: 0,             // FIXED:倍數(×注額);PROGRESSIVE:起始彩池 seed(×注額)
+      increment_pct: 0,    // v5.2:PROGRESSIVE 注金抽成 %(0–100,文件/數值用)
+      must_hit_by: 0,      // v5.2:必開上限(×注額;0=無)
+      trigger_desc: '',    // 觸發說明(自由文字)
+      mode_scope: 'ALL',   // 適用模式(ALL 或模式名,逗號分隔)
+      notes: '',
+    };
+  }
+  function loadJackpots() {
+    try {
+      const raw = localStorage.getItem(LS_JACKPOTS_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(j => ({ ...makeJackpot(''), ...j }));
+    } catch (e) {
+      console.warn('[config-editor] loadJackpots failed:', e);
+      return [];
+    }
+  }
+  function saveJackpots(arr) {
+    try {
+      localStorage.setItem(LS_JACKPOTS_KEY, JSON.stringify(arr));
+      return true;
+    } catch (e) {
+      console.warn('[config-editor] saveJackpots failed:', e);
       return false;
     }
   }
@@ -2035,6 +2073,7 @@
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
     LS_PANELS_KEY, makePanel, loadPanels, savePanels,
+    LS_JACKPOTS_KEY, makeJackpot, loadJackpots, saveJackpots,
     LS_SYMBOLSETS_KEY, loadSymbolSets, saveSymbolSets,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,

@@ -31,6 +31,7 @@
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
     makePanel, loadPanels, savePanels, loadSymbolSets, saveSymbolSets,
+    makeJackpot, loadJackpots, saveJackpots,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
@@ -60,52 +61,10 @@
       const g        = reactive(loadGlobal());
 
       // ──────────────────────────────────────────────────────────
-      //  v3.4 / C12:暗色模式
-      //  - 寫入 LS,並透過 document.documentElement.dataset.theme 觸發 CSS 變數覆寫
-      //  - 三段:'auto' (跟系統)/ 'light' / 'dark'
+      //  v5.0-b:主題單源化 — C12 重複實作已移除
+      //  亮暗切換唯一入口在 app.js(sidebar 按鈕),寫 slotplanner.uiTheme.v1
+      //  + document.documentElement.dataset.theme;本元件不再持有 themeMode。
       // ──────────────────────────────────────────────────────────
-      const LS_THEME_KEY = 'slotplanner.uiTheme.v1';
-      const themeMode = ref(localStorage.getItem(LS_THEME_KEY) || 'auto');
-      function _applyTheme(mode) {
-        // 解析最終要套用的 data-theme:auto 看系統
-        let effective = mode;
-        if (mode === 'auto') {
-          const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-          effective = (mq && mq.matches) ? 'dark' : 'light';
-        }
-        document.documentElement.dataset.theme = effective;
-      }
-      function setThemeMode(mode) {
-        themeMode.value = mode;
-        try { localStorage.setItem(LS_THEME_KEY, mode); } catch (e) {}
-        _applyTheme(mode);
-      }
-      function cycleThemeMode() {
-        const order = ['auto', 'light', 'dark'];
-        const idx = order.indexOf(themeMode.value);
-        setThemeMode(order[(idx + 1) % order.length]);
-      }
-      const themeModeIcon = computed(() => ({
-        'auto':  '◐',
-        'light': '☀',
-        'dark':  '☾',
-      })[themeMode.value] || '◐');
-      const themeModeLabel = computed(() => ({
-        'auto':  '跟隨系統',
-        'light': '亮色',
-        'dark':  '暗色',
-      })[themeMode.value] || '?');
-
-      // 監聽系統色彩偏好變化(only when in auto mode)
-      function _setupThemeWatcher() {
-        if (!window.matchMedia) return;
-        try {
-          const mq = window.matchMedia('(prefers-color-scheme: dark)');
-          const handler = () => { if (themeMode.value === 'auto') _applyTheme('auto'); };
-          if (mq.addEventListener) mq.addEventListener('change', handler);
-          else mq.addListener(handler);
-        } catch (e) {}
-      }
 
       // ──────────────────────────────────────────────────────────
       //  v3.4 / B6:範本載入 diff preview
@@ -116,7 +75,7 @@
         // 從 LS 直接讀(避免依賴 reactive 變數順序)
         const counts = {
           modes: 0, layout: 0, paylines: 0, constraints: 0,
-          rules: 0, discards: 0, symbols: 0,
+          rules: 0, discards: 0, symbols: 0, jackpots: 0,
         };
         try {
           const m = JSON.parse(localStorage.getItem('slotplanner.aconfig.modes.v1') || '[]');
@@ -133,6 +92,8 @@
           counts.discards = Array.isArray(d) ? d.length : 0;
           const reg = JSON.parse(localStorage.getItem('slotplanner.registry.v1') || 'null');
           counts.symbols = reg && Array.isArray(reg.symbols) ? reg.symbols.length : 0;
+          const jp = JSON.parse(localStorage.getItem('slotplanner.aconfig.jackpots.v1') || '[]');
+          counts.jackpots = Array.isArray(jp) ? jp.length : 0;
         } catch (e) {}
         return counts;
       }
@@ -1014,6 +975,13 @@
         if (!k) { k = 'm' + (++_modeCardKeySeq); _modeCardKeyMap.set(m, k); }
         return k;
       }
+      // v5.0-d:模式清單 accordion — 預設全收合,點摘要列展開;同時間最多一張
+      const modeExpandedKey = ref(null);
+      function isModeExpanded(m) { return modeExpandedKey.value === modeCardKey(m); }
+      function toggleModeExpanded(m) {
+        const k = modeCardKey(m);
+        modeExpandedKey.value = (modeExpandedKey.value === k) ? null : k;
+      }
 
       function addMode() {
         // 自動產生不衝突的新名稱
@@ -1022,6 +990,7 @@
         let i = 1;
         while (taken.has(`${base}${i}`)) i++;
         modes.push(makeMode(`${base}${i}`));
+        modeExpandedKey.value = modeCardKey(modes[modes.length - 1]);   // v5.0-d:新卡自動展開
         emit('status', { type: 'ok', msg: `已新增模式 ${base}${i}` });
         // 流程優化:捲動到新卡片並聚焦名稱欄(找不到則 no-op,不影響功能)
         Vue.nextTick(() => {
@@ -1292,7 +1261,7 @@
         if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return;
         const a = layout[fromIdx], b = layout[toIdx];
         const ridA = a.reel_id, ridB = b.reel_id;
-        const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight', 'subreel_kind'];
+        const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight', 'subreel_kind', 'subreel_symbol_set'];
         for (const k of attrs) { const t = a[k]; a[k] = b[k]; b[k] = t; }
         _swapReelWeightKeys(ridA, ridB);
         activeReelIdx.value = toIdx;
@@ -1585,6 +1554,7 @@
 
       // 整欄 sum(欄 = 某 symbol 在所有 reel 的權重總和)
       function reelTotalForCol(mode, sid) {
+        if (mode === reelActiveMode.value) return _reelActiveTotals.value.cols[sid] || 0;
         const e = reelW(mode);
         let s = 0;
         for (let r = 1; r <= layout.length; r++) {
@@ -1826,7 +1796,11 @@
         if (kind === 'reel') {
           const e = reelW(mode);
           cur = Number(e.weights[`${r}-${col}`]) || 0;
-          if (dm === 'pct_row') {
+          if (mode === reelActiveMode.value) {
+            // v5.0-c:活躍模式走快取,O(1)
+            const t = _reelActiveTotals.value;
+            denom = (dm === 'pct_row') ? (t.rows[r] || 0) : (t.cols[col] || 0);
+          } else if (dm === 'pct_row') {
             for (const sid of e.symbol_ids) denom += Number(e.weights[`${r}-${sid}`]) || 0;
           } else {
             for (const rr of layout) denom += Number(e.weights[`${rr.reel_id}-${col}`]) || 0;
@@ -1834,7 +1808,10 @@
         } else if (kind === 'grid') {
           const e = gridW(mode);
           cur = Number(e.weights[`${r}-${col}`]) || 0;
-          if (dm === 'pct_row') {
+          if (mode === gridActiveMode.value) {
+            const t = _gridActiveTotals.value;
+            denom = (dm === 'pct_row') ? (t.rows[r] || 0) : (t.cols[String(col)] || 0);
+          } else if (dm === 'pct_row') {
             for (const sz of e.grid_sizes) denom += Number(e.weights[`${r}-${sz}`]) || 0;
           } else {
             for (const rr of layout) denom += Number(e.weights[`${rr.reel_id}-${col}`]) || 0;
@@ -1863,6 +1840,7 @@
       //  欄 = 某 grid_size 在所有 reel 的權重總和
       // ──────────────────────────────────────────────────────────
       function gridTotalForCol(mode, sz) {
+        if (mode === gridActiveMode.value) return _gridActiveTotals.value.cols[String(sz)] || 0;
         const e = gridW(mode);
         let s = 0;
         for (let r = 1; r <= layout.length; r++) {
@@ -1985,10 +1963,44 @@
         const [kind, mode, step] = first.split(':');
         return { kind, mode, step };
       }
-      function toggleMatrixCell(kind, mode, r, col, ev, step) {
-        // 切換 kind/mode/step:若新點 cell 不屬於現有 scope,先清空
-        const scope = _selectionScope();
+      // ────────────────────────────────────────────────────────
+      //  v5.0-c:矩陣 cell 互動重做(spreadsheet 模型)
+      //  - 點 cell(含 input 本體)= 選取該格 + 進入編輯;不再依賴 td 邊緣窄縫
+      //  - Shift+點 = 視覺序矩形範圍;Ctrl/⌘+點 = 多選 toggle(兩者皆不進入編輯)
+      //  - 按住拖曳跨格 = 矩形框選(自動離開編輯狀態)
+      //  - 範圍一律以「畫面上的列序」計算(修正列排序後 Shift 框選選錯格)
+      // ────────────────────────────────────────────────────────
+      const matrixDrag = reactive({
+        pending: false,   // pointerdown 後待命(尚未跨格)
+        active:  false,   // 已跨格,進入拖曳框選
+        kind: null, mode: null, step: '',
+        startR: null, startCol: null,
+      });
+      function _visualRowIds(kind, mode) {
+        try { return sortedReels(kind, mode).map(r => r.reel_id); }
+        catch (e) { return layout.map(r => r.reel_id); }
+      }
+      function _selectRange(kind, mode, a, b, step) {
+        // 以視覺順序(欄 = symbol_ids 現序;列 = sortedReels 現序)框出矩形
+        const cols = _colsForKind(kind, mode);
+        const rows = _visualRowIds(kind, mode);
+        if (cols.length === 0 || rows.length === 0) return;
+        const cidxA = cols.indexOf(String(a.col));
+        const cidxB = cols.indexOf(String(b.col));
+        const ridxA = rows.indexOf(a.r);
+        const ridxB = rows.indexOf(b.r);
+        if (cidxA < 0 || cidxB < 0 || ridxA < 0 || ridxB < 0) return;
+        const rMin = Math.min(ridxA, ridxB), rMax = Math.max(ridxA, ridxB);
+        const cMin = Math.min(cidxA, cidxB), cMax = Math.max(cidxA, cidxB);
+        for (let ri = rMin; ri <= rMax; ri++) {
+          for (let ci = cMin; ci <= cMax; ci++) {
+            matrixSelection.keys.add(_selKey(kind, mode, rows[ri], cols[ci], step));
+          }
+        }
+      }
+      function onMatrixCellPointerDown(kind, mode, r, col, ev, step) {
         const stStr = (step === undefined || step === null) ? '' : String(step);
+        const scope = _selectionScope();
         if (scope && (scope.kind !== kind || scope.mode !== mode || scope.step !== stStr)) {
           matrixSelection.keys = new Set();
           matrixSelection.anchor = null;
@@ -1996,35 +2008,52 @@
         col = String(col);
         const key = _selKey(kind, mode, r, col, step);
         if (ev && ev.shiftKey && matrixSelection.anchor) {
-          // 範圍選取:從 anchor 到當前
+          ev.preventDefault();   // 不搬移 focus / caret
           _selectRange(kind, mode, matrixSelection.anchor, { r, col }, step);
-        } else if (ev && (ev.ctrlKey || ev.metaKey)) {
-          // toggle 單一
+          return;
+        }
+        if (ev && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
           if (matrixSelection.keys.has(key)) matrixSelection.keys.delete(key);
           else matrixSelection.keys.add(key);
           matrixSelection.anchor = { r, col };
-        } else {
-          // 一般點:清空 + 選這個
-          matrixSelection.keys = new Set([key]);
-          matrixSelection.anchor = { r, col };
+          return;
+        }
+        // 一般按下:單選該格 + 設 anchor + 拖曳待命;允許 focus 直接編輯
+        matrixSelection.keys = new Set([key]);
+        matrixSelection.anchor = { r, col };
+        matrixDrag.pending = true;
+        matrixDrag.active = false;
+        matrixDrag.kind = kind; matrixDrag.mode = mode; matrixDrag.step = stStr;
+        matrixDrag.startR = r; matrixDrag.startCol = col;
+        // 點在 td gutter(非 input 本體)也把焦點交給該格 input → 死區消失
+        const host = ev && ev.currentTarget;
+        if (host && host.querySelector && ev.target && ev.target.tagName !== 'INPUT') {
+          const inp = host.querySelector('input.cfg-matrix-cell');
+          if (inp) { ev.preventDefault(); inp.focus(); if (inp.select) inp.select(); }
         }
       }
-      function _selectRange(kind, mode, a, b, step) {
-        // 由 a.r..b.r 與 a.col..b.col 框出矩形
-        const cols = _colsForKind(kind, mode);
-        if (cols.length === 0) return;
-        const aCol = String(a.col);
-        const bCol = String(b.col);
-        const cidxA = cols.indexOf(aCol);
-        const cidxB = cols.indexOf(bCol);
-        if (cidxA < 0 || cidxB < 0) return;
-        const rMin = Math.min(a.r, b.r), rMax = Math.max(a.r, b.r);
-        const cMin = Math.min(cidxA, cidxB), cMax = Math.max(cidxA, cidxB);
-        for (let r = rMin; r <= rMax; r++) {
-          for (let c = cMin; c <= cMax; c++) {
-            matrixSelection.keys.add(_selKey(kind, mode, r, cols[c], step));
-          }
+      function onMatrixCellPointerEnter(kind, mode, r, col, ev, step) {
+        if (!matrixDrag.pending) return;
+        if (ev && ev.buttons === 0) { matrixDrag.pending = false; matrixDrag.active = false; return; }
+        const stStr = (step === undefined || step === null) ? '' : String(step);
+        if (matrixDrag.kind !== kind || matrixDrag.mode !== mode || matrixDrag.step !== stStr) return;
+        col = String(col);
+        if (!matrixDrag.active) {
+          if (r === matrixDrag.startR && col === matrixDrag.startCol) return;
+          matrixDrag.active = true;
+          // 拖曳成立:離開編輯狀態,避免拖曳途中誤改值
+          try { document.activeElement && document.activeElement.blur(); } catch (e) {}
         }
+        matrixSelection.keys = new Set();
+        _selectRange(kind, mode,
+                     { r: matrixDrag.startR, col: matrixDrag.startCol },
+                     { r, col }, step);
+        matrixSelection.anchor = { r: matrixDrag.startR, col: matrixDrag.startCol };
+      }
+      function _onMatrixPointerUp() {
+        matrixDrag.pending = false;
+        matrixDrag.active = false;
       }
       function clearMatrixSelection() {
         matrixSelection.keys = new Set();
@@ -2035,7 +2064,8 @@
       }
       // 對選取的 cells 套用操作
       function applyMatrixSelOp(op, v = null) {
-        _pushUndoForSelection();        if (matrixSelection.keys.size === 0) return;
+        if (matrixSelection.keys.size === 0) return;
+        _pushUndoForSelection();
         const targets = [];
         for (const k of matrixSelection.keys) {
           // 'kind:mode:step:r-col' — mode/step 可能含 ':' 嗎?modeNames 是純識別字,不會
@@ -2304,6 +2334,32 @@
 
       // ── 06_Paylines 狀態 ──
       const paylines = reactive(loadPaylines());
+      // v5.2:選到空 path 的中獎線 → 自動開點選模式(直接在棋盤畫線)
+      //   (watch 於 selectedPaylineIdx 宣告後註冊,見下方)
+
+      // ── v5.1:JP 定義(13_Jackpots;文件生成自動帶入)──
+      const jackpots = reactive(loadJackpots());
+      function addJackpot() {
+        const taken = new Set(jackpots.map(j => j.jp_id));
+        let i = 1;
+        while (taken.has(`JP${i}`)) i++;
+        jackpots.push(makeJackpot(`JP${i}`));
+      }
+      function removeJackpot(idx) { jackpots.splice(idx, 1); }
+      function toggleJackpotMode(j, modeName) {
+        // mode_scope:'ALL' 或逗號分隔模式名;點 chip 切換
+        if (modeName === 'ALL') { j.mode_scope = 'ALL'; return; }
+        let cur = (j.mode_scope === 'ALL' || !j.mode_scope)
+          ? [] : j.mode_scope.split(',').map(x => x.trim()).filter(Boolean);
+        if (cur.includes(modeName)) cur = cur.filter(x => x !== modeName);
+        else cur.push(modeName);
+        j.mode_scope = cur.length ? cur.join(',') : 'ALL';
+      }
+      function jackpotHasMode(j, modeName) {
+        if (modeName === 'ALL') return j.mode_scope === 'ALL' || !j.mode_scope;
+        if (j.mode_scope === 'ALL' || !j.mode_scope) return false;
+        return j.mode_scope.split(',').map(x => x.trim()).includes(modeName);
+      }
       const paylinesDebugJson = computed(() => JSON.stringify(paylines, null, 2));
 
       function addPayline() {
@@ -2352,6 +2408,11 @@
       //  - 與文字 input 雙向同步(都寫入 paylines[idx].path)
       // ──────────────────────────────────────────────────────────
       const paylineClickMode = ref(false);
+      // v5.2:切到空 path 的線自動進入點選模式,省一次手動開關
+      watch(selectedPaylineIdx, (idx) => {
+        const pl = paylines[idx];
+        if (pl && !(pl.path || '').trim()) paylineClickMode.value = true;
+      });
 
       // 把目前選中 payline 的 path 解析成 [{reel, row}] 列表
       // 注意:解析失敗或只有 1 點時 parsed.valid 為 false,但仍可有 points,
@@ -2951,6 +3012,31 @@
           table[`${id}-${sid}`] = Math.round((v / s) * target);
         }
       }
+      // v5.2:依 02 指定的符號集帶入等權(成員 100、非成員 0)
+      function auxFillFromSet(kind, mode, id) {
+        let setName = '';
+        if (kind === 'sub') {
+          const r = layout.find(x => x.reel_id === id);
+          setName = (r && r.subreel_symbol_set) || '';
+        } else {
+          const p = panels.find(x => x.panel_id === id);
+          setName = (p && p.symbol_set) || '';
+        }
+        if (!setName) {
+          emit('status', { type: 'warn', msg: `此${kind === 'sub' ? '副盤' : 'Panel'}未在 02_Layout 指定符號集,無法帶入` });
+          return;
+        }
+        const members = new Set(symbolSets[setName] || []);
+        if (!members.size) {
+          emit('status', { type: 'warn', msg: `符號集「${setName}」為空,請先到 02 補成員` });
+          return;
+        }
+        _pushUndo('reel', mode);
+        const e = auxW(mode);
+        const table = kind === 'sub' ? e.sub_weights : e.panel_weights;
+        for (const sid of e.symbol_ids) table[`${id}-${sid}`] = members.has(sid) ? 100 : 0;
+        emit('status', { type: 'ok', msg: `已依符號集「${setName}」帶入:成員 100 / 其餘 0` });
+      }
       // panel 的權重來源描述(熱力/提示用)
       function panelWeightSourceLabel(p, mode) {
         if (auxRowTotal('panel', mode, p.panel_id) > 0) return '專屬權重';
@@ -3038,6 +3124,35 @@
         const th = vals.length <= 2 ? 0 : vals[1];
         return { mx, th };
       });
+      // v5.0-c:活躍模式的列/欄合計快取(cellPercent / 合計欄 O(1) 查表)
+      const _reelActiveTotals = computed(() => {
+        const rows = {}, cols = {};
+        if (!reelActiveMode.value) return { rows, cols };
+        const e = reelW(reelActiveMode.value);
+        for (const rr of layout) {
+          let sum = 0;
+          for (const sid of e.symbol_ids) {
+            const v = Number(e.weights[`${rr.reel_id}-${sid}`]) || 0;
+            sum += v; cols[sid] = (cols[sid] || 0) + v;
+          }
+          rows[rr.reel_id] = sum;
+        }
+        return { rows, cols };
+      });
+      const _gridActiveTotals = computed(() => {
+        const rows = {}, cols = {};
+        if (!gridActiveMode.value) return { rows, cols };
+        const e = gridW(gridActiveMode.value);
+        for (const rr of layout) {
+          let sum = 0;
+          for (const sz of e.grid_sizes) {
+            const v = Number(e.weights[`${rr.reel_id}-${sz}`]) || 0;
+            sum += v; cols[String(sz)] = (cols[String(sz)] || 0) + v;
+          }
+          rows[rr.reel_id] = sum;
+        }
+        return { rows, cols };
+      });
       function reelMaxWeight(mode) {
         if (mode === reelActiveMode.value) return _reelActiveStats.value.mx;
         const e = reelW(mode);
@@ -3061,6 +3176,17 @@
         const ratio = Math.sqrt(Math.min(1, w / mx));
         return `rgb(var(--tint-accent) / ${(0.08 + 0.50 * ratio).toFixed(3)})`;
       }
+      // v5.0-c:熱力底色改 class bucket(取代每格 inline style;
+      //   亦讓暗色模式可直接覆寫,移除對 style 字串的 selector hack 依賴)
+      function _heatBucket(w, mx) {
+        if (w === 0 || w === undefined || w === null) return 'cfg-heat-zero';
+        if (!mx) return '';
+        const ratio = Math.sqrt(Math.min(1, w / mx));
+        return 'cfg-heat-' + Math.max(1, Math.min(9, Math.round(ratio * 9)));
+      }
+      function reelHeatClass(mode, w)        { return _heatBucket(w, reelMaxWeight(mode)); }
+      function gridHeatClass(mode, w)        { return _heatBucket(w, gridMaxWeight(mode)); }
+      function comboHeatClass(mode, step, w) { return _heatBucket(w, comboMaxWeight(mode, step)); }
       // v3.5 / #6:該模式內整表 top-N(預設 2)的 weight 門檻
       function _topNThreshold(weights, n = 2) {
         const vals = Object.values(weights).filter(v => typeof v === 'number' && v > 0);
@@ -3078,6 +3204,7 @@
         return th > 0 && v >= th;
       }
       function reelTotalForRow(mode, reel_id) {
+        if (mode === reelActiveMode.value) return _reelActiveTotals.value.rows[reel_id] || 0;
         const e = reelW(mode);
         let s = 0;
         for (const sid of e.symbol_ids) {
@@ -3441,6 +3568,7 @@
         }
       }
       function gridTotalForRow(mode, reel_id) {
+        if (mode === gridActiveMode.value) return _gridActiveTotals.value.rows[reel_id] || 0;
         const e = gridW(mode);
         let s = 0;
         for (const sz of e.grid_sizes) {
@@ -5667,6 +5795,8 @@
         { key: 'ways_direction',   label: 'Ways 方向' },
         { key: 'cluster_min_size', label: 'Cluster 最小群組' },
         { key: 'return_pct',       label: '目標 RTP' },
+        { key: 'starting_mode',    label: '起始模式' },
+        { key: 'jackpots',         label: 'JP 定義' },   // v5.2
       ];
 
       // 建立扁平索引,每次 reactive 變動會自動重算
@@ -5698,6 +5828,22 @@
             title: f.label,
             subtitle: f.key,
             haystack: `${f.label} ${f.key} global`.toLowerCase(),
+          });
+        }
+
+        // ─ 2b. JP 定義(v5.2)─
+        for (const j of jackpots) {
+          const nm = j.name || j.jp_id;
+          if (!nm) continue;
+          items.push({
+            id: `jackpot:${j.jp_id}`,
+            tab: 'global',
+            category: 'field',
+            categoryLabel: 'JP',
+            icon: '💰',
+            title: `JP ${nm}`,
+            subtitle: `13_Jackpots · ${j.kind === 'PROGRESSIVE' ? '累積' : '固定'} ×${j.mult}`,
+            haystack: `jp jackpot 彩池 ${nm} ${j.jp_id} ${j.trigger_desc || ''}`.toLowerCase(),
           });
         }
 
@@ -5964,6 +6110,7 @@
         '連爆權重':   'combo_weights',
         '棄牌規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '腳本規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
+        'JP 定義':    'global',           // v5.1:JP 區塊掛在 01_Global
         '範本':       null,            // 不歸屬任何 tab
       };
       function markTabDirty(label) {
@@ -6001,6 +6148,7 @@
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
           case '棄牌規則': return () => saveDiscards(discards.map(d => ({ ...d })));
           case '腳本規則': return () => saveRules(rules.map(r => ({ ...r })));
+          case 'JP 定義':  return () => saveJackpots(jackpots.map(j => ({ ...j })));
           default: return null;
         }
       }
@@ -6043,6 +6191,7 @@
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
       watch(discards,     () => scheduleSave('棄牌規則'), { deep: true });
       watch(rules,        () => scheduleSave('腳本規則'), { deep: true });
+      watch(jackpots,     () => scheduleSave('JP 定義'), { deep: true });
 
       // ──────────────────────────────────────────────────────────
       //  #2 跨 tab 健康度檢查(validateConfig)
@@ -6072,6 +6221,32 @@
         // 03_Symbols 名稱集合(SymbolRegistry)
         const symbolNameSet = new Set(symbolNames.value);
 
+        // ─── 01_Global · JP 定義(v5.2)───
+        const jpIdSeen = new Set();
+        for (const j of jackpots) {
+          const jid = (j.jp_id || '').trim();
+          if (!jid && !(j.name || '').trim()) continue;   // 全空列不檢查
+          if (jid) {
+            if (jpIdSeen.has(jid)) add('error', 'global', `JP_ID 重複:${jid}`);
+            jpIdSeen.add(jid);
+          } else {
+            add('warn', 'global', `JP「${j.name}」缺 JP_ID,匯出後外部程式難以引用`);
+          }
+          if (!(Number(j.mult) > 0)) add('warn', 'global', `JP ${j.name || jid} 的${j.kind === 'PROGRESSIVE' ? '起始彩池' : '倍數'}為 0`);
+          if (j.kind === 'PROGRESSIVE') {
+            const inc = Number(j.increment_pct) || 0;
+            if (inc <= 0) add('warn', 'global', `累積 JP ${j.name || jid} 抽成 % 為 0,彩池不會成長`);
+            if (inc > 100) add('error', 'global', `累積 JP ${j.name || jid} 抽成 % 超過 100`);
+            const mhb = Number(j.must_hit_by) || 0;
+            if (mhb > 0 && mhb < Number(j.mult)) add('error', 'global', `累積 JP ${j.name || jid} 必開上限(${mhb}x)小於起始彩池(${j.mult}x)`);
+          }
+          if (j.mode_scope && j.mode_scope !== 'ALL') {
+            for (const mn of j.mode_scope.split(',').map(x => x.trim()).filter(Boolean)) {
+              if (!validModeSet.has(mn)) add('error', 'global', `JP ${j.name || jid} 的適用模式「${mn}」不在模式清單`);
+            }
+          }
+        }
+
         // ─── 02_Layout ───
         if (layout.length === 0) {
           add('error', 'layout', '盤面結構為空,請至少新增一個 Reel');
@@ -6082,6 +6257,13 @@
             add('error', 'layout', `Reel ID 重複:${r.reel_id}`);
           } else {
             reelIdSeen.add(r.reel_id);
+          }
+          // v5.2:副盤符號集引用檢查(對齊 py a_loader 的 ConfigValidationError)
+          if (r.has_subreel && r.subreel_symbol_set) {
+            const mem = symbolSets[r.subreel_symbol_set];
+            if (!Array.isArray(mem) || mem.length === 0) {
+              add('error', 'layout', `R${r.reel_id} 副盤引用的符號集「${r.subreel_symbol_set}」未定義或為空(外部模擬器會拒讀)`);
+            }
           }
         }
 
@@ -6459,10 +6641,11 @@
 
         if (id === 'global') {
           // v3.1:global 同時涵蓋全域 + 模式定義(原 11_Mode_Config 已合併進來)
-          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
+          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· JP 定義(目前 ${jackpots.length} 個)\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
           Object.assign(g, DEFAULT_GLOBAL);
           modes.splice(0, modes.length, ...DEFAULT_MODES.map(m => ({ ...m })));
-          emit('status', { type: 'ok', msg: '已重設全域設定 + 模式定義為預設值' });
+          jackpots.splice(0, jackpots.length);   // v5.1:JP 隨 01_Global 一併重設
+          emit('status', { type: 'ok', msg: '已重設全域設定 + 模式定義 + JP 為預設值' });
         } else if (id === 'layout') {
           if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${layout.length} 個 Reel(含副 Reel 設定)\n\n回到預設 5 Reel × 3 列,此動作不可復原。`)) return;
           layout.splice(0, layout.length, ...DEFAULT_LAYOUT.map(r => ({ ...r })));
@@ -6519,9 +6702,7 @@
 
       onMounted(() => {
         emit('status', { type: 'wait', msg: 'A 設定檔編輯器' });
-        // v3.4:啟動暗色模式(套用 LS 中的 themeMode)
-        _applyTheme(themeMode.value);
-        _setupThemeWatcher();
+        // v5.0-b:主題由 app 層套用,此處不再處理
         document.addEventListener('click', _onDocClickForMatrixMenu, true);
         document.addEventListener('click', _onDocClickForRulesAddMenu, true);
         document.addEventListener('click', _onDocClickForPaylineAddMenu, true);
@@ -6537,8 +6718,11 @@
         // #10:確保 baseline 存在(若首次使用就用當前 LS 內容建立)
         ensureBaseline();
         refreshBaselineInfo();
+        // v5.0-c:矩陣拖曳框選收尾
+        window.addEventListener('pointerup', _onMatrixPointerUp);
       });
       onUnmounted(() => {
+        window.removeEventListener('pointerup', _onMatrixPointerUp);
         document.removeEventListener('click', _onDocClickForMatrixMenu, true);
         document.removeEventListener('click', _onDocClickForRulesAddMenu, true);
         document.removeEventListener('click', _onDocClickForPaylineAddMenu, true);
@@ -6780,7 +6964,7 @@
         symbolSets, symbolSetNames, addSymbolSet, removeSymbolSet, toggleSymbolInSet,
         // v4.8 04 副盤權重(副輪 .sub + Panel)
         auxW, independentSubReels, hasAuxWeightRows,
-        auxRowTotal, auxFillRow, auxNormalizeRow, panelWeightSourceLabel,
+        auxRowTotal, auxFillRow, auxNormalizeRow, auxFillFromSet, panelWeightSourceLabel,
         // v4.8:移除冗餘底線匯出(_dragReelIdx/_dragOverIdx 已以別名匯出,底線名觸發 Vue 保留前綴警告)
         onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
         LAYOUT_CELL_SIZE: LAYOUT_CELL_SIZE_OUT,
@@ -6847,8 +7031,10 @@
         // v3.3 A2:矩陣強化
         reelTotalForCol, reelFillColUniform, reelScaleCol, reelNormalizeCol, reelCopyColToAll,
         colMenu, openColMenu, closeColMenu,
-        matrixSelection, toggleMatrixCell, clearMatrixSelection,
+        matrixSelection, clearMatrixSelection,
+        onMatrixCellPointerDown, onMatrixCellPointerEnter, matrixDrag,
         isMatrixCellSelected, applyMatrixSelOp,
+        reelHeatClass, gridHeatClass, comboHeatClass,
         // v3.5:矩陣顯示模式 + 05/08 整欄操作
         getMatrixDisplayMode, setMatrixDisplayMode, cellPercent,
         gridTotalForCol, gridFillColUniform, gridScaleCol, gridNormalizeCol, gridCopyColToAll,
@@ -6895,9 +7081,9 @@
         reelShowAllModes, gridShowAllModes,
         reelHiddenCount, gridHiddenCount,
         reelCellDiff, gridCellDiff, cellDiffLabel,
-        // v3.4 / C12:暗色模式
-        themeMode, themeModeIcon, themeModeLabel, setThemeMode, cycleThemeMode,
         // v3.4 / B6:範本載入 diff preview
+        modeExpandedKey, isModeExpanded, toggleModeExpanded,
+        jackpots, addJackpot, removeJackpot, toggleJackpotMode, jackpotHasMode,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
         confirmTemplateDiffLoad,
         // v3.4 / B5:active tab issues

@@ -97,6 +97,7 @@
     const comboWeights= readLS('slotplanner.aconfig.comboweights.v1', {});
     const discards    = readLS('slotplanner.aconfig.discards.v1',     []);
     const rules       = readLS('slotplanner.aconfig.rules.v1',        []);
+    const jackpots    = readLS('slotplanner.aconfig.jackpots.v1',     []);   // v5.1
     const registryRaw = readLS('slotplanner.registry.v1',             { symbols: [] });
 
     const modeNames = modes.map(m => m.mode).filter(Boolean);
@@ -131,6 +132,7 @@
       ['10_Discard_Rules', '棄牌規則'],
       ['11_Mode_Config', '模式設定'],
       ['12_Distribution_Bins', '分佈區間'],
+      ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
     ]);
     wsR.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF5A3DB0' } };
     setCols(wsR, [28, 50]);
@@ -144,13 +146,15 @@
     // 02_Layout
     const wsL = wb.addWorksheet('02_Layout');
     wsL.addRow(['Reel_ID', 'Y_Offset', 'Max_Rows', 'Has_SubReel',
-                'SubReel_Position', 'SubReel_Rows', 'SubReel_Inherit_Weight', 'SubReel_Kind']);
+                'SubReel_Position', 'SubReel_Rows', 'SubReel_Inherit_Weight', 'SubReel_Kind',
+                'SubReel_Symbol_Set']);
     for (const r of layoutRows) {
       wsL.addRow([r.reel_id, r.y_offset, r.max_rows, r.has_subreel,
                   r.subreel_position, r.subreel_rows, r.subreel_inherit_weight,
-                  r.subreel_kind || 'STACK']);
+                  r.subreel_kind || 'STACK',
+                  r.subreel_symbol_set || '']);   // v5.1:契約加法欄
     }
-    boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22]);
+    boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22, 14, 20]);
 
     // 02b_Panels(v4.7:自由副盤;無 panel → 仍寫表頭，引擎讀到空 → panels=[])
     const wsPnl = wb.addWorksheet("02b_Panels");
@@ -363,6 +367,20 @@
     }
     boldHdr(wsB); setCols(wsB, [13, 40, 28]);
 
+    // 13_Jackpots(v5.1:選用分頁;契約加法。引擎不讀,供文件生成/前端使用。
+    //   無 JP → 仍寫表頭,讀取端讀到空 → jackpots=[])
+    const wsJ = wb.addWorksheet('13_Jackpots');
+    // v5.2:Kind=FIXED/PROGRESSIVE;Multiplier 在 PROGRESSIVE 語義為起始彩池 seed(×注額)
+    wsJ.addRow(['JP_ID', 'Name', 'Kind', 'Multiplier', 'Increment_Pct', 'Must_Hit_By',
+                'Trigger_Desc', 'Mode_Scope', 'Notes']);
+    for (const j of (Array.isArray(jackpots) ? jackpots : [])) {
+      if (!j || (!j.name && !j.jp_id)) continue;
+      wsJ.addRow([j.jp_id || '', j.name || '', j.kind || 'FIXED', Number(j.mult) || 0,
+                  Number(j.increment_pct) || 0, Number(j.must_hit_by) || 0,
+                  j.trigger_desc || '', j.mode_scope || 'ALL', j.notes || '']);
+    }
+    boldHdr(wsJ); setCols(wsJ, [10, 16, 13, 12, 13, 12, 30, 14, 24]);
+
     return await wb.xlsx.writeBuffer();
   }
 
@@ -441,6 +459,7 @@
       comboweights: 'slotplanner.aconfig.comboweights.v1',
       discards:     'slotplanner.aconfig.discards.v1',
       rules:        'slotplanner.aconfig.rules.v1',
+      jackpots:     'slotplanner.aconfig.jackpots.v1',   // v5.1
       registry:     'slotplanner.registry.v1',
     };
     const out = {};
@@ -471,6 +490,7 @@
       comboweights: 'slotplanner.aconfig.comboweights.v1',
       discards:     'slotplanner.aconfig.discards.v1',
       rules:        'slotplanner.aconfig.rules.v1',
+      jackpots:     'slotplanner.aconfig.jackpots.v1',   // v5.1
       registry:     'slotplanner.registry.v1',
     };
     for (const [k, lsKey] of Object.entries(keys)) {

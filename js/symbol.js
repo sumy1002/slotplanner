@@ -109,14 +109,14 @@
         </div>
         <div class="sep"></div>
 
-        <!-- 外觀 / 識別(顏色 + 編號 + 名稱 + 代碼)-->
+        <!-- 外觀 / 識別(顏色 + 編號 + 名稱 + 代碼)— v5.0-a 壓縮版 -->
         <div class="sym-edit-section">
           <div class="section-title">外觀 / 識別</div>
-          <div class="sym-edit-row">
+          <div class="sym-appearance-row">
             <div class="sym-swatch-preview" :style="swatchStyle(selected.id)">
               {{ initialOf(selected) }}
             </div>
-            <div class="swatch-grid">
+            <div class="swatch-strip">
               <div v-for="(c, i) in SWATCH_COLORS" :key="i"
                    class="swatch-cell"
                    :class="{selected: isCurrentSwatch(i)}"
@@ -124,35 +124,35 @@
                    :title="c[0]"
                    @click="pickSwatch(i)"></div>
             </div>
-            <div class="sym-id-fields">
-              <div>
-                <div class="field-label-sm">編號（數字）</div>
-                <input class="input input-sm input-center"
-                       :class="{err: numErr}"
-                       v-model="form.number"
-                       @input="onFieldEdit"
-                       placeholder="00"
-                       inputmode="numeric">
-                <div v-if="numErr" class="field-err">編號已重複</div>
+          </div>
+          <div class="sym-id-grid">
+            <div>
+              <div class="field-label-sm">編號（數字）</div>
+              <input class="input input-sm input-center input-w-num"
+                     :class="{err: numErr}"
+                     v-model="form.number"
+                     @input="onFieldEdit"
+                     placeholder="00"
+                     inputmode="numeric">
+              <div v-if="numErr" class="field-err">編號已重複</div>
+            </div>
+            <div>
+              <div class="field-label-sm">名稱</div>
+              <input class="input input-sm input-w-id"
+                     :class="{err: nameErr}"
+                     v-model="form.name"
+                     @input="onFieldEdit"
+                     placeholder="symbol 名稱">
+              <div v-if="nameErr" class="field-err">名稱已重複</div>
+            </div>
+            <div>
+              <div class="field-label-sm">
+                Symbol_ID <span class="field-label-hint">A.xlsx 代碼,留空用名稱</span>
               </div>
-              <div>
-                <div class="field-label-sm">名稱</div>
-                <input class="input input-sm input-center"
-                       :class="{err: nameErr}"
-                       v-model="form.name"
-                       @input="onFieldEdit"
-                       placeholder="symbol 名稱">
-                <div v-if="nameErr" class="field-err">名稱已重複</div>
-              </div>
-              <div>
-                <div class="field-label-sm">
-                  Symbol_ID <span class="field-label-hint">A.xlsx 代碼,留空用名稱</span>
-                </div>
-                <input class="input input-sm input-center cfg-mono"
-                       v-model="form.symbol_id"
-                       @input="onFieldEdit"
-                       placeholder="WILD / H1 / L2">
-              </div>
+              <input class="input input-sm cfg-mono input-w-id"
+                     v-model="form.symbol_id"
+                     @input="onFieldEdit"
+                     placeholder="WILD / H1 / L2">
             </div>
           </div>
         </div>
