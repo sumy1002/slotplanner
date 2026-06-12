@@ -504,7 +504,7 @@
                       :class="{ active: g.starting_mode === m }"
                       @click="g.starting_mode = m">{{ m }}</button>
             </div>
-            <input v-else class="input" type="text" v-model.trim="g.starting_mode" placeholder="NG">
+            <input v-else class="input input-w-id" type="text" v-model.trim="g.starting_mode" placeholder="NG">
             <div v-if="modeNames.length > 0 && !modeNames.includes(g.starting_mode)" class="cfg-warn">
               ⚠ 「{{ g.starting_mode }}」不在下方模式清單中,模擬將會失敗
             </div>
@@ -525,7 +525,7 @@
               <div class="cfg-mode-card-header">
                 <div class="cfg-mode-name-wrap">
                   <label class="cfg-mode-name-label">模式名稱</label>
-                  <input class="input cfg-mode-name-input"
+                  <input class="input cfg-mode-name-input input-w-id"
                          :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }"
                          v-model.trim="m.mode"
                          placeholder="NG"
@@ -550,7 +550,7 @@
                     <label class="cfg-label">
                       局數 <span class="cfg-key">spin_count</span>
                     </label>
-                    <input class="input input-center" type="number" min="0" v-model.number="m.spin_count">
+                    <input class="input input-center input-w-num" type="number" min="0" v-model.number="m.spin_count">
                     <div class="cfg-hint">0 = 無限 / FG 通常 10–15</div>
                   </div>
 
@@ -841,29 +841,30 @@
 
             <div class="cfg-field">
               <label class="cfg-label">Panel ID <span class="cfg-key">Panel_ID</span></label>
-              <input class="input" :value="activePanel.panel_id"
+              <input class="input input-w-id" :value="activePanel.panel_id"
                      @change="renamePanel(activePanelIdx, $event.target.value)">
             </div>
 
             <div class="cfg-mode-grid">
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">X 位置 <span class="cfg-key">Col</span></label>
-                <input class="input" type="number" v-model.number="activePanel.col">
+                <input class="input input-w-num" type="number" v-model.number="activePanel.col">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">Y 位置 <span class="cfg-key">Row</span></label>
-                <input class="input" type="number" v-model.number="activePanel.row">
-                <div class="cfg-hint">與主盤同座標:X=0 最左欄、Y=0 基準列,皆可負;預覽會自動擴張涵蓋。</div>
+                <input class="input input-w-num" type="number" v-model.number="activePanel.row">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">寬 <span class="cfg-key">Width</span></label>
-                <input class="input" type="number" min="1" max="12" v-model.number="activePanel.width">
+                <input class="input input-w-num" type="number" min="1" max="12" v-model.number="activePanel.width">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">高 <span class="cfg-key">Height</span></label>
-                <input class="input" type="number" min="1" max="12" v-model.number="activePanel.height">
+                <input class="input input-w-num" type="number" min="1" max="12" v-model.number="activePanel.height">
               </div>
             </div>
+            <!-- v4.9-c / C2:長 hint 移出兩欄 grid,整寬顯示 -->
+            <div class="cfg-hint">與主盤同座標:X=0 最左欄、Y=0 基準列,皆可負;預覽會自動擴張涵蓋。</div>
 
             <div class="cfg-field">
               <label class="cfg-label">是否參與主盤連線 <span class="cfg-key">Join_Payline</span></label>
@@ -971,14 +972,14 @@
                       <label class="cfg-label">
                         縱向偏移 <span class="cfg-key">Y_Offset</span>
                       </label>
-                      <input class="input" type="number" v-model.number="activeReel.y_offset">
+                      <input class="input input-w-num" type="number" v-model.number="activeReel.y_offset">
                       <div class="cfg-hint">正值偏下、負值偏上；0 = 基準列對齊</div>
                     </div>
                     <div class="cfg-field cfg-field-compact">
                       <label class="cfg-label">
                         主 Reel 列數 <span class="cfg-key">Max_Rows</span>
                       </label>
-                      <input class="input" type="number" min="1" max="9" v-model.number="activeReel.max_rows">
+                      <input class="input input-w-num" type="number" min="1" max="9" v-model.number="activeReel.max_rows">
                       <div class="cfg-hint">此 Reel 顯示幾列符號（建議 1–9）</div>
                     </div>
                   </div>
@@ -1032,7 +1033,7 @@
                         副盤列數 <span class="cfg-key">SubReel_Rows</span>
                       </label>
                       <input v-if="(activeReel.subreel_kind||'STACK') !== 'DUAL_PANEL'"
-                             class="input" type="number" min="1" max="9" v-model.number="activeReel.subreel_rows">
+                             class="input input-w-num" type="number" min="1" max="9" v-model.number="activeReel.subreel_rows">
                       <div v-else class="cfg-payline-dir-readonly">{{ activeReel.max_rows }} 列（雙盤面鎖定＝主輪列數）</div>
                     </div>
                   </div>
@@ -1176,7 +1177,9 @@
 
         <template v-else>
           <!-- ── Sticky 模式選擇列 ── -->
-          <div class="cfg-sticky-mode-bar">
+          <!-- v4.9-c / D1:sticky bar 拆兩列(模式列 + 工具列)避免互相擠壓 -->
+          <div class="cfg-sticky-mode-bar cfg-smb-stacked">
+            <div class="cfg-smb-row cfg-smb-row-modes">
             <span class="cfg-sticky-mode-label">模式</span>
             <button v-for="m in modeNames" :key="m"
                     class="cfg-chip"
@@ -1185,6 +1188,8 @@
             <span class="cfg-sticky-meta" v-if="reelActiveMode">
               Max: <strong>{{ reelMaxWeight(reelActiveMode) }}</strong>
             </span>
+            </div>
+            <div class="cfg-smb-row cfg-smb-row-tools" v-if="reelActiveMode">
             <!-- v3.5:顯示模式切換 -->
             <span v-if="reelActiveMode" class="cfg-matrix-display-toggle"
                   title="切換 cell 顯示模式(輸入值仍為絕對權重,百分比只是顯示)">
@@ -1288,6 +1293,7 @@
                 </div>
               </div>
             </span>
+            </div>
           </div>
 
           <!-- v4.0 / #2:移除頂部平均占比 chips(占比改看下方 cell 的 %橫/%縱 顯示模式);保留 CSV 匯入匯出 -->
@@ -1747,7 +1753,9 @@
           </div>
 
           <!-- ── Sticky 模式選擇列 ── -->
-          <div class="cfg-sticky-mode-bar">
+          <!-- v4.9-c / D1:sticky bar 拆兩列(同 04)-->
+          <div class="cfg-sticky-mode-bar cfg-smb-stacked">
+            <div class="cfg-smb-row cfg-smb-row-modes">
             <span class="cfg-sticky-mode-label">模式</span>
             <button v-for="m in modeNames" :key="m"
                     class="cfg-chip"
@@ -1756,6 +1764,8 @@
             <span class="cfg-sticky-meta" v-if="gridActiveMode">
               Max: <strong>{{ gridMaxWeight(gridActiveMode) }}</strong>
             </span>
+            </div>
+            <div class="cfg-smb-row cfg-smb-row-tools" v-if="gridActiveMode">
             <!-- v3.5:顯示模式切換 -->
             <span v-if="gridActiveMode" class="cfg-matrix-display-toggle"
                   title="切換 cell 顯示模式(輸入值仍為絕對權重,百分比只是顯示)">
@@ -1858,6 +1868,7 @@
                 </div>
               </div>
             </span>
+            </div>
           </div>
 
           <!-- v3.5 / #14:平均占比預覽 bar(05 顯示各格數平均占比) -->
@@ -2695,9 +2706,8 @@
                 <div class="cfg-constraints-v2-section-title">
                   門檻數量 <span class="cfg-key">threshold</span>
                 </div>
-                <input class="input" type="number" min="0"
-                       v-model.number="constraints[selectedConstraintIdx].threshold"
-                       style="max-width:200px;">
+                <input class="input input-w-num" type="number" min="0"
+                       v-model.number="constraints[selectedConstraintIdx].threshold">
                 <div class="cfg-hint">
                   {{ constraints[selectedConstraintIdx].ctype === 'GLOBAL_MAX'
                      ? '一個盤面上「' + (constraints[selectedConstraintIdx].symbol_id || '此符號') + '」最多可以出現幾個'
@@ -2706,7 +2716,7 @@
               </div>
 
               <!-- 套用模式 + 備註 -->
-              <div class="cfg-constraints-v2-section cfg-mode-grid">
+              <div class="cfg-constraints-v2-section cfg-constraints-v2-footer">
                 <div class="cfg-field cfg-field-compact">
                   <label class="cfg-label">套用模式 <span class="cfg-key">mode_scope</span></label>
                   <div class="cfg-chip-row">
@@ -2718,7 +2728,7 @@
                 </div>
                 <div class="cfg-field cfg-field-compact">
                   <label class="cfg-label">備註 <span class="cfg-key">notes</span></label>
-                  <input class="input" type="text"
+                  <input class="input input-w-name" type="text"
                          v-model.trim="constraints[selectedConstraintIdx].notes"
                          placeholder="(選填)">
                 </div>
@@ -3507,8 +3517,7 @@
               <!-- 標題列 -->
               <div class="cfg-split-detail-header">
                 <div style="flex:1;">
-                  <input class="input cfg-mode-name-input"
-                         style="font-size:15px;"
+                  <input class="input cfg-mode-name-input cfg-split-id-input input-w-id"
                          :class="{ err: !rules[selectedRuleIdx].rule_id.trim() || (ruleDuplicateIds.has(rules[selectedRuleIdx].rule_id) && rules[selectedRuleIdx].rule_id) }"
                          v-model.trim="rules[selectedRuleIdx].rule_id"
                          placeholder="P001"
@@ -3556,7 +3565,7 @@
               <label class="cfg-label">
                 優先順序 <span class="cfg-key">priority</span>
               </label>
-              <input class="input" type="number" v-model.number="rules[selectedRuleIdx].priority">
+              <input class="input input-w-num" type="number" v-model.number="rules[selectedRuleIdx].priority">
               <div class="cfg-hint">數字越大越優先(同 trigger 下執行順序)</div>
             </div>
           </div>
@@ -3876,7 +3885,7 @@
 
                     <!-- pos:格式 [reel,row] -->
                     <input v-else-if="param.type === 'pos'"
-                           class="input cfg-mono"
+                           class="input cfg-mono input-w-id"
                            type="text"
                            :value="actParamValue(act, param.key)"
                            @input="setActParam(act, param.key, $event.target.value)"
@@ -3884,7 +3893,7 @@
 
                     <!-- number -->
                     <input v-else-if="param.type === 'number'"
-                           class="input cfg-mono"
+                           class="input cfg-mono input-w-num"
                            type="number"
                            step="any"
                            :value="actParamValue(act, param.key)"
@@ -3996,8 +4005,7 @@
               <!-- 標題列 -->
               <div class="cfg-split-detail-header">
                 <div style="flex:1;">
-                  <input class="input cfg-mode-name-input"
-                         style="font-size:15px;"
+                  <input class="input cfg-mode-name-input cfg-split-id-input input-w-id"
                          :class="{ err: !discards[selectedDiscardIdx].discard_id.trim() || (discardDuplicateIds.has(discards[selectedDiscardIdx].discard_id) && discards[selectedDiscardIdx].discard_id) }"
                          v-model.trim="discards[selectedDiscardIdx].discard_id"
                          placeholder="D001"
@@ -4291,7 +4299,7 @@
                 <label class="cfg-label">
                   備註 <span class="cfg-key">notes</span>
                 </label>
-                <input class="input" type="text"
+                <input class="input input-w-name" type="text"
                        v-model.trim="binsFor(m).notes"
                        placeholder="(選填)">
               </div>
@@ -4555,27 +4563,27 @@
         <div v-if="inspectorCtxExpanded" class="cfg-inspector-ctx-grid">
           <div class="cfg-inspector-ctx-field">
             <label>mode</label>
-            <input class="input cfg-mono" type="text" v-model.trim="testCtx.mode">
+            <input class="input cfg-mono input-w-id" type="text" v-model.trim="testCtx.mode">
           </div>
           <div class="cfg-inspector-ctx-field">
             <label>combo_step</label>
-            <input class="input cfg-mono" type="number" v-model.number="testCtx.combo_step">
+            <input class="input cfg-mono input-w-num" type="number" v-model.number="testCtx.combo_step">
           </div>
           <div class="cfg-inspector-ctx-field">
             <label>multiplier</label>
-            <input class="input cfg-mono" type="number" step="any" v-model.number="testCtx.multiplier">
+            <input class="input cfg-mono input-w-num" type="number" step="any" v-model.number="testCtx.multiplier">
           </div>
           <div class="cfg-inspector-ctx-field">
             <label>total_multiplier</label>
-            <input class="input cfg-mono" type="number" step="any" v-model.number="testCtx.total_multiplier">
+            <input class="input cfg-mono input-w-num" type="number" step="any" v-model.number="testCtx.total_multiplier">
           </div>
           <div class="cfg-inspector-ctx-field">
             <label>consecutive_dead_spins</label>
-            <input class="input cfg-mono" type="number" v-model.number="testCtx.consecutive_dead_spins">
+            <input class="input cfg-mono input-w-num" type="number" v-model.number="testCtx.consecutive_dead_spins">
           </div>
           <div class="cfg-inspector-ctx-field">
             <label>event(上一個 EMIT)</label>
-            <input class="input cfg-mono" type="text" v-model.trim="testCtx.event"
+            <input class="input cfg-mono input-w-id" type="text" v-model.trim="testCtx.event"
                    placeholder="fg_trigger">
           </div>
           <div class="cfg-inspector-ctx-field cfg-inspector-ctx-field-wide">

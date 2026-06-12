@@ -9340,3 +9340,69 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 :root[data-theme="dark"] .bcmp-th-b { color: #3fae8c; }
 :root[data-theme="dark"] .bcmp-table td { border-bottom-color: rgba(255,255,255,0.05); }
 :root[data-theme="dark"] .bcmp-row-changed { background: rgb(var(--tint-accent)/0.10); }
+
+/* ════════════════════════════════════════════════════════════════
+   v4.9-c:UI 排版全面優化批次
+   A1/A2/A3 寬度 token + 全站 number 護欄
+   C2 panel hint 整寬 / D1 sticky bar 拆兩列 / D2 combo bar 間距
+   E1/E2 paylines topbar / F1 constraints footer / F2 ctype RWD
+   G1 rules/discards 標題列 ID 字級(取代 inline style)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── A2:全站 number input 護欄 ──
+   矩陣 cell 用 .cfg-matrix-cell(不帶 .input),不受影響;
+   .cfg-mqb-value 已有固定 width:74px,亦不受影響。 */
+.cfg-form input[type=number].input { max-width: 140px; }
+
+/* ── A1:輸入框寬度 token ──
+   寫在護欄之後,且第二組選擇器權重 ≥ 護欄,確保能覆寫。
+   .input-w-num  → 2–4 位數字(y_offset / max_rows / priority / threshold…)
+   .input-w-id   → 短 ID / 模式名(C001 / P001 / D001 / panel_id / NG…)
+   .input-w-name → 名稱 / 短備註 */
+.input.input-w-num,  .cfg-form input[type=number].input.input-w-num { max-width: 110px; }
+.input.input-w-id,   .cfg-form input.input-w-id   { max-width: 200px; }
+.input.input-w-name, .cfg-form input.input-w-name { max-width: 340px; }
+
+/* ── G1:rules/discards 標題列 ID 輸入(取代原 inline font-size:15px)── */
+.cfg-split-id-input { font-size: 15px !important; }
+
+/* ── D1:04/05 sticky bar 拆兩列 ── */
+.cfg-sticky-mode-bar.cfg-smb-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.cfg-smb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.cfg-smb-row-tools { gap: 10px; }
+/* 「⋯ 模式操作」靠右,與顯示/檢視/undo 群組自然分隔 */
+.cfg-smb-row-tools .cfg-matrix-menu-host { margin-left: auto; }
+@media (max-width: 760px) {
+  .cfg-smb-row-tools .cfg-matrix-menu-host { margin-left: 0; }
+}
+
+/* ── D2:08 combo bar 間距與 04/05 對齊 ── */
+.cfg-sticky-mode-bar-combo { gap: 6px; }
+
+/* ── E1:paylines path 輸入放寬(6 輪以上盤面 placeholder 才放得下)── */
+.cfg-paylines-v2-path-input { max-width: 560px; }
+/* ── E2:中等寬度三段互擠 → 按鈕群不縮、欄位段可換行(1180px RWD 已有)── */
+.cfg-paylines-v2-topbar-actions { flex-shrink: 0; }
+
+/* ── F1:07_Constraints footer(原 cfg-mode-grid 兩欄改直排,
+        模式 chips 不再把備註壓窄)── */
+.cfg-constraints-v2-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── F2:ctype 三大按鈕窄寬度改直排,避免文字截斷 ── */
+@media (max-width: 860px) {
+  .cfg-constraints-v2-ctype-row { grid-template-columns: 1fr; }
+}
