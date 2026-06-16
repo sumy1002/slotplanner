@@ -47,6 +47,7 @@
       kind: 'fullpane' },
     // ── 權重表 ──
     { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: 'Reel 權重',    icon: '🎲', done: true, group: 'weight' },
+    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight' },
     { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight' },
     // v4.0 / #14:連爆權重(08)已移除 UI 分頁(資料也清掉);A.xlsx 仍會輸出空的 08 sheet 以維持 13 分頁結構
     // ── 賠付 & 規則 ──
@@ -56,6 +57,10 @@
     { id: 'rules',             sheet: '09 + 10',               name: '規則',         icon: '🧩', done: true, group: 'rule' },
     // v3.1:11_Mode_Config 已合併進 'global' tab,不再是獨立分頁
     { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule' },
+    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '投注結構',     icon: '💴', done: true, group: 'base' },
+    { id: 'bonus_games',       sheet: '17_Bonus_Games',         name: 'Bonus 小遊戲', icon: '🎡', done: true, group: 'rule' },
+    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight' },
+    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight' },
   ];
 
   // 依 group 切分(渲染用),保持 TABS 內各 group 內部的原順序
@@ -640,6 +645,304 @@
       return true;
     } catch (e) {
       console.warn('[config-editor] saveLayout failed:', e);
+      return false;
+    }
+  }
+
+  // ─── v5.3:動態賠付表(03c_Paytable)───
+  // 每個符號持有 pay_rows: [{count:3, pay:1.0}, ...]
+  // 舊欄位(pay_3x–6x)讀取後自動遷移;匯出時以 pay_rows 優先,並向下兼容保留舊欄位。
+  function makePayRow(count, pay) {
+    return { count: count || 3, pay: pay || 0 };
+  }
+  // 從舊 pay_3x–6x 遷移
+  function migratePayRows(sym) {
+    if (Array.isArray(sym.pay_rows) && sym.pay_rows.length > 0) return sym.pay_rows;
+    const rows = [];
+    for (const n of [2, 3, 4, 5, 6, 7, 8, 9]) {
+      const v = sym['pay_' + n + 'x'];
+      if (v != null && Number(v) > 0) rows.push(makePayRow(n, Number(v)));
+    }
+    return rows.length > 0 ? rows : [
+      makePayRow(3, 0), makePayRow(4, 0), makePayRow(5, 0),
+    ];
+  }
+
+  // ─── v6.0-b:真實輪帶（04b_Reel_Strips）───
+  //   strips[mode][reelId] = [symId, symId, ...]（實體輪帶序列;連續相同=stacked）
+  //   啟用時引擎改「視窗抽樣」(隨機停點 → 讀連續視窗)，自然產生 stacking。
+  const LS_REEL_STRIPS_KEY = 'slotplanner.aconfig.reelstrips.v1';
+  function defaultReelStrips() {
+    return { enabled: false, strips: {} };   // strips: {mode: {reelId: [sym,...]}}
+  }
+  function loadReelStrips() {
+    try {
+      const raw = localStorage.getItem(LS_REEL_STRIPS_KEY);
+      if (!raw) return defaultReelStrips();
+      const d = JSON.parse(raw);
+      return {
+        enabled: !!d.enabled,
+        strips: (d.strips && typeof d.strips === 'object') ? d.strips : {},
+      };
+    } catch (e) {
+      console.warn('[config-editor] loadReelStrips failed:', e);
+      return defaultReelStrips();
+    }
+  }
+  function saveReelStrips(obj) {
+    try { localStorage.setItem(LS_REEL_STRIPS_KEY, JSON.stringify(obj)); return true; }
+    catch (e) { console.warn('[config-editor] saveReelStrips failed:', e); return false; }
+  }
+  function parseStripStr(str) {
+    if (Array.isArray(str)) return str.slice();
+    if (typeof str !== 'string') return [];
+    return str.split(',').map(x => x.trim()).filter(Boolean);
+  }
+  function stripToStr(arr) { return Array.isArray(arr) ? arr.join(', ') : ''; }
+  function stripToWeights(strip) {
+    const w = {};
+    for (const s of (strip || [])) w[s] = (w[s] || 0) + 1;
+    return w;
+  }
+  function weightsToStrip(weightMap, targetLen, stacked) {
+    const entries = Object.entries(weightMap || {})
+      .map(([sid, w]) => [sid, Number(w) || 0])
+      .filter(([, w]) => w > 0);
+    const total = entries.reduce((a, [, w]) => a + w, 0);
+    if (total <= 0 || !targetLen) return [];
+    const alloc = entries.map(([sid, w]) => {
+      const exact = w / total * targetLen;
+      return { sid, base: Math.floor(exact), frac: exact - Math.floor(exact) };
+    });
+    let used = alloc.reduce((a, x) => a + x.base, 0);
+    alloc.sort((a, b) => b.frac - a.frac);
+    let i = 0;
+    while (used < targetLen) { alloc[i % alloc.length].base++; used++; i++; }
+    if (stacked) {
+      const order = entries.map(([sid]) => sid);
+      const cntBy = {};
+      alloc.forEach(a => { cntBy[a.sid] = a.base; });
+      const out = [];
+      for (const sid of order) for (let k = 0; k < (cntBy[sid] || 0); k++) out.push(sid);
+      return out;
+    }
+    const remaining = {};
+    alloc.forEach(a => { remaining[a.sid] = a.base; });
+    const out = [];
+    const ids = alloc.map(a => a.sid);
+    let guard = 0;
+    while (out.length < targetLen && guard < targetLen * 4) {
+      for (const sid of ids) {
+        if (remaining[sid] > 0) { out.push(sid); remaining[sid]--; if (out.length >= targetLen) break; }
+      }
+      guard++;
+    }
+    return out;
+  }
+
+  // ─── v6.0-c:Bonus 小遊戲（17_Bonus_Games）───
+  //   三型:WHEEL 輪盤 / PICK 選獎 / COLLECTION 收集。
+  //   統一 items 陣列承載各型項目;型別專屬純量另存。
+  const LS_BONUS_GAMES_KEY = 'slotplanner.aconfig.bonusgames.v1';
+  function defaultBonusGames() { return { games: [] }; }
+  function makeBonusItem(label, value, weight) {
+    return {
+      label: label || '',
+      value: value || 0,        // ×注額（或收集門檻的累積數，依型別語義）
+      weight: weight || 100,    // WHEEL/PICK 抽中權重;COLLECTION 不用
+      link_jackpot: '',         // 連結 13_Jackpots（空=純值）
+      is_end: false,            // PICK 專用:抽到即結束（pooper）
+    };
+  }
+  function makeBonusGame(id, type) {
+    return {
+      bonus_id: id || 'BG1',
+      type: type || 'WHEEL',     // WHEEL / PICK / COLLECTION
+      title: '',
+      trigger_desc: '',
+      mode_scope: 'ALL',
+      // WHEEL:可升級到下一輪盤（多層輪盤）
+      wheel_upgrade_to: '',      // 指向另一個 bonus_id（空=無升級）
+      // PICK:可選次數（0=抽到 end 為止）
+      pick_count: 0,
+      // COLLECTION:目標收集數
+      collect_target: 0,
+      items: [],                 // Array<BonusItem>
+      notes: '',
+    };
+  }
+  function loadBonusGames() {
+    try {
+      const raw = localStorage.getItem(LS_BONUS_GAMES_KEY);
+      if (!raw) return defaultBonusGames();
+      const d = JSON.parse(raw);
+      const games = Array.isArray(d.games) ? d.games : [];
+      return {
+        games: games.map(g => ({
+          ...makeBonusGame('', ''), ...g,
+          items: Array.isArray(g.items) ? g.items.map(it => ({ ...makeBonusItem(), ...it })) : [],
+        })),
+      };
+    } catch (e) {
+      console.warn('[config-editor] loadBonusGames failed:', e);
+      return defaultBonusGames();
+    }
+  }
+  function saveBonusGames(obj) {
+    try { localStorage.setItem(LS_BONUS_GAMES_KEY, JSON.stringify(obj)); return true; }
+    catch (e) { console.warn('[config-editor] saveBonusGames failed:', e); return false; }
+  }
+
+  // ─── v5.4:倍數系統(15_Multipliers)───
+  // 三種倍數來源:
+  //   WILD      — Wild 符號自帶倍數(固定值或權重表)
+  //   PROGRESS  — cascade/連爆進度倍數階梯(每模式一條序列,如 NG 1-2-3-5)
+  //   RANDOM    — 隨機倍數符號(出現時依權重表抽一個倍數)
+  const LS_MULTIPLIERS_KEY = 'slotplanner.aconfig.multipliers.v1';
+  function defaultMultipliers() {
+    return {
+      // WILD 倍數:適用符號 + 固定值或權重表
+      wild_mult_enabled: false,
+      wild_mult_values: [],     // Array<{mult, weight}>;空=不啟用權重,用 wild_mult_fixed
+      wild_mult_fixed: 2,       // 權重表為空時的固定倍數
+      // PROGRESS 階梯:每模式一條(mode → [1,2,3,5])
+      progress_enabled: false,
+      progress_ladders: {},     // { NG: [1,2,3,5], FG1: [2,4,6,10] }
+      progress_reset_on_mode: true,   // 切模式是否重置(FG 常為不重置)
+      // RANDOM 倍數符號:權重表
+      random_enabled: false,
+      random_symbol_id: '',     // 哪個符號帶隨機倍數(空=任意特定符號)
+      random_values: [],        // Array<{mult, weight}>
+    };
+  }
+  function makeMultValue(mult, weight) {
+    return { mult: mult || 2, weight: weight || 100 };
+  }
+  function loadMultipliers() {
+    try {
+      const raw = localStorage.getItem(LS_MULTIPLIERS_KEY);
+      if (!raw) return defaultMultipliers();
+      const d = JSON.parse(raw);
+      const def = defaultMultipliers();
+      return {
+        ...def, ...d,
+        wild_mult_values: Array.isArray(d.wild_mult_values)
+          ? d.wild_mult_values.map(v => ({ ...makeMultValue(), ...v })) : [],
+        random_values: Array.isArray(d.random_values)
+          ? d.random_values.map(v => ({ ...makeMultValue(), ...v })) : [],
+        progress_ladders: (d.progress_ladders && typeof d.progress_ladders === 'object')
+          ? d.progress_ladders : {},
+      };
+    } catch (e) {
+      console.warn('[config-editor] loadMultipliers failed:', e);
+      return defaultMultipliers();
+    }
+  }
+  function saveMultipliers(obj) {
+    try { localStorage.setItem(LS_MULTIPLIERS_KEY, JSON.stringify(obj)); return true; }
+    catch (e) { console.warn('[config-editor] saveMultipliers failed:', e); return false; }
+  }
+  // 解析 "1,2,3,5" → [1,2,3,5];回傳合法遞增正數陣列
+  function parseLadder(str) {
+    if (typeof str !== 'string') return Array.isArray(str) ? str : [];
+    return str.split(',').map(x => Number(x.trim())).filter(x => !isNaN(x) && x > 0);
+  }
+
+  // ─── v5.4:金幣面額(16_Coin_Values)— Hold&Win 核心 ───
+  // COIN 符號帶面額(×注額);面額可分模式設定權重表。
+  // GRAND/MAJOR... 等固定獎也可掛在面額上(link_jackpot 指向 13_Jackpots 的 jp_id)。
+  const LS_COIN_VALUES_KEY = 'slotplanner.aconfig.coinvalues.v1';
+  function defaultCoinValues() {
+    return {
+      enabled: false,
+      coin_symbol_id: 'COIN',   // 哪個符號是金幣(對應 03_Symbols 的 symbol_id)
+      // 面額清單:每筆 {label, value, weight_by_mode:{NG:.., FG1:..}, link_jackpot}
+      denominations: [],
+    };
+  }
+  function makeCoinDenom(label, value) {
+    return {
+      label: label || '',       // 顯示名(可空;固定獎時填 GRAND 等)
+      value: value || 1,        // 面額(×注額);link_jackpot 非空時此值可被 JP 覆蓋
+      weight_by_mode: {},       // { NG: 100, FG1: 80 }
+      link_jackpot: '',         // 對應 13_Jackpots 的 jp_id(空=純面額)
+    };
+  }
+  function loadCoinValues() {
+    try {
+      const raw = localStorage.getItem(LS_COIN_VALUES_KEY);
+      if (!raw) return defaultCoinValues();
+      const d = JSON.parse(raw);
+      const def = defaultCoinValues();
+      return {
+        ...def, ...d,
+        denominations: Array.isArray(d.denominations)
+          ? d.denominations.map(dn => ({
+              ...makeCoinDenom(), ...dn,
+              weight_by_mode: (dn.weight_by_mode && typeof dn.weight_by_mode === 'object')
+                ? dn.weight_by_mode : {},
+            }))
+          : [],
+      };
+    } catch (e) {
+      console.warn('[config-editor] loadCoinValues failed:', e);
+      return defaultCoinValues();
+    }
+  }
+  function saveCoinValues(obj) {
+    try { localStorage.setItem(LS_COIN_VALUES_KEY, JSON.stringify(obj)); return true; }
+    catch (e) { console.warn('[config-editor] saveCoinValues failed:', e); return false; }
+  }
+
+  // ─── v5.3:投注結構(14_Bet_Config)───
+
+  // ─── v5.3:投注結構(14_Bet_Config)───
+  const LS_BET_CONFIG_KEY = 'slotplanner.aconfig.betconfig.v1';
+  function defaultBetConfig() {
+    return {
+      // ── Ante Bet ──
+      ante_bet_enabled:  false,    // 是否啟用 Ante Bet
+      ante_bet_mult:     1.25,     // 成本倍數(預設 ×1.25 注額)
+      ante_bet_trigger_mult: 2.0,  // 觸發機率乘數(如 SCAT 觸發率 ×2)
+      ante_bet_desc:     '',       // 企劃說明(供文件生成)
+      // ── Buy Feature ──
+      buy_features: [],            // Array<BuyFeatureDef>
+    };
+  }
+  function makeBuyFeature(mode) {
+    return {
+      bf_id:        `BF_${(mode || 'FG').toUpperCase()}`,
+      target_mode:  mode || '',    // 購買後進入的模式名
+      cost_mult:    80,            // 成本倍數(×注額)
+      rtp_target:   96,            // 此功能獨立 RTP 目標 %
+      enabled:      true,
+      notes:        '',
+    };
+  }
+  function loadBetConfig() {
+    try {
+      const raw = localStorage.getItem(LS_BET_CONFIG_KEY);
+      if (!raw) return defaultBetConfig();
+      const d = JSON.parse(raw);
+      const def = defaultBetConfig();
+      return {
+        ...def,
+        ...d,
+        buy_features: Array.isArray(d.buy_features)
+          ? d.buy_features.map(bf => ({ ...makeBuyFeature(''), ...bf }))
+          : [],
+      };
+    } catch (e) {
+      console.warn('[config-editor] loadBetConfig failed:', e);
+      return defaultBetConfig();
+    }
+  }
+  function saveBetConfig(obj) {
+    try {
+      localStorage.setItem(LS_BET_CONFIG_KEY, JSON.stringify(obj));
+      return true;
+    } catch (e) {
+      console.warn('[config-editor] saveBetConfig failed:', e);
       return false;
     }
   }
@@ -2073,6 +2376,13 @@
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
     LS_PANELS_KEY, makePanel, loadPanels, savePanels,
+    makePayRow, migratePayRows,
+    LS_REEL_STRIPS_KEY, defaultReelStrips, loadReelStrips, saveReelStrips,
+    parseStripStr, stripToStr, stripToWeights, weightsToStrip,
+    LS_BONUS_GAMES_KEY, defaultBonusGames, makeBonusItem, makeBonusGame, loadBonusGames, saveBonusGames,
+    LS_MULTIPLIERS_KEY, defaultMultipliers, makeMultValue, loadMultipliers, saveMultipliers, parseLadder,
+    LS_COIN_VALUES_KEY, defaultCoinValues, makeCoinDenom, loadCoinValues, saveCoinValues,
+    LS_BET_CONFIG_KEY, defaultBetConfig, makeBuyFeature, loadBetConfig, saveBetConfig,
     LS_JACKPOTS_KEY, makeJackpot, loadJackpots, saveJackpots,
     LS_SYMBOLSETS_KEY, loadSymbolSets, saveSymbolSets,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
@@ -2096,6 +2406,10 @@
     extractModeScope, asStr, asNum, asBool,
     LAYOUT_CELL_SIZE, LAYOUT_CELL_GAP, LAYOUT_SUBREEL_GAP, LAYOUT_LABEL_HEIGHT,
   };
+
+  // v5.3:symbol.js 需要的賠付表工具，掛到全域 SP（lazy 安全：symbol.js setup() 執行時 helpers 已載入）
+  SP.makePayRow     = makePayRow;
+  SP.migratePayRows = migratePayRows;
 
   console.log('[config-editor/helpers] loaded', Object.keys(SP.ConfigEditor.Helpers).length, 'symbols');
 

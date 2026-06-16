@@ -32,6 +32,13 @@
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
     makePanel, loadPanels, savePanels, loadSymbolSets, saveSymbolSets,
     makeJackpot, loadJackpots, saveJackpots,
+    LS_MULTIPLIERS_KEY, defaultMultipliers, makeMultValue, loadMultipliers, saveMultipliers, parseLadder,
+    makePayRow, migratePayRows,
+    LS_REEL_STRIPS_KEY, defaultReelStrips, loadReelStrips, saveReelStrips,
+    parseStripStr, stripToStr, stripToWeights, weightsToStrip,
+    LS_BONUS_GAMES_KEY, defaultBonusGames, makeBonusItem, makeBonusGame, loadBonusGames, saveBonusGames,
+    LS_COIN_VALUES_KEY, defaultCoinValues, makeCoinDenom, loadCoinValues, saveCoinValues,
+    LS_BET_CONFIG_KEY, defaultBetConfig, makeBuyFeature, loadBetConfig, saveBetConfig,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
@@ -94,6 +101,10 @@
           counts.symbols = reg && Array.isArray(reg.symbols) ? reg.symbols.length : 0;
           const jp = JSON.parse(localStorage.getItem('slotplanner.aconfig.jackpots.v1') || '[]');
           counts.jackpots = Array.isArray(jp) ? jp.length : 0;
+          const bc = JSON.parse(localStorage.getItem('slotplanner.aconfig.betconfig.v1') || '{}');
+          counts.buy_features = Array.isArray(bc.buy_features) ? bc.buy_features.length : 0;
+          const cv = JSON.parse(localStorage.getItem('slotplanner.aconfig.coinvalues.v1') || '{}');
+          counts.coin_denoms = Array.isArray(cv.denominations) ? cv.denominations.length : 0;
         } catch (e) {}
         return counts;
       }
@@ -962,6 +973,7 @@
           if (!names.includes(gridActiveMode.value))    gridActiveMode.value    = names[0];
           if (!names.includes(comboActiveModeBar.value)) comboActiveModeBar.value = names[0];
         }
+        // v5.4:progress/coin 的 per-mode 同步移到後面專屬 watch（避免 TDZ）
       }, { immediate: true });
 
       // 模式卡片穩定 key:用 WeakMap 給每個 mode 物件 session 內穩定 id。
@@ -2337,6 +2349,218 @@
       // v5.2:選到空 path 的中獎線 → 自動開點選模式(直接在棋盤畫線)
       //   (watch 於 selectedPaylineIdx 宣告後註冊,見下方)
 
+      // ── v5.3:投注結構(14_Bet_Config)──
+      const betConfig = reactive(loadBetConfig());
+      function addBuyFeature() {
+        const usedModes = new Set(betConfig.buy_features.map(bf => bf.target_mode));
+        const unusedMode = modes.find(m => m.mode && !usedModes.has(m.mode));
+        betConfig.buy_features.push(makeBuyFeature(unusedMode ? unusedMode.mode : ''));
+      }
+      function removeBuyFeature(idx) { betConfig.buy_features.splice(idx, 1); }
+
+      // ── v5.4:倍數系統(15_Multipliers)──
+      const multipliers = reactive(loadMultipliers());
+      function addWildMultValue() { multipliers.wild_mult_values.push(makeMultValue(2, 100)); }
+      function removeWildMultValue(i) { multipliers.wild_mult_values.splice(i, 1); }
+      function addRandomMultValue() { multipliers.random_values.push(makeMultValue(2, 100)); }
+      function removeRandomMultValue(i) { multipliers.random_values.splice(i, 1); }
+      const progressLadderStr = reactive({});
+      function _syncProgressStrFromData() {
+        for (const m of modeNames.value) {
+          const arr = multipliers.progress_ladders[m];
+          progressLadderStr[m] = Array.isArray(arr) ? arr.join(', ') : '';
+        }
+      }
+      function commitProgressLadder(mode) {
+        const arr = parseLadder(progressLadderStr[mode] || '');
+        if (arr.length) multipliers.progress_ladders[mode] = arr;
+        else delete multipliers.progress_ladders[mode];
+      }
+      function wildMultPct(i) {
+        const tot = multipliers.wild_mult_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+        if (!tot) return 0;
+        return ((Number(multipliers.wild_mult_values[i].weight) || 0) / tot * 100);
+      }
+      function randomMultPct(i) {
+        const tot = multipliers.random_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+        if (!tot) return 0;
+        return ((Number(multipliers.random_values[i].weight) || 0) / tot * 100);
+      }
+      const wildMultExpected = computed(() => {
+        const vs = multipliers.wild_mult_values;
+        const tot = vs.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+        if (!tot) return 0;
+        return vs.reduce((a, v) => a + (Number(v.mult) || 0) * (Number(v.weight) || 0), 0) / tot;
+      });
+      const randomMultExpected = computed(() => {
+        const vs = multipliers.random_values;
+        const tot = vs.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+        if (!tot) return 0;
+        return vs.reduce((a, v) => a + (Number(v.mult) || 0) * (Number(v.weight) || 0), 0) / tot;
+      });
+
+      // ── v5.4:金幣面額(16_Coin_Values;Hold&Win 核心)──
+      const coinValues = reactive(loadCoinValues());
+      function addCoinDenom() {
+        const dn = makeCoinDenom('', 1);
+        for (const m of modeNames.value) dn.weight_by_mode[m] = 0;
+        coinValues.denominations.push(dn);
+      }
+      function removeCoinDenom(i) { coinValues.denominations.splice(i, 1); }
+
+      // ── v6.0-c:Bonus 小遊戲(17_Bonus_Games)──
+      const bonusGames = reactive(loadBonusGames());
+      function addBonusGame(type) {
+        const taken = new Set(bonusGames.games.map(g => g.bonus_id));
+        let i = 1; while (taken.has(`BG${i}`)) i++;
+        bonusGames.games.push(makeBonusGame(`BG${i}`, type || 'WHEEL'));
+      }
+      function removeBonusGame(idx) { bonusGames.games.splice(idx, 1); }
+      function addBonusItem(g) { g.items.push(makeBonusItem('', g.type === 'COLLECTION' ? 0 : 10, 100)); }
+      function removeBonusItem(g, idx) { g.items.splice(idx, 1); }
+      function bonusItemPct(g, idx) {
+        if (g.type === 'COLLECTION') return null;
+        const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+        if (!tot) return 0;
+        return (Number(g.items[idx].weight) || 0) / tot * 100;
+      }
+      // WHEEL/PICK 期望值(加權平均;含連結 JP)
+      function bonusExpected(g) {
+        if (g.type === 'COLLECTION') return null;
+        const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+        if (!tot) return 0;
+        return g.items.reduce((a, it) => {
+          let v = Number(it.value) || 0;
+          if (it.link_jackpot) { const jp = jackpots.find(j => j.jp_id === it.link_jackpot); if (jp) v = Number(jp.mult) || v; }
+          return a + v * (Number(it.weight) || 0);
+        }, 0) / tot;
+      }
+      const BONUS_TYPE_LABEL = { WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+
+      // ════════════════════════════════════════════════════════════
+      //  v5.5:即時 RTP 計算器(LINE 玩法閉式計算)
+      //  原理:對每條中獎線、每個賠付符號 S、每個連線長度 N:
+      //    P(恰好左起 N 連) = Π[i=1..N] p_i(S或Wild) × (1 − p_{N+1}(S或Wild))
+      //    line_RTP += Σ P × pay_table[S][N]
+      //  base_RTP = Σ over lines（每線吃單注,故除以線數得每注 RTP）
+      //  限制:純 LINE;不含 cascade/倍數/scatter/ways/bonus(會明確標示)。
+      // ════════════════════════════════════════════════════════════
+      function _symPayMap() {
+        // symbol_id → { is_wild, is_scatter, pay: {N: payout} }
+        const m = {};
+        for (const s of symbolList.value) {
+          if (s.enabled === false) continue;
+          const sid = (s.symbol_id && s.symbol_id.trim()) || s.name;
+          if (!sid) continue;
+          const rows = migratePayRows(s);
+          const pay = {};
+          for (const r of rows) {
+            const n = Number(r.count), p = Number(r.pay);
+            if (n > 0 && p > 0) pay[n] = p;
+          }
+          m[sid] = { is_wild: !!s.is_wild, is_scatter: !!s.is_scatter, pay };
+        }
+        return m;
+      }
+      // 某 reel 上「符號 sid 命中(含 wild)」的機率;mode 走快取總計
+      function _reelHitProb(mode, reelId, sid, payMap, includeWild) {
+        const e = reelW(mode);
+        let total = 0, hit = 0;
+        for (const k of e.symbol_ids) {
+          const w = Number(e.weights[`${reelId}-${k}`]) || 0;
+          total += w;
+          if (k === sid) hit += w;
+          else if (includeWild && payMap[k] && payMap[k].is_wild) hit += w;
+        }
+        return total > 0 ? hit / total : 0;
+      }
+      const rtpResult = computed(() => {
+        const out = { ok: false, isLine: false, total: 0, perLine: [], note: '', target: Number(g.return_pct) || 0 };
+        const payType = (g.pay_type || '').toUpperCase();
+        out.isLine = payType === 'LINE';
+        if (!out.isLine) { out.note = `目前賠付類型為 ${payType || '未設定'};即時 RTP 僅支援 LINE`; return out; }
+        const mode = reelActiveMode.value || (modeNames.value[0] || '');
+        if (!mode) { out.note = '無可用模式'; return out; }
+        const payMap = _symPayMap();
+        const validLines = paylines.filter(pl => {
+          const pr = parsePathString(pl.path || '');
+          return pr.valid && pr.points.length >= 2;
+        });
+        if (validLines.length === 0) { out.note = '尚無有效中獎線'; return out; }
+
+        let grand = 0;
+        for (const pl of validLines) {
+          const pts = parsePathString(pl.path).points;   // [{reel,row}]
+          const reelsOnLine = pts.map(p => p.reel);
+          // 預算每個 reel 上「各賠付符號(含 wild)」命中機率
+          let lineRtp = 0;
+          for (const [sid, info] of Object.entries(payMap)) {
+            if (info.is_scatter) continue;          // scatter 不走 LINE
+            if (Object.keys(info.pay).length === 0) continue;
+            // 各 reel 對此 sid 的命中機率(含 wild 替代)
+            const hp = reelsOnLine.map(rid => _reelHitProb(mode, rid, sid, payMap, !info.is_wild));
+            // 逐長度 N 計算「恰好 N 連(左起)」
+            let runProb = 1;
+            for (let n = 1; n <= reelsOnLine.length; n++) {
+              runProb *= hp[n - 1];
+              if (runProb <= 0) break;
+              const pay = info.pay[n];
+              if (!pay) continue;
+              let exact = runProb;
+              if (n < reelsOnLine.length) exact *= (1 - hp[n]);   // 第 N+1 reel 不命中
+              lineRtp += exact * pay;
+            }
+          }
+          out.perLine.push({ line_id: pl.line_id, rtp: lineRtp });
+          grand += lineRtp;
+        }
+        // 每線吃 1 注 → 平均每注 RTP = Σ line_rtp / 線數
+        out.total = validLines.length > 0 ? (grand / validLines.length) : 0;
+        out.lineCount = validLines.length;
+        out.mode = mode;
+        out.ok = true;
+        // 提醒:有未納入計算的機制
+        const extras = [];
+        if (multipliers.wild_mult_enabled || multipliers.progress_enabled || multipliers.random_enabled) extras.push('倍數');
+        if (coinValues.enabled) extras.push('金幣');
+        if (jackpots.length) extras.push('JP');
+        if (symbolList.value.some(s => s.is_scatter)) extras.push('Scatter 觸發');
+        if (extras.length) out.note = `未計入:${extras.join('、')}(僅 LINE base 賠付)`;
+        return out;
+      });
+      const rtpPct = computed(() => (rtpResult.value.total * 100));
+      const rtpVsTarget = computed(() => {
+        const r = rtpResult.value;
+        if (!r.ok || !r.target) return null;
+        return (r.total * 100) - r.target;
+      });
+      // v5.4:模式增減時同步 progress 字串與每筆面額的 weight_by_mode
+      watch(modeNames, (names) => {
+        _syncProgressStrFromData();
+        for (const dn of coinValues.denominations) {
+          for (const m of names) if (!(m in dn.weight_by_mode)) dn.weight_by_mode[m] = 0;
+        }
+        // v6.0-b:輪帶 per-mode 同步移到後面專屬 watch（避免 TDZ）
+      }, { immediate: true });
+      function coinDenomPct(di, mode) {
+        const tot = coinValues.denominations.reduce((a, d) => a + (Number(d.weight_by_mode[mode]) || 0), 0);
+        if (!tot) return 0;
+        return ((Number(coinValues.denominations[di].weight_by_mode[mode]) || 0) / tot * 100);
+      }
+      function coinExpectedValue(mode) {
+        const ds = coinValues.denominations;
+        const tot = ds.reduce((a, d) => a + (Number(d.weight_by_mode[mode]) || 0), 0);
+        if (!tot) return 0;
+        return ds.reduce((a, d) => {
+          let v = Number(d.value) || 0;
+          if (d.link_jackpot) {
+            const jp = jackpots.find(j => j.jp_id === d.link_jackpot);
+            if (jp) v = Number(jp.mult) || v;
+          }
+          return a + v * (Number(d.weight_by_mode[mode]) || 0);
+        }, 0) / tot;
+      }
+
       // ── v5.1:JP 定義(13_Jackpots;文件生成自動帶入)──
       const jackpots = reactive(loadJackpots());
       function addJackpot() {
@@ -2944,6 +3168,90 @@
         _fillSigReel[name] = sig;
       }
       function reelW(mode) { ensureReelWeightsForMode(mode); return reelWeights[mode]; }
+
+      // ──────────────────────────────────────────────────────────
+      //  v6.0-b:真實輪帶（04b_Reel_Strips）
+      //  - reelStrips.strips[mode][reelId] = [symId,...]（編輯時以逗號字串呈現）
+      //  - 與 04 權重雙向轉換;啟用時引擎改視窗抽樣（自然 stacking）
+      // ──────────────────────────────────────────────────────────
+      const reelStrips = reactive(loadReelStrips());
+      const stripActiveMode = ref('');
+      const stripGenLen = ref(30);       // v6.0-b:生成輪帶目標長度
+      const stripGenStacked = ref(false); // v6.0-b:生成時是否聚成 stacked
+      // 編輯用字串快取:stripStr[mode][reelId] = "H1, H1, L1, ..."
+      const stripStr = reactive({});
+      function _ensureStripMode(mode) {
+        if (!reelStrips.strips[mode]) reelStrips.strips[mode] = {};
+        if (!stripStr[mode]) stripStr[mode] = {};
+        for (const r of layout) {
+          const rid = r.reel_id;
+          if (stripStr[mode][rid] === undefined) {
+            stripStr[mode][rid] = stripToStr(reelStrips.strips[mode][rid] || []);
+          }
+        }
+      }
+      function stripLen(mode, rid) {
+        return parseStripStr(stripStr[mode] && stripStr[mode][rid]).length;
+      }
+      // 編輯字串 → 寫回 reelStrips.strips（即時）
+      function commitStrip(mode, rid) {
+        const arr = parseStripStr(stripStr[mode] && stripStr[mode][rid]);
+        if (!reelStrips.strips[mode]) reelStrips.strips[mode] = {};
+        if (arr.length) reelStrips.strips[mode][rid] = arr;
+        else delete reelStrips.strips[mode][rid];
+      }
+      // strip 隱含的符號分佈 %（驗證 / 預覽用）
+      function stripDist(mode, rid) {
+        const arr = parseStripStr(stripStr[mode] && stripStr[mode][rid]);
+        const w = stripToWeights(arr);
+        const tot = arr.length || 1;
+        return Object.entries(w).map(([sid, c]) => ({ sid, count: c, pct: c / tot * 100 }))
+          .sort((a, b) => b.count - a.count);
+      }
+      // 從 04 權重生成 strip（單一 reel）
+      function genStripFromWeights(mode, rid, targetLen, stacked) {
+        const e = reelW(mode);
+        const wmap = {};
+        for (const sid of e.symbol_ids) {
+          const w = Number(e.weights[`${rid}-${sid}`]) || 0;
+          if (w > 0) wmap[sid] = w;
+        }
+        const arr = weightsToStrip(wmap, Number(targetLen) || 30, !!stacked);
+        if (!stripStr[mode]) stripStr[mode] = {};
+        stripStr[mode][rid] = stripToStr(arr);
+        commitStrip(mode, rid);
+        emit('status', { type: 'ok', msg: `R${rid} 已由權重生成 ${arr.length} 格輪帶${stacked ? '（stacked）' : ''}` });
+      }
+      function genAllStripsFromWeights(mode, targetLen, stacked) {
+        for (const r of layout) genStripFromWeights(mode, r.reel_id, targetLen, stacked);
+        emit('status', { type: 'ok', msg: `已由權重生成全部輪帶（${mode}）` });
+      }
+      // strip → 04 權重（計次寫回該 reel 列）
+      function applyStripToWeights(mode, rid) {
+        const arr = parseStripStr(stripStr[mode] && stripStr[mode][rid]);
+        if (!arr.length) { emit('status', { type: 'warn', msg: `R${rid} 輪帶為空,無法轉權重` }); return; }
+        const w = stripToWeights(arr);
+        _pushUndo('reel', mode);
+        const e = reelW(mode);
+        for (const sid of e.symbol_ids) e.weights[`${rid}-${sid}`] = Number(w[sid]) || 0;
+        emit('status', { type: 'ok', msg: `R${rid} 輪帶計次已寫回 04 權重` });
+      }
+      function applyAllStripsToWeights(mode) {
+        for (const r of layout) {
+          const arr = parseStripStr(stripStr[mode] && stripStr[mode][r.reel_id]);
+          if (arr.length) {
+            const w = stripToWeights(arr);
+            const e = reelW(mode);
+            for (const sid of e.symbol_ids) e.weights[`${r.reel_id}-${sid}`] = Number(w[sid]) || 0;
+          }
+        }
+        emit('status', { type: 'ok', msg: `全部輪帶已寫回 04 權重（${mode}）` });
+      }
+      // v6.0-b:模式增減時同步輪帶 active mode 與字串快取
+      watch(modeNames, (names) => {
+        if (names.length && !names.includes(stripActiveMode.value)) stripActiveMode.value = names[0];
+        for (const m of names) _ensureStripMode(m);
+      }, { immediate: true });
 
       // ──────────────────────────────────────────────────────────
       //  v4.8:04 副盤權重(副輪 .sub + 自由副盤 Panel)資料層
@@ -5797,6 +6105,9 @@
         { key: 'return_pct',       label: '目標 RTP' },
         { key: 'starting_mode',    label: '起始模式' },
         { key: 'jackpots',         label: 'JP 定義' },   // v5.2
+        { key: 'bet_config',       label: '投注結構' },  // v5.3
+        { key: 'multipliers',      label: '倍數系統' },  // v5.4
+        { key: 'coin_values',      label: '金幣面額' },  // v5.4
       ];
 
       // 建立扁平索引,每次 reactive 變動會自動重算
@@ -6110,6 +6421,11 @@
         '連爆權重':   'combo_weights',
         '棄牌規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '腳本規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
+        '投注結構':   'bet_config',         // v5.3:14_Bet_Config 獨立分頁
+        '真實輪帶':   'reel_strips',        // v6.0-b:04b_Reel_Strips
+        'Bonus 小遊戲': 'bonus_games',       // v6.0-c:17_Bonus_Games
+        '倍數系統':   'multipliers',        // v5.4:15_Multipliers
+        '金幣面額':   'coin_values',        // v5.4:16_Coin_Values
         'JP 定義':    'global',           // v5.1:JP 區塊掛在 01_Global
         '範本':       null,            // 不歸屬任何 tab
       };
@@ -6148,6 +6464,11 @@
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
           case '棄牌規則': return () => saveDiscards(discards.map(d => ({ ...d })));
           case '腳本規則': return () => saveRules(rules.map(r => ({ ...r })));
+          case '投注結構': return () => saveBetConfig({ ...betConfig, buy_features: betConfig.buy_features.map(bf => ({ ...bf })) });
+          case '真實輪帶': return () => saveReelStrips({ enabled: reelStrips.enabled, strips: JSON.parse(JSON.stringify(reelStrips.strips)) });
+          case 'Bonus 小遊戲': return () => saveBonusGames({ games: JSON.parse(JSON.stringify(bonusGames.games)) });
+          case '倍數系統': return () => saveMultipliers(JSON.parse(JSON.stringify(multipliers)));
+          case '金幣面額': return () => saveCoinValues(JSON.parse(JSON.stringify(coinValues)));
           case 'JP 定義':  return () => saveJackpots(jackpots.map(j => ({ ...j })));
           default: return null;
         }
@@ -6191,6 +6512,11 @@
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
       watch(discards,     () => scheduleSave('棄牌規則'), { deep: true });
       watch(rules,        () => scheduleSave('腳本規則'), { deep: true });
+      watch(betConfig,    () => scheduleSave('投注結構'), { deep: true });
+      watch(reelStrips,   () => scheduleSave('真實輪帶'), { deep: true });
+      watch(bonusGames,   () => scheduleSave('Bonus 小遊戲'), { deep: true });
+      watch(multipliers,  () => scheduleSave('倍數系統'), { deep: true });
+      watch(coinValues,   () => scheduleSave('金幣面額'), { deep: true });
       watch(jackpots,     () => scheduleSave('JP 定義'), { deep: true });
 
       // ──────────────────────────────────────────────────────────
@@ -6202,6 +6528,12 @@
       //  symbolNames 變動時重算,不再卡在每次編輯的熱路徑(徽章 ~400ms lag)。
       //  純函式在 setTimeout/手動呼叫情境下執行,無 reactive 追蹤 → 真正解耦。
       // ──────────────────────────────────────────────────────────
+      function _enabledSymbolIds() {
+        try {
+          const reg = registry && registry.symbols ? registry.symbols() : [];
+          return reg.filter(x => x.enabled !== false).map(x => (x.symbol_id && x.symbol_id.trim()) || x.name).filter(Boolean);
+        } catch (e) { return []; }
+      }
       function _computeValidationIssues() {
         const out = [];
         // 跑時 push 函數(以避免重複 push 同種訊息可在外層去重)
@@ -6220,6 +6552,130 @@
         }
         // 03_Symbols 名稱集合(SymbolRegistry)
         const symbolNameSet = new Set(symbolNames.value);
+
+        // ─── 01_Global · 投注結構(v5.3)───
+        for (const bf of betConfig.buy_features) {
+          if (!bf.target_mode) {
+            add('warn', 'bet_config', `Buy Feature「${bf.bf_id}」未指定目標模式`);
+            continue;
+          }
+          if (!validModeSet.has(bf.target_mode)) {
+            add('error', 'bet_config', `Buy Feature「${bf.bf_id}」目標模式「${bf.target_mode}」不在模式清單`);
+          }
+          if (!(Number(bf.cost_mult) > 0)) add('warn', 'bet_config', `Buy Feature「${bf.bf_id}」成本倍數為 0`);
+          const rt = Number(bf.rtp_target);
+          if (rt > 0 && (rt < 50 || rt > 102)) add('warn', 'bet_config', `Buy Feature「${bf.bf_id}」RTP 目標 ${rt}% 異常（通常 50–102）`);
+        }
+        if (betConfig.ante_bet_enabled) {
+          const m = Number(betConfig.ante_bet_mult);
+          if (m <= 1 || m > 3) add('warn', 'bet_config', `Ante Bet 成本倍數 ${m}× 異常（通常 1.1–2.0×）`);
+          const tm = Number(betConfig.ante_bet_trigger_mult);
+          if (tm <= 1 || tm > 10) add('warn', 'bet_config', `Ante Bet 觸發倍率 ${tm}× 異常（通常 1.5–3×）`);
+        }
+
+        // ─── 17_Bonus_Games（v6.0-c）───
+        const bgIdSeen = new Set();
+        for (const g of bonusGames.games) {
+          const id = (g.bonus_id || '').trim();
+          if (id) {
+            if (bgIdSeen.has(id)) add('error', 'bonus_games', `Bonus ID 重複:${id}`);
+            bgIdSeen.add(id);
+          } else {
+            add('warn', 'bonus_games', `有 Bonus 小遊戲缺 ID`);
+          }
+          if (g.mode_scope && g.mode_scope !== 'ALL') {
+            for (const mn of g.mode_scope.split(',').map(x => x.trim()).filter(Boolean))
+              if (!validModeSet.has(mn)) add('error', 'bonus_games', `Bonus ${id} 適用模式「${mn}」不存在`);
+          }
+          if (g.items.length === 0) {
+            add('warn', 'bonus_games', `Bonus ${id || '(未命名)'} 尚無項目`);
+          }
+          if (g.type === 'WHEEL' || g.type === 'PICK') {
+            const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+            if (g.items.length && tot <= 0) add('error', 'bonus_games', `Bonus ${id} 權重總和為 0`);
+            if (g.type === 'PICK' && g.items.length && !g.items.some(it => it.is_end) && !(Number(g.pick_count) > 0))
+              add('warn', 'bonus_games', `Bonus ${id}（PICK）未設結束項也未設次數,可能無法結束`);
+          }
+          if (g.type === 'COLLECTION' && !(Number(g.collect_target) > 0))
+            add('warn', 'bonus_games', `Bonus ${id}（COLLECTION）未設目標收集數`);
+          if (g.type === 'WHEEL' && g.wheel_upgrade_to) {
+            if (!bonusGames.games.some(x => x.bonus_id === g.wheel_upgrade_to))
+              add('error', 'bonus_games', `Bonus ${id} 升級目標「${g.wheel_upgrade_to}」不存在`);
+          }
+          for (const it of g.items) {
+            if (it.link_jackpot && !jackpots.find(j => j.jp_id === it.link_jackpot))
+              add('error', 'bonus_games', `Bonus ${id} 項目連結的 JP「${it.link_jackpot}」不存在`);
+          }
+        }
+
+        // ─── 04b_Reel_Strips（v6.0-b）───
+        if (reelStrips.enabled) {
+          const symIdSet = new Set(_enabledSymbolIds());
+          let anyStrip = false;
+          for (const m of modeNames.value) {
+            const ms = reelStrips.strips[m] || {};
+            for (const r of layout) {
+              const arr = ms[r.reel_id];
+              if (!arr || !arr.length) continue;
+              anyStrip = true;
+              if (arr.length < r.max_rows)
+                add('error', 'reel_strips', `模式 ${m} R${r.reel_id} 輪帶長度 ${arr.length} < 顯示列數 ${r.max_rows}`);
+              for (const sid of arr) {
+                if (!symIdSet.has(sid)) { add('error', 'reel_strips', `模式 ${m} R${r.reel_id} 輪帶含未知符號「${sid}」`); break; }
+              }
+            }
+          }
+          if (!anyStrip) add('warn', 'reel_strips', '真實輪帶已啟用,但尚未定義任何輪帶（引擎將回退權重抽樣）');
+        }
+
+        // ─── 15_Multipliers(v5.4)───
+        if (multipliers.wild_mult_enabled && multipliers.wild_mult_values.length) {
+          const tot = multipliers.wild_mult_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+          if (tot <= 0) add('warn', 'multipliers', 'Wild 倍數權重表總和為 0,將不會抽到任何倍數');
+          for (const v of multipliers.wild_mult_values)
+            if (!(Number(v.mult) > 0)) add('warn', 'multipliers', 'Wild 倍數表存在倍數 ≤ 0 的列');
+        }
+        if (multipliers.random_enabled) {
+          const tot = multipliers.random_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
+          if (tot <= 0) add('error', 'multipliers', '隨機倍數已啟用,但權重表總和為 0');
+          if (multipliers.random_symbol_id) {
+            const ids = new Set(_enabledSymbolIds());
+            if (!ids.has(multipliers.random_symbol_id))
+              add('error', 'multipliers', `隨機倍數符號「${multipliers.random_symbol_id}」不存在於符號清單`);
+          }
+        }
+        if (multipliers.progress_enabled) {
+          for (const m of modeNames.value) {
+            const arr = multipliers.progress_ladders[m];
+            if (arr && arr.length) {
+              for (let i = 1; i < arr.length; i++)
+                if (arr[i] < arr[i - 1]) { add('warn', 'multipliers', `模式 ${m} 的進度倍數階梯非遞增`); break; }
+            }
+          }
+        }
+
+        // ─── 16_Coin_Values(v5.4)───
+        if (coinValues.enabled) {
+          const ids = new Set(_enabledSymbolIds());
+          if (!coinValues.coin_symbol_id)
+            add('error', 'coin_values', '金幣面額已啟用,但未指定金幣符號');
+          else if (!ids.has(coinValues.coin_symbol_id))
+            add('error', 'coin_values', `金幣符號「${coinValues.coin_symbol_id}」不存在於符號清單`);
+          if (coinValues.denominations.length === 0)
+            add('warn', 'coin_values', '金幣面額已啟用,但尚未定義任何面額');
+          for (const d of coinValues.denominations) {
+            if (!(Number(d.value) > 0) && !d.link_jackpot)
+              add('warn', 'coin_values', `面額「${d.label || '(未命名)'}」value ≤ 0 且未連結 JP`);
+            if (d.link_jackpot && !jackpots.find(j => j.jp_id === d.link_jackpot))
+              add('error', 'coin_values', `面額「${d.label || '(未命名)'}」連結的 JP「${d.link_jackpot}」不存在`);
+          }
+          // 每模式權重總和檢查
+          for (const m of modeNames.value) {
+            const tot = coinValues.denominations.reduce((a, d) => a + (Number(d.weight_by_mode[m]) || 0), 0);
+            if (tot <= 0 && coinValues.denominations.length)
+              add('warn', 'coin_values', `模式 ${m} 的金幣面額權重總和為 0`);
+          }
+        }
 
         // ─── 01_Global · JP 定義(v5.2)───
         const jpIdSeen = new Set();
@@ -7084,6 +7540,16 @@
         // v3.4 / B6:範本載入 diff preview
         modeExpandedKey, isModeExpanded, toggleModeExpanded,
         jackpots, addJackpot, removeJackpot, toggleJackpotMode, jackpotHasMode,
+        betConfig, addBuyFeature, removeBuyFeature,
+        multipliers, addWildMultValue, removeWildMultValue, addRandomMultValue, removeRandomMultValue,
+        progressLadderStr, commitProgressLadder, wildMultPct, randomMultPct, wildMultExpected, randomMultExpected,
+        coinValues, addCoinDenom, removeCoinDenom, coinDenomPct, coinExpectedValue,
+        rtpResult, rtpPct, rtpVsTarget,
+        reelStrips, stripActiveMode, stripStr, stripLen, commitStrip, stripDist,
+        stripGenLen, stripGenStacked,
+        genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
+        bonusGames, addBonusGame, removeBonusGame, addBonusItem, removeBonusItem,
+        bonusItemPct, bonusExpected, BONUS_TYPE_LABEL,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
         confirmTemplateDiffLoad,
         // v3.4 / B5:active tab issues

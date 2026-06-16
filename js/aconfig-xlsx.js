@@ -98,6 +98,11 @@
     const discards    = readLS('slotplanner.aconfig.discards.v1',     []);
     const rules       = readLS('slotplanner.aconfig.rules.v1',        []);
     const jackpots    = readLS('slotplanner.aconfig.jackpots.v1',     []);   // v5.1
+    const betConfig   = readLS('slotplanner.aconfig.betconfig.v1',   {});  // v5.3
+    const reelStrips  = readLS('slotplanner.aconfig.reelstrips.v1',   {});  // v6.0-b
+    const multipliers = readLS('slotplanner.aconfig.multipliers.v1', {});  // v5.4
+    const coinValues  = readLS('slotplanner.aconfig.coinvalues.v1',  {});  // v5.4
+    const bonusGames  = readLS('slotplanner.aconfig.bonusgames.v1',  {});  // v6.0-c
     const registryRaw = readLS('slotplanner.registry.v1',             { symbols: [] });
 
     const modeNames = modes.map(m => m.mode).filter(Boolean);
@@ -123,7 +128,9 @@
       ['01_Global', '全域設定'],
       ['02_Layout', '盤面結構'],
       ['03_Symbols', '符號清單'],
+      ['03c_Paytable', '動態賠付表(v5.3;優先於 03_Symbols Pay_Nx)'],
       ['04_Reel_Weights', 'Reel 權重'],
+      ['04b_Reel_Strips', '真實輪帶(v6.0-b:實體序列;啟用時引擎用視窗抽樣;選用)'],
       ['05_Grid_Size_Weights', '格數權重'],
       ['06_Paylines', '中獎線'],
       ['07_Constraints', '硬約束'],
@@ -133,6 +140,10 @@
       ['11_Mode_Config', '模式設定'],
       ['12_Distribution_Bins', '分佈區間'],
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
+      ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
+      ['15_Multipliers', '倍數系統(v5.4:Wild/Progress/Random;選用;引擎讀取)'],
+      ['16_Coin_Values', '金幣面額(v5.4:Hold&Win;選用;引擎讀取)'],
+      ['17_Bonus_Games', 'Bonus 小遊戲(v6.0-c:輪盤/選獎/收集;選用;引擎讀取)'],
     ]);
     wsR.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF5A3DB0' } };
     setCols(wsR, [28, 50]);
@@ -212,6 +223,22 @@
     }
     boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18]);
 
+    // 03c_Paytable(v5.3:動態賠付表)
+    const wsPaytable = wb.addWorksheet('03c_Paytable');
+    wsPaytable.addRow(['Symbol_ID', 'Count', 'Pay']);
+    for (const s of syms) {
+      if (s.enabled === false) continue;
+      const sid = s.symbol_id || s.name || String(s.number || '');
+      const rows = (Array.isArray(s.pay_rows) && s.pay_rows.length > 0)
+        ? s.pay_rows
+        : [2,3,4,5,6,7,8,9].filter(n => Number(s['pay_'+n+'x']) > 0)
+                             .map(n => ({ count: n, pay: s['pay_'+n+'x'] }));
+      for (const r of rows) {
+        if (Number(r.pay) > 0) wsPaytable.addRow([sid, Number(r.count), Number(r.pay)]);
+      }
+    }
+    boldHdr(wsPaytable); setCols(wsPaytable, [16, 10, 12]);
+
     // 04_Reel_Weights(扁平化)
     const wsRW = wb.addWorksheet('04_Reel_Weights');
     wsRW.addRow(['Mode_Scope', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
@@ -261,6 +288,24 @@
     }
     boldHdr(wsRW); setCols(wsRW, [12, 10, 14, 10, 24]);
 
+    // 04b_Reel_Strips(v6.0-b:Mode_Scope / Reel_ID / Enabled / Strip_Sequence)
+    //   逗號分隔的符號序列;空輪帶不寫列。Enabled 旗標寫在每列(讀取端取首列即可)。
+    const wsStrip = wb.addWorksheet('04b_Reel_Strips');
+    wsStrip.addRow(['Mode_Scope', 'Reel_ID', 'Enabled', 'Strip_Sequence']);
+    {
+      const rs = (typeof reelStrips === 'object' && reelStrips) ? reelStrips : {};
+      const en = !!rs.enabled;
+      const strips = (rs.strips && typeof rs.strips === 'object') ? rs.strips : {};
+      for (const [mode, byReel] of Object.entries(strips)) {
+        if (!byReel || typeof byReel !== 'object') continue;
+        for (const [rid, arr] of Object.entries(byReel)) {
+          if (!Array.isArray(arr) || !arr.length) continue;
+          wsStrip.addRow([mode, Number(rid), en, arr.join(',')]);
+        }
+      }
+    }
+    boldHdr(wsStrip); setCols(wsStrip, [13, 9, 9, 80]);
+
     // 05_Grid_Size_Weights(扁平化)
     const wsGW = wb.addWorksheet('05_Grid_Size_Weights');
     wsGW.addRow(['Mode_Scope', 'Reel_ID', 'Grid_Size', 'Weight', 'Notes']);
@@ -280,11 +325,11 @@
 
     // 06_Paylines
     const wsP = wb.addWorksheet('06_Paylines');
-    wsP.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
+    wsPaytable.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
     // v4.0 / #16:Direction 改全域設定(g.payline_direction);每行寫入相同值以維持後端逐行讀取相容
     const _plDir = (g && g.payline_direction) || 'LTR';
-    for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
-    boldHdr(wsP); setCols(wsP, [10, 44, 12, 28]);
+    for (const pl of paylines) wsPaytable.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
+    boldHdr(wsPaytable); setCols(wsPaytable, [10, 44, 12, 28]);
 
     // 07_Constraints
     const wsC = wb.addWorksheet('07_Constraints');
@@ -381,6 +426,106 @@
     }
     boldHdr(wsJ); setCols(wsJ, [10, 16, 13, 12, 13, 12, 30, 14, 24]);
 
+    // 14_Bet_Config(v5.3:選用分頁;引擎讀取。無 Buy Feature → 仍寫 Ante Bet 區塊 + 空清單)
+    const wsBet = wb.addWorksheet('14_Bet_Config');
+    const bc = typeof betConfig === 'object' && betConfig ? betConfig : {};
+    // ── Ante Bet 區段 ──
+    wsBet.addRow(['Key', 'Value', 'Notes']);
+    wsBet.addRow(['Ante_Bet_Enabled',      !!bc.ante_bet_enabled,           'true/false']);
+    wsBet.addRow(['Ante_Bet_Mult',         Number(bc.ante_bet_mult) || 1.25, '成本倍數(×注額)']);
+    wsBet.addRow(['Ante_Bet_Trigger_Mult', Number(bc.ante_bet_trigger_mult) || 2.0, 'SCAT 觸發倍率']);
+    wsBet.addRow(['Ante_Bet_Desc',         bc.ante_bet_desc || '',           '企劃說明']);
+    wsBet.addRow([]);   // 空行分隔
+    // ── Buy Feature 清單 ──
+    wsBet.addRow(['BF_ID', 'Target_Mode', 'Cost_Mult', 'RTP_Target', 'Enabled', 'Notes']);
+    for (const bf of (Array.isArray(bc.buy_features) ? bc.buy_features : [])) {
+      if (!bf || !bf.bf_id) continue;
+      wsBet.addRow([bf.bf_id, bf.target_mode || '', Number(bf.cost_mult) || 0,
+                   Number(bf.rtp_target) || 0, bf.enabled !== false, bf.notes || '']);
+    }
+    boldHdr(wsBet); setCols(wsBet, [22, 16, 12, 12, 10, 28]);
+
+    // 15_Multipliers(v5.4:三段 — WILD / PROGRESS / RANDOM。引擎讀取;選用分頁)
+    const wsMul = wb.addWorksheet('15_Multipliers');
+    const mp = (typeof multipliers === 'object' && multipliers) ? multipliers : {};
+    wsMul.addRow(['Section', 'Key', 'Value', 'Weight', 'Notes']);
+    // WILD
+    wsMul.addRow(['WILD', 'Enabled',     !!mp.wild_mult_enabled, '', '']);
+    wsMul.addRow(['WILD', 'Fixed_Mult',  Number(mp.wild_mult_fixed) || 0, '', '權重表為空時使用']);
+    for (const v of (Array.isArray(mp.wild_mult_values) ? mp.wild_mult_values : [])) {
+      wsMul.addRow(['WILD', 'Mult', Number(v.mult) || 0, Number(v.weight) || 0, '']);
+    }
+    // PROGRESS
+    wsMul.addRow(['PROGRESS', 'Enabled',        !!mp.progress_enabled, '', '']);
+    wsMul.addRow(['PROGRESS', 'Reset_On_Mode',  mp.progress_reset_on_mode !== false, '', '']);
+    const ladders = (mp.progress_ladders && typeof mp.progress_ladders === 'object') ? mp.progress_ladders : {};
+    for (const [mode, arr] of Object.entries(ladders)) {
+      wsMul.addRow(['PROGRESS', 'Ladder', mode, Array.isArray(arr) ? arr.join(',') : '', '逗號分隔倍數階梯']);
+    }
+    // RANDOM
+    wsMul.addRow(['RANDOM', 'Enabled',   !!mp.random_enabled, '', '']);
+    wsMul.addRow(['RANDOM', 'Symbol_ID', mp.random_symbol_id || '', '', '承載隨機倍數的符號']);
+    for (const v of (Array.isArray(mp.random_values) ? mp.random_values : [])) {
+      wsMul.addRow(['RANDOM', 'Mult', Number(v.mult) || 0, Number(v.weight) || 0, '']);
+    }
+    boldHdr(wsMul); setCols(wsMul, [12, 14, 14, 10, 24]);
+
+    // 16_Coin_Values(v5.4:Hold&Win 金幣面額。各模式權重展開成欄。引擎讀取;選用分頁)
+    const wsCoin = wb.addWorksheet('16_Coin_Values');
+    const cv = (typeof coinValues === 'object' && coinValues) ? coinValues : {};
+    // 頭兩列 KV
+    wsCoin.addRow(['Enabled', !!cv.enabled]);
+    wsCoin.addRow(['Coin_Symbol_ID', cv.coin_symbol_id || 'COIN']);
+    wsCoin.addRow([]);
+    // 面額表:Label / Value / Link_Jackpot + 每模式一欄權重
+    const coinModeNames = modeNames.slice();   // 與 01_Global 模式順序一致
+    wsCoin.addRow(['Label', 'Value', 'Link_Jackpot', ...coinModeNames.map(m => 'W_' + m)]);
+    for (const d of (Array.isArray(cv.denominations) ? cv.denominations : [])) {
+      const wb_ = d.weight_by_mode || {};
+      wsCoin.addRow([
+        d.label || '', Number(d.value) || 0, d.link_jackpot || '',
+        ...coinModeNames.map(m => Number(wb_[m]) || 0),
+      ]);
+    }
+    boldHdr(wsCoin); setCols(wsCoin, [16, 12, 14, ...coinModeNames.map(() => 10)]);
+
+    // 17_Bonus_Games(v6.0-c:每個 game 一段 KV header + 其 items 列。引擎讀取;選用)
+    const wsBonus = wb.addWorksheet('17_Bonus_Games');
+    wsBonus.addRow(['Bonus_ID', 'Type', 'Title', 'Trigger_Desc', 'Mode_Scope',
+                    'Upgrade_To', 'Pick_Count', 'Collect_Target',
+                    'Item_Label', 'Item_Value', 'Item_Weight', 'Item_Is_End', 'Item_Link_JP']);
+    {
+      const bg = (typeof bonusGames === 'object' && bonusGames) ? bonusGames : {};
+      const games = Array.isArray(bg.games) ? bg.games : [];
+      for (const g of games) {
+        if (!g || !g.bonus_id) continue;
+        const items = Array.isArray(g.items) ? g.items : [];
+        if (items.length === 0) {
+          // 無項目仍寫一列保留 game 定義
+          wsBonus.addRow([g.bonus_id, g.type || 'WHEEL', g.title || '', g.trigger_desc || '',
+                          g.mode_scope || 'ALL', g.wheel_upgrade_to || '',
+                          Number(g.pick_count) || 0, Number(g.collect_target) || 0,
+                          '', '', '', '', '']);
+          continue;
+        }
+        items.forEach((it, idx) => {
+          wsBonus.addRow([
+            idx === 0 ? g.bonus_id : '',
+            idx === 0 ? (g.type || 'WHEEL') : '',
+            idx === 0 ? (g.title || '') : '',
+            idx === 0 ? (g.trigger_desc || '') : '',
+            idx === 0 ? (g.mode_scope || 'ALL') : '',
+            idx === 0 ? (g.wheel_upgrade_to || '') : '',
+            idx === 0 ? (Number(g.pick_count) || 0) : '',
+            idx === 0 ? (Number(g.collect_target) || 0) : '',
+            it.label || '', Number(it.value) || 0, Number(it.weight) || 0,
+            !!it.is_end, it.link_jackpot || '',
+          ]);
+        });
+      }
+    }
+    boldHdr(wsBonus); setCols(wsBonus, [10, 12, 16, 24, 12, 11, 10, 12, 14, 11, 11, 10, 12]);
+
     return await wb.xlsx.writeBuffer();
   }
 
@@ -460,6 +605,11 @@
       discards:     'slotplanner.aconfig.discards.v1',
       rules:        'slotplanner.aconfig.rules.v1',
       jackpots:     'slotplanner.aconfig.jackpots.v1',   // v5.1
+      betconfig:    'slotplanner.aconfig.betconfig.v1',   // v5.3
+      reelstrips:   'slotplanner.aconfig.reelstrips.v1',   // v6.0-b
+      multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
+      coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
+      bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
       registry:     'slotplanner.registry.v1',
     };
     const out = {};
@@ -491,6 +641,11 @@
       discards:     'slotplanner.aconfig.discards.v1',
       rules:        'slotplanner.aconfig.rules.v1',
       jackpots:     'slotplanner.aconfig.jackpots.v1',   // v5.1
+      betconfig:    'slotplanner.aconfig.betconfig.v1',   // v5.3
+      reelstrips:   'slotplanner.aconfig.reelstrips.v1',   // v6.0-b
+      multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
+      coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
+      bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
       registry:     'slotplanner.registry.v1',
     };
     for (const [k, lsKey] of Object.entries(keys)) {

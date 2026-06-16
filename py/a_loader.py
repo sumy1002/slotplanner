@@ -28,6 +28,9 @@ from collections import defaultdict
 from typing import Any
 
 from core.schemas import (
+    BetConfig, BuyFeatureDef,
+    Multipliers, MultValue, CoinValues, CoinDenom,
+    BonusGame, BonusItem,
     AConfig, GlobalConfig, LayoutConfig, ReelLayout, PanelDef,
     SymbolDef, SymbolType,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
@@ -98,6 +101,40 @@ def load_a_config(path: str | Path) -> AConfig:
         symbol_sets=symbol_sets,   # v4.7:panel 獨立符號集
         raw_dataframes=sheets,   # 留存用於 B 文件「A 參數回填」
     )
+
+    # v5.3:03c_Paytable（優先覆蓋 pay_table）
+    _parse_paytable_03c(sheets.get('03c_Paytable'), cfg.symbols)
+
+    # v5.3:14_Bet_Config（需 header=None 以位置存取多段版面）
+    bet_df = None
+    if "14_Bet_Config" in sheets:
+        try:
+            bet_df = pd.read_excel(path, sheet_name="14_Bet_Config",
+                                   header=None, dtype=object, engine="openpyxl")
+        except Exception:
+            bet_df = None
+    cfg.bet_config = _parse_bet_config(bet_df)
+
+    # v5.4:15_Multipliers
+    cfg.multipliers = _parse_multipliers(sheets.get('15_Multipliers'))
+
+    # v5.4:16_Coin_Values（需 header=None 位置存取）
+    coin_df = None
+    if "16_Coin_Values" in sheets:
+        try:
+            coin_df = pd.read_excel(path, sheet_name="16_Coin_Values",
+                                    header=None, dtype=object, engine="openpyxl")
+        except Exception:
+            coin_df = None
+    cfg.coin_values = _parse_coin_values(coin_df)
+
+    # v6.0-b:04b_Reel_Strips
+    rs_enabled, rs_strips = _parse_reel_strips(sheets.get('04b_Reel_Strips'))
+    cfg.reel_strips_enabled = rs_enabled
+    cfg.reel_strips = rs_strips
+
+    # v6.0-c:17_Bonus_Games
+    cfg.bonus_games = _parse_bonus_games(sheets.get('17_Bonus_Games'))
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -249,6 +286,272 @@ def _parse_symbol_sets(df: pd.DataFrame | None) -> dict[str, list[str]]:
         if sid not in out[name]:
             out[name].append(sid)
     return out
+
+
+def _parse_paytable_03c(df, symbols: dict) -> None:
+    """v5.3: 03c_Paytable — Symbol_ID / Count / Pay。
+    有值時覆蓋 symbols 的 pay_table（優先於 03_Symbols Pay_Nx 欄）。
+    sheet 不存在或空 → 靜默跳過（向後相容）。
+    """
+    if df is None or df.empty:
+        return
+    for idx, r in df.iterrows():
+        sid = r.get("Symbol_ID")
+        if pd.isna(sid):
+            continue
+        sid = str(sid).strip()
+        if sid not in symbols:
+            continue
+        try:
+            count = int(r.get("Count", 0))
+            pay = float(r.get("Pay", 0.0))
+        except (ValueError, TypeError):
+            continue
+        if count > 0:
+            symbols[sid].pay_table[count] = pay
+
+
+def _parse_bet_config(df) -> "BetConfig":
+    """v5.3: 14_Bet_Config（KV 區 + Buy Feature 清單）。
+    sheet 不存在 → 回傳預設 BetConfig（向後相容）。
+    版面：Row0 表頭 / Row1-4 Ante KV / Row5 空 / Row6 BF 子表頭 / Row7+ BF 列。
+    """
+    if df is None or df.empty:
+        return BetConfig()
+
+    def _cell(rr, cc):
+        try:
+            v = df.iloc[rr, cc]
+            return None if pd.isna(v) else v
+        except Exception:
+            return None
+
+    def _bool(v):
+        if v is None:
+            return False
+        if isinstance(v, bool):
+            return v
+        return str(v).strip().upper() in ("TRUE", "1", "YES")
+
+    bc = BetConfig()
+    kv = {}
+    for i in range(1, min(6, len(df))):
+        k = _cell(i, 0)
+        if k:
+            kv[str(k).strip()] = _cell(i, 1)
+    bc.ante_bet_enabled = _bool(kv.get("Ante_Bet_Enabled", False))
+    try:
+        bc.ante_bet_mult = float(kv.get("Ante_Bet_Mult", 1.25) or 1.25)
+    except (ValueError, TypeError):
+        pass
+    try:
+        bc.ante_bet_trigger_mult = float(kv.get("Ante_Bet_Trigger_Mult", 2.0) or 2.0)
+    except (ValueError, TypeError):
+        pass
+    bc.ante_bet_desc = str(kv.get("Ante_Bet_Desc", "") or "")
+
+    for i in range(7, len(df)):
+        bf_id = _cell(i, 0)
+        if not bf_id or pd.isna(bf_id):
+            continue
+        try:
+            bc.buy_features.append(BuyFeatureDef(
+                bf_id=str(bf_id).strip(),
+                target_mode=str(_cell(i, 1) or "").strip(),
+                cost_mult=float(_cell(i, 2) or 0),
+                rtp_target=float(_cell(i, 3) or 0),
+                enabled=_bool(_cell(i, 4)),
+                notes=str(_cell(i, 5) or "").strip(),
+            ))
+        except (ValueError, TypeError):
+            continue
+    return bc
+
+
+def _parse_multipliers(df) -> "Multipliers":
+    """v5.4: 15_Multipliers（Section/Key/Value/Weight/Notes 長表）。
+    sheet 不存在 → 預設 Multipliers（向後相容）。
+    """
+    mp = Multipliers()
+    if df is None or df.empty:
+        return mp
+
+    def _b(v):
+        if isinstance(v, bool): return v
+        return str(v).strip().upper() in ("TRUE", "1", "YES")
+
+    for _, r in df.iterrows():
+        sec = str(r.get("Section") or "").strip().upper()
+        key = str(r.get("Key") or "").strip()
+        val = r.get("Value")
+        wt = r.get("Weight")
+        if sec == "WILD":
+            if key == "Enabled":
+                mp.wild_mult_enabled = _b(val)
+            elif key == "Fixed_Mult":
+                try: mp.wild_mult_fixed = float(val)
+                except (ValueError, TypeError): pass
+            elif key == "Mult":
+                try: mp.wild_mult_values.append(MultValue(float(val), float(wt or 0)))
+                except (ValueError, TypeError): pass
+        elif sec == "PROGRESS":
+            if key == "Enabled":
+                mp.progress_enabled = _b(val)
+            elif key == "Reset_On_Mode":
+                mp.progress_reset_on_mode = _b(val)
+            elif key == "Ladder":
+                mode = str(val or "").strip()
+                arr = [float(x) for x in str(wt or "").split(",") if x.strip()]
+                if mode and arr:
+                    mp.progress_ladders[mode] = arr
+        elif sec == "RANDOM":
+            if key == "Enabled":
+                mp.random_enabled = _b(val)
+            elif key == "Symbol_ID":
+                mp.random_symbol_id = str(val or "").strip()
+            elif key == "Mult":
+                try: mp.random_values.append(MultValue(float(val), float(wt or 0)))
+                except (ValueError, TypeError): pass
+    return mp
+
+
+def _parse_coin_values(df) -> "CoinValues":
+    """v5.4: 16_Coin_Values（前 2 列 KV、第 4 列起面額表;權重欄為 W_<mode>）。
+    需 header=None 讀取（位置存取）。sheet 不存在 → 預設 CoinValues。
+    """
+    cv = CoinValues()
+    if df is None or df.empty:
+        return cv
+
+    def _cell(rr, cc):
+        try:
+            v = df.iloc[rr, cc]
+            return None if pd.isna(v) else v
+        except Exception:
+            return None
+
+    def _b(v):
+        if v is None: return False
+        if isinstance(v, bool): return v
+        return str(v).strip().upper() in ("TRUE", "1", "YES")
+
+    cv.enabled = _b(_cell(0, 1))
+    cv.coin_symbol_id = str(_cell(1, 1) or "COIN").strip()
+
+    # 第 3 列（index 3）為面額表表頭：Label / Value / Link_Jackpot / W_<mode>...
+    header_row = 3
+    headers = []
+    c = 0
+    while True:
+        h = _cell(header_row, c)
+        if h is None and c > 2:
+            break
+        headers.append(str(h).strip() if h is not None else "")
+        c += 1
+        if c > 50:
+            break
+    mode_cols = [(i, h[2:]) for i, h in enumerate(headers) if h.startswith("W_")]
+
+    for i in range(header_row + 1, len(df)):
+        label = _cell(i, 0)
+        val = _cell(i, 1)
+        link = _cell(i, 2)
+        if label is None and val is None and link is None:
+            continue
+        denom = CoinDenom(
+            label=str(label or "").strip(),
+            value=float(val or 0) if val is not None else 0.0,
+            link_jackpot=str(link or "").strip(),
+        )
+        for (ci, mode) in mode_cols:
+            w = _cell(i, ci)
+            try:
+                denom.weight_by_mode[mode] = float(w or 0)
+            except (ValueError, TypeError):
+                denom.weight_by_mode[mode] = 0.0
+        cv.denominations.append(denom)
+    return cv
+
+
+def _parse_reel_strips(df):
+    """v6.0-b: 04b_Reel_Strips — Mode_Scope / Reel_ID / Enabled / Strip_Sequence。
+    回傳 (enabled, {mode: {reel_id: [sym,...]}})。sheet 不存在 → (False, {}).
+    """
+    if df is None or df.empty:
+        return (False, {})
+    enabled = False
+    strips = {}
+    for _, r in df.iterrows():
+        mode = r.get("Mode_Scope")
+        rid = r.get("Reel_ID")
+        seq = r.get("Strip_Sequence")
+        if pd.isna(mode) or pd.isna(rid) or pd.isna(seq):
+            continue
+        en = r.get("Enabled")
+        if isinstance(en, bool):
+            enabled = enabled or en
+        elif str(en).strip().upper() in ("TRUE", "1", "YES"):
+            enabled = True
+        arr = [x.strip() for x in str(seq).split(",") if x.strip()]
+        if not arr:
+            continue
+        try:
+            rid_i = int(rid)
+        except (ValueError, TypeError):
+            continue
+        strips.setdefault(str(mode).strip(), {})[rid_i] = arr
+    return (enabled, strips)
+
+
+def _parse_bonus_games(df) -> list:
+    """v6.0-c: 17_Bonus_Games — 每 game 首列帶 game 欄位,後續列僅 item 欄。
+    以「首列非空 → 新 game」carry-forward 方式還原。sheet 不存在 → []。
+    """
+    if df is None or df.empty:
+        return []
+    games = []
+    cur = None
+
+    def _b(v):
+        if isinstance(v, bool): return v
+        return str(v).strip().upper() in ("TRUE", "1", "YES")
+
+    def _s(v):
+        return "" if pd.isna(v) else str(v).strip()
+
+    def _n(v, cast=float):
+        try: return cast(v)
+        except (ValueError, TypeError): return cast(0)
+
+    for _, r in df.iterrows():
+        bid = _s(r.get("Bonus_ID"))
+        if bid:
+            cur = BonusGame(
+                bonus_id=bid,
+                type=(_s(r.get("Type")) or "WHEEL").upper(),
+                title=_s(r.get("Title")),
+                trigger_desc=_s(r.get("Trigger_Desc")),
+                mode_scope=_s(r.get("Mode_Scope")) or "ALL",
+                wheel_upgrade_to=_s(r.get("Upgrade_To")),
+                pick_count=_n(r.get("Pick_Count"), int),
+                collect_target=_n(r.get("Collect_Target"), int),
+            )
+            games.append(cur)
+        if cur is None:
+            continue
+        label = _s(r.get("Item_Label"))
+        val = r.get("Item_Value")
+        link = _s(r.get("Item_Link_JP"))
+        # 有 item 內容才加（避免無 item 的純 header 列誤加空項）
+        if label or (val is not None and not pd.isna(val) and _n(val) != 0) or link:
+            cur.items.append(BonusItem(
+                label=label,
+                value=_n(val),
+                weight=_n(r.get("Item_Weight")),
+                is_end=_b(r.get("Item_Is_End")),
+                link_jackpot=link,
+            ))
+    return games
 
 
 def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
@@ -711,6 +1014,38 @@ def _cross_validate(cfg: AConfig):
                     "02_Layout",
                     f"Reel {reel.reel_id} 副盤引用的符號集 '{sset}' "
                     f"未在 03b_Symbol_Sets 定義或為空",
+                )
+
+    # v5.4:15_Multipliers — 隨機倍數承載符號必須存在
+    mp = cfg.multipliers
+    if mp and mp.random_enabled and mp.random_symbol_id:
+        if mp.random_symbol_id not in cfg.symbols:
+            raise ConfigValidationError(
+                "15_Multipliers",
+                f"隨機倍數承載符號 '{mp.random_symbol_id}' 未在 03_Symbols 定義",
+            )
+
+    # v5.4:16_Coin_Values — 金幣符號存在 + link_jackpot 引用合法
+    cv = cfg.coin_values
+    if cv and cv.enabled:
+        if cv.coin_symbol_id and cv.coin_symbol_id not in cfg.symbols:
+            raise ConfigValidationError(
+                "16_Coin_Values",
+                f"金幣符號 '{cv.coin_symbol_id}' 未在 03_Symbols 定義",
+            )
+        # 13_Jackpots 的 jp_id 集合（raw_dataframes 可能含；否則略過 JP 連結檢查）
+        jp_ids = set()
+        jp_df = cfg.raw_dataframes.get("13_Jackpots") if cfg.raw_dataframes else None
+        if jp_df is not None:
+            try:
+                jp_ids = {str(x).strip() for x in jp_df.get("JP_ID", []) if str(x).strip()}
+            except Exception:
+                jp_ids = set()
+        for d in cv.denominations:
+            if d.link_jackpot and jp_ids and d.link_jackpot not in jp_ids:
+                raise ConfigValidationError(
+                    "16_Coin_Values",
+                    f"面額 '{d.label or d.value}' 連結的 JP '{d.link_jackpot}' 不存在於 13_Jackpots",
                 )
 
     # v4.7:panel 交叉驗證

@@ -81,6 +81,12 @@
     const constraints = _readLS('slotplanner.aconfig.constraints.v1', []);
     const rules       = _readLS('slotplanner.aconfig.rules.v1', []);
     const registryRaw = _readLS('slotplanner.registry.v1', { symbols: [] });
+    // v5.6:帶入 v5.x 新增結構供文件自動呈現
+    const jackpots    = _readLS('slotplanner.aconfig.jackpots.v1', []);
+    const betConfig   = _readLS('slotplanner.aconfig.betconfig.v1', {});
+    const multipliers = _readLS('slotplanner.aconfig.multipliers.v1', {});
+    const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
+    const bonusGames  = _readLS('slotplanner.aconfig.bonusgames.v1', {});   // v6.0-c
 
     const allSyms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     const syms = allSyms.filter(s => s.enabled !== false);
@@ -101,6 +107,12 @@
       symbols: syms,
       normalSyms,
       specialSyms,
+      // v5.6:
+      jackpots: Array.isArray(jackpots) ? jackpots : [],
+      betConfig: (betConfig && typeof betConfig === 'object') ? betConfig : {},
+      multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
+      coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
+      bonusGames: (bonusGames && Array.isArray(bonusGames.games)) ? bonusGames.games : [],   // v6.0-c
       derived: {
         gridStr,
         waysCount,
@@ -109,6 +121,22 @@
         startingMode: g.starting_mode || (modes[0] && modes[0].mode) || 'NG',
       },
     };
+  }
+
+  // v5.6:符號 → 動態賠付列（{count, pay} 由高到低 count 排序;優先 pay_rows）
+  function _symPayRows(s) {
+    if (Array.isArray(s.pay_rows) && s.pay_rows.length) {
+      return s.pay_rows
+        .filter(r => Number(r.pay) > 0)
+        .map(r => ({ count: Number(r.count), pay: Number(r.pay) }))
+        .sort((a, b) => b.count - a.count);
+    }
+    const rows = [];
+    for (const n of [9, 8, 7, 6, 5, 4, 3, 2]) {
+      const v = Number(s['pay_' + n + 'x']) || 0;
+      if (v > 0) rows.push({ count: n, pay: v });
+    }
+    return rows;
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -359,27 +387,37 @@
     kv('加局', m.freegame.add_spins);
     kv('上限', m.freegame.cap === '有' ? `有（${m.freegame.cap_value || TODO}）` : m.freegame.cap);
 
-    // ── Sheet 2：圖示賠付明細 ──
+    // ── Sheet 2：圖示賠付明細（v5.6:動態連線數欄，依實際 pay_rows 決定）──
     const wsS = wb.addWorksheet('圖示賠付明細');
-    wsS.columns = [{ width: 8 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }];
+    // 收集所有符號出現過的連線數（由大到小排序），動態建欄
+    const countSet = new Set();
+    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => countSet.add(r.count)));
+    const payCounts = [...countSet].sort((a, b) => b - a);
+    if (payCounts.length === 0) payCounts.push(5, 4, 3);   // 全空時給預設三欄
+    // 欄位:編號 / 名稱 / 類型 / <各連線數> / 備註
+    const NCOL_S = 3 + payCounts.length + 1;
+    wsS.columns = [{ width: 8 }, { width: 18 }, { width: 12 },
+                   ...payCounts.map(() => ({ width: 11 })), { width: 26 }];
     let SR = 1;
     function symHeader(title, bg) {
-      wsS.mergeCells(SR, 1, SR, 7);
+      wsS.mergeCells(SR, 1, SR, NCOL_S);
       _cell(wsS, SR, 1, title, { bold: true, bg: C.band, fg: C.bandFg, size: 11 });
       SR++;
-      ['編號', '名稱', '類型', '5連線', '4連線', '3連線'].forEach((h, i) =>
-        _cell(wsS, SR, i + 1, h, { bold: true, bg: bg, fg: C.thFg, h: 'center' }));
-      _cell(wsS, SR, 7, '備註', { bold: true, bg: bg, fg: C.thFg, h: 'center' });
+      _cell(wsS, SR, 1, '編號', { bold: true, bg, fg: C.thFg, h: 'center' });
+      _cell(wsS, SR, 2, '名稱', { bold: true, bg, fg: C.thFg, h: 'center' });
+      _cell(wsS, SR, 3, '類型', { bold: true, bg, fg: C.thFg, h: 'center' });
+      payCounts.forEach((n, i) => _cell(wsS, SR, 4 + i, n + '連線', { bold: true, bg, fg: C.thFg, h: 'center' }));
+      _cell(wsS, SR, NCOL_S, '備註', { bold: true, bg, fg: C.thFg, h: 'center' });
       SR++;
     }
     function symRow(s, role) {
       _cell(wsS, SR, 1, s.number !== '' && s.number != null ? s.number : '', { h: 'center' });
       _cell(wsS, SR, 2, s.name || _symId(s));
       _cell(wsS, SR, 3, role || (s.type || ''), { h: 'center' });
-      _cell(wsS, SR, 4, s.pay_5x || 0, { h: 'center' });
-      _cell(wsS, SR, 5, s.pay_4x || 0, { h: 'center' });
-      _cell(wsS, SR, 6, s.pay_3x || 0, { h: 'center' });
-      _cell(wsS, SR, 7, '');
+      const payByN = {};
+      _symPayRows(s).forEach(r => { payByN[r.count] = r.pay; });
+      payCounts.forEach((n, i) => _cell(wsS, SR, 4 + i, payByN[n] != null ? payByN[n] : '—', { h: 'center' }));
+      _cell(wsS, SR, NCOL_S, '');
       SR++;
     }
     symHeader('一般圖示', C.th);
@@ -391,7 +429,7 @@
       symRow(s, role);
       const beh = m.special_behavior[_symId(s)];
       if (beh) {
-        wsS.mergeCells(SR, 1, SR, 7);
+        wsS.mergeCells(SR, 1, SR, NCOL_S);
         _cell(wsS, SR, 1, `↳ ${s.name || _symId(s)} 行為：${beh}`, { wrap: true, fg: C.todoFg });
         wsS.getRow(SR).height = 30;
         SR++;
@@ -452,6 +490,112 @@
       XR++;
     }
 
+    // ── Sheet 5：數值機制（v5.6:投注結構 / 倍數系統 / 金幣面額）──
+    //   僅在有對應設定時才建表，避免空白頁
+    const bc = cfg.betConfig || {};
+    const mpc = cfg.multipliers || {};
+    const cvc = cfg.coinValues || {};
+    const hasBet  = bc.ante_bet_enabled || (Array.isArray(bc.buy_features) && bc.buy_features.length);
+    const hasMul  = mpc.wild_mult_enabled || mpc.progress_enabled || mpc.random_enabled;
+    const hasCoin = cvc.enabled && Array.isArray(cvc.denominations) && cvc.denominations.length;
+    if (hasBet || hasMul || hasCoin) {
+      const wsV = wb.addWorksheet('數值機制');
+      wsV.columns = [{ width: 18 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 30 }];
+      let VR = 1;
+      const vBand = (t) => { wsV.mergeCells(VR, 1, VR, 5); _cell(wsV, VR, 1, t, { bold: true, bg: C.band, fg: C.bandFg, size: 11 }); VR++; };
+      const vHead = (arr) => { arr.forEach((h, i) => _cell(wsV, VR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' })); VR++; };
+
+      // 投注結構
+      if (hasBet) {
+        vBand('投注結構（Bet Config）');
+        if (bc.ante_bet_enabled) {
+          vHead(['Ante Bet', '成本倍數', '觸發倍率', '', '說明']);
+          _cell(wsV, VR, 1, '啟用', { h: 'center' });
+          _cell(wsV, VR, 2, '×' + (Number(bc.ante_bet_mult) || 0), { h: 'center' });
+          _cell(wsV, VR, 3, '×' + (Number(bc.ante_bet_trigger_mult) || 0), { h: 'center' });
+          _cell(wsV, VR, 5, bc.ante_bet_desc || '');
+          VR++;
+        }
+        if (Array.isArray(bc.buy_features) && bc.buy_features.length) {
+          vHead(['Buy Feature', '目標模式', '成本×注額', 'RTP目標', '備註']);
+          bc.buy_features.forEach(f => {
+            _cell(wsV, VR, 1, f.bf_id || '', { h: 'center' });
+            _cell(wsV, VR, 2, f.target_mode || '', { h: 'center' });
+            _cell(wsV, VR, 3, Number(f.cost_mult) || 0, { h: 'center' });
+            _cell(wsV, VR, 4, (Number(f.rtp_target) || 0) + '%', { h: 'center' });
+            _cell(wsV, VR, 5, f.notes || '');
+            VR++;
+          });
+        }
+        VR++;
+      }
+
+      // 倍數系統
+      if (hasMul) {
+        vBand('倍數系統（Multipliers）');
+        if (mpc.wild_mult_enabled) {
+          const vals = Array.isArray(mpc.wild_mult_values) ? mpc.wild_mult_values : [];
+          if (vals.length) {
+            vHead(['Wild 倍數', '倍數', '權重', '機率', '']);
+            const tot = vals.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1;
+            vals.forEach(v => {
+              _cell(wsV, VR, 1, '', {});
+              _cell(wsV, VR, 2, '×' + (Number(v.mult) || 0), { h: 'center' });
+              _cell(wsV, VR, 3, Number(v.weight) || 0, { h: 'center' });
+              _cell(wsV, VR, 4, ((Number(v.weight) || 0) / tot * 100).toFixed(1) + '%', { h: 'center' });
+              VR++;
+            });
+          } else {
+            vHead(['Wild 倍數', '固定值', '', '', '']);
+            _cell(wsV, VR, 1, '啟用', { h: 'center' });
+            _cell(wsV, VR, 2, '×' + (Number(mpc.wild_mult_fixed) || 0), { h: 'center' });
+            VR++;
+          }
+        }
+        if (mpc.progress_enabled) {
+          vHead(['進度倍數', '模式', '階梯', '重置', '']);
+          const lad = mpc.progress_ladders || {};
+          Object.keys(lad).forEach(mode => {
+            _cell(wsV, VR, 1, '', {});
+            _cell(wsV, VR, 2, mode, { h: 'center' });
+            _cell(wsV, VR, 3, Array.isArray(lad[mode]) ? lad[mode].join(' → ') : '', { h: 'center' });
+            _cell(wsV, VR, 4, mpc.progress_reset_on_mode === false ? '不重置' : '重置', { h: 'center' });
+            VR++;
+          });
+        }
+        if (mpc.random_enabled) {
+          const vals = Array.isArray(mpc.random_values) ? mpc.random_values : [];
+          vHead(['隨機倍數', '倍數', '權重', '機率', '承載符號:' + (mpc.random_symbol_id || '—')]);
+          const tot = vals.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1;
+          vals.forEach(v => {
+            _cell(wsV, VR, 1, '', {});
+            _cell(wsV, VR, 2, '×' + (Number(v.mult) || 0), { h: 'center' });
+            _cell(wsV, VR, 3, Number(v.weight) || 0, { h: 'center' });
+            _cell(wsV, VR, 4, ((Number(v.weight) || 0) / tot * 100).toFixed(1) + '%', { h: 'center' });
+            VR++;
+          });
+        }
+        VR++;
+      }
+
+      // 金幣面額
+      if (hasCoin) {
+        vBand('金幣面額（Hold&Win · 符號:' + (cvc.coin_symbol_id || 'COIN') + '）');
+        const modeNames = cfg.modes.map(md => md.mode).filter(Boolean);
+        vHead(['標籤 / 面額', '面額×注額', '連結JP', ...modeNames.slice(0, 2).map(mn => 'W_' + mn)]);
+        cvc.denominations.forEach(d => {
+          _cell(wsV, VR, 1, d.label || ('×' + (Number(d.value) || 0)), {});
+          _cell(wsV, VR, 2, d.link_jackpot ? '（依JP）' : (Number(d.value) || 0), { h: 'center' });
+          _cell(wsV, VR, 3, d.link_jackpot || '—', { h: 'center' });
+          modeNames.slice(0, 2).forEach((mn, i) => {
+            const w = d.weight_by_mode ? (Number(d.weight_by_mode[mn]) || 0) : 0;
+            _cell(wsV, VR, 4 + i, w, { h: 'center' });
+          });
+          VR++;
+        });
+      }
+    }
+
     return await wb.xlsx.writeBuffer();
   }
 
@@ -507,13 +651,22 @@
     // 賠付表
     L.push('## 賠付表');
     L.push('');
-    L.push('| 編號 | 名稱 | 類型 | 5連線 | 4連線 | 3連線 |');
-    L.push('| --- | --- | --- | --- | --- | --- |');
+    // v5.6:動態連線數欄
+    const mdCountSet = new Set();
+    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => mdCountSet.add(r.count)));
+    const mdCounts = [...mdCountSet].sort((a, b) => b - a);
+    if (mdCounts.length === 0) mdCounts.push(5, 4, 3);
+    L.push('| 編號 | 名稱 | 類型 | ' + mdCounts.map(n => n + '連線').join(' | ') + ' |');
+    L.push('| --- | --- | --- | ' + mdCounts.map(() => '---').join(' | ') + ' |');
+    const mdPayCell = (s, n) => {
+      const by = {}; _symPayRows(s).forEach(r => { by[r.count] = r.pay; });
+      return by[n] != null ? by[n] : '—';
+    };
     cfg.normalSyms.forEach(s => {
-      L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${s.type || ''} | ${s.pay_5x || 0} | ${s.pay_4x || 0} | ${s.pay_3x || 0} |`);
+      L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${s.type || ''} | ` + mdCounts.map(n => mdPayCell(s, n)).join(' | ') + ' |');
     });
     cfg.specialSyms.forEach(s => {
-      L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${_symRole(s) || '特殊'} | ${s.pay_5x || 0} | ${s.pay_4x || 0} | ${s.pay_3x || 0} |`);
+      L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${_symRole(s) || '特殊'} | ` + mdCounts.map(n => mdPayCell(s, n)).join(' | ') + ' |');
     });
     L.push('');
 
@@ -565,6 +718,101 @@
     if (m.freegame.enter_board) L.push(`- 進入盤面：${m.freegame.enter_board}`);
     if (m.freegame.exit_board) L.push(`- 結束盤面：${m.freegame.exit_board}`);
     L.push('');
+
+    // v5.6:數值機制（投注 / 倍數 / 金幣）— 僅有設定時輸出
+    const _bc = cfg.betConfig || {};
+    if (_bc.ante_bet_enabled || (Array.isArray(_bc.buy_features) && _bc.buy_features.length)) {
+      L.push('## 投注結構');
+      L.push('');
+      if (_bc.ante_bet_enabled) {
+        L.push(`- **Ante Bet**：成本 ×${Number(_bc.ante_bet_mult) || 0} 注額，觸發倍率 ×${Number(_bc.ante_bet_trigger_mult) || 0}${_bc.ante_bet_desc ? '　—　' + _bc.ante_bet_desc : ''}`);
+      }
+      if (Array.isArray(_bc.buy_features) && _bc.buy_features.length) {
+        L.push('');
+        L.push('| Buy Feature | 目標模式 | 成本×注額 | RTP目標 | 備註 |');
+        L.push('| --- | --- | --- | --- | --- |');
+        _bc.buy_features.forEach(f => {
+          L.push(`| ${f.bf_id || ''} | ${f.target_mode || ''} | ${Number(f.cost_mult) || 0} | ${(Number(f.rtp_target) || 0)}% | ${(f.notes || '').replace(/\|/g, '\\|')} |`);
+        });
+      }
+      L.push('');
+    }
+
+    const _mp = cfg.multipliers || {};
+    if (_mp.wild_mult_enabled || _mp.progress_enabled || _mp.random_enabled) {
+      L.push('## 倍數系統');
+      L.push('');
+      if (_mp.wild_mult_enabled) {
+        const vals = Array.isArray(_mp.wild_mult_values) ? _mp.wild_mult_values : [];
+        if (vals.length) {
+          const tot = vals.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1;
+          L.push('- **Wild 倍數**（權重表）：' + vals.map(v => `×${Number(v.mult) || 0}（${((Number(v.weight) || 0) / tot * 100).toFixed(1)}%）`).join('、'));
+        } else {
+          L.push(`- **Wild 倍數**：固定 ×${Number(_mp.wild_mult_fixed) || 0}`);
+        }
+      }
+      if (_mp.progress_enabled) {
+        const lad = _mp.progress_ladders || {};
+        const resetTxt = _mp.progress_reset_on_mode === false ? '切模式不重置' : '切模式重置';
+        L.push(`- **進度倍數**（${resetTxt}）：` + Object.keys(lad).map(mo => `${mo} = ${Array.isArray(lad[mo]) ? lad[mo].join('→') : ''}`).join('；'));
+      }
+      if (_mp.random_enabled) {
+        const vals = Array.isArray(_mp.random_values) ? _mp.random_values : [];
+        const tot = vals.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1;
+        L.push(`- **隨機倍數**（承載符號 ${_mp.random_symbol_id || '—'}）：` + vals.map(v => `×${Number(v.mult) || 0}（${((Number(v.weight) || 0) / tot * 100).toFixed(1)}%）`).join('、'));
+      }
+      L.push('');
+    }
+
+    const _cv = cfg.coinValues || {};
+    if (_cv.enabled && Array.isArray(_cv.denominations) && _cv.denominations.length) {
+      L.push('## 金幣面額（Hold&Win）');
+      L.push('');
+      L.push(`- 金幣符號：**${_cv.coin_symbol_id || 'COIN'}**`);
+      L.push('');
+      const _modeNames = cfg.modes.map(md => md.mode).filter(Boolean);
+      L.push('| 標籤 / 面額 | 面額×注額 | 連結JP | ' + _modeNames.map(mn => 'W_' + mn).join(' | ') + ' |');
+      L.push('| --- | --- | --- | ' + _modeNames.map(() => '---').join(' | ') + ' |');
+      _cv.denominations.forEach(d => {
+        const wm = _modeNames.map(mn => (d.weight_by_mode ? (Number(d.weight_by_mode[mn]) || 0) : 0));
+        L.push(`| ${d.label || ('×' + (Number(d.value) || 0))} | ${d.link_jackpot ? '（依JP）' : (Number(d.value) || 0)} | ${d.link_jackpot || '—'} | ${wm.join(' | ')} |`);
+      });
+      L.push('');
+    }
+
+    // v6.0-c:Bonus 小遊戲
+    const _bg = cfg.bonusGames || [];
+    if (_bg.length) {
+      const TLAB = { WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+      L.push('## Bonus 小遊戲');
+      L.push('');
+      _bg.forEach(g => {
+        L.push(`### ${g.title || g.bonus_id}（${TLAB[g.type] || g.type}）`);
+        if (g.trigger_desc) L.push(`- 觸發：${g.trigger_desc}`);
+        if (g.mode_scope && g.mode_scope !== 'ALL') L.push(`- 適用模式：${g.mode_scope}`);
+        if (g.type === 'WHEEL' && g.wheel_upgrade_to) L.push(`- 升級至：${g.wheel_upgrade_to}`);
+        if (g.type === 'PICK') L.push(`- 抽選次數：${Number(g.pick_count) > 0 ? g.pick_count : '抽到結束項為止'}`);
+        if (g.type === 'COLLECTION') L.push(`- 目標收集數：${g.collect_target}`);
+        if (Array.isArray(g.items) && g.items.length) {
+          L.push('');
+          if (g.type === 'COLLECTION') {
+            L.push('| 獎勵 | 門檻 | 連結JP |');
+            L.push('| --- | --- | --- |');
+            g.items.forEach(it => L.push(`| ${it.label || ''} | ${Number(it.value) || 0} | ${it.link_jackpot || '—'} |`));
+          } else {
+            const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0) || 1;
+            L.push('| 項目 | 值×注額 | 權重 | 機率 |' + (g.type === 'PICK' ? ' 結束 |' : '') + ' 連結JP |');
+            L.push('| --- | --- | --- | --- |' + (g.type === 'PICK' ? ' --- |' : '') + ' --- |');
+            g.items.forEach(it => {
+              const pct = ((Number(it.weight) || 0) / tot * 100).toFixed(1) + '%';
+              L.push(`| ${it.label || ''} | ${it.link_jackpot ? '（依JP）' : (Number(it.value) || 0)} | ${Number(it.weight) || 0} | ${pct} |`
+                + (g.type === 'PICK' ? ` ${it.is_end ? '✓' : ''} |` : '') + ` ${it.link_jackpot || '—'} |`);
+            });
+          }
+        }
+        L.push('');
+      });
+    }
 
     return L.join('\n');
   }

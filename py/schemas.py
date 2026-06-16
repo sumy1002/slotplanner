@@ -211,6 +211,99 @@ class SymbolDef:
 
 
 # ============================================================
+# Bonus 小遊戲 (對應 17_Bonus_Games, v6.0-c)
+# ============================================================
+@dataclass
+class BonusItem:
+    label:        str = ""
+    value:        float = 0.0
+    weight:       float = 100.0
+    is_end:       bool = False
+    link_jackpot: str = ""
+
+@dataclass
+class BonusGame:
+    bonus_id:         str = "BG1"
+    type:             str = "WHEEL"   # WHEEL / PICK / COLLECTION
+    title:            str = ""
+    trigger_desc:     str = ""
+    mode_scope:       str = "ALL"
+    wheel_upgrade_to: str = ""
+    pick_count:       int = 0
+    collect_target:   int = 0
+    items:            list = None
+    notes:            str = ""
+    def __post_init__(self):
+        if self.items is None: self.items = []
+
+# ============================================================
+# 倍數系統 (對應 15_Multipliers, v5.4)
+# ============================================================
+@dataclass
+class MultValue:
+    mult:   float
+    weight: float = 100.0
+
+@dataclass
+class Multipliers:
+    wild_mult_enabled:      bool = False
+    wild_mult_fixed:        float = 2.0
+    wild_mult_values:       list = None
+    progress_enabled:       bool = False
+    progress_reset_on_mode: bool = True
+    progress_ladders:       dict = None
+    random_enabled:         bool = False
+    random_symbol_id:       str = ""
+    random_values:          list = None
+    def __post_init__(self):
+        if self.wild_mult_values is None: self.wild_mult_values = []
+        if self.progress_ladders is None: self.progress_ladders = {}
+        if self.random_values is None: self.random_values = []
+
+# ============================================================
+# 金幣面額 (對應 16_Coin_Values, v5.4 — Hold&Win)
+# ============================================================
+@dataclass
+class CoinDenom:
+    label:          str = ""
+    value:          float = 1.0
+    weight_by_mode: dict = None
+    link_jackpot:   str = ""
+    def __post_init__(self):
+        if self.weight_by_mode is None: self.weight_by_mode = {}
+
+@dataclass
+class CoinValues:
+    enabled:        bool = False
+    coin_symbol_id: str = "COIN"
+    denominations:  list = None
+    def __post_init__(self):
+        if self.denominations is None: self.denominations = []
+
+# ============================================================
+# 投注結構 (對應 14_Bet_Config, v5.3)
+# ============================================================
+@dataclass
+class BuyFeatureDef:
+    bf_id:        str
+    target_mode:  str
+    cost_mult:    float = 80.0
+    rtp_target:   float = 96.0
+    enabled:      bool  = True
+    notes:        str   = ""
+
+@dataclass
+class BetConfig:
+    ante_bet_enabled:      bool  = False
+    ante_bet_mult:         float = 1.25
+    ante_bet_trigger_mult: float = 2.0
+    ante_bet_desc:         str   = ""
+    buy_features:          list  = None
+    def __post_init__(self):
+        if self.buy_features is None:
+            self.buy_features = []
+
+# ============================================================
 # Reel 權重 (對應 04_Reel_Weights, 08_Combo_Weights)
 # ============================================================
 @dataclass
@@ -371,6 +464,16 @@ class AConfig:
 
     # v4.7:符號集（D）{set_name: [symbol_id, ...]};舊檔無 → {}
     symbol_sets: dict[str, list[str]] = field(default_factory=dict)
+
+    # v5.3 / v5.4:投注結構 / 倍數系統 / 金幣面額（選用;舊檔 → 預設）
+    bet_config: "BetConfig" = field(default_factory=lambda: BetConfig())
+    multipliers: "Multipliers" = field(default_factory=lambda: Multipliers())
+    coin_values: "CoinValues" = field(default_factory=lambda: CoinValues())
+    # v6.0-b:真實輪帶（啟用時引擎視窗抽樣）;reel_strips[mode][reel_id] = [sym,...]
+    reel_strips_enabled: bool = False
+    reel_strips: dict = field(default_factory=dict)
+    # v6.0-c:Bonus 小遊戲（選用）
+    bonus_games: list = field(default_factory=list)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

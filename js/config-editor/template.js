@@ -35,6 +35,23 @@
     <div class="cfg-source-status">
       <!-- v5.0-b:主題切換移除,唯一入口在 sidebar(app 層級全站有效)-->
 
+      <!-- v5.5:即時 RTP 徽章(LINE base;點擊到 reel_weights 看明細)-->
+      <button v-if="rtpResult.ok"
+              class="cfg-rtp-badge"
+              :class="{
+                'cfg-rtp-ok':   rtpVsTarget !== null && Math.abs(rtpVsTarget) <= 2,
+                'cfg-rtp-low':  rtpVsTarget !== null && rtpVsTarget < -2,
+                'cfg-rtp-high': rtpVsTarget !== null && rtpVsTarget > 2
+              }"
+              @click="active = 'reel_weights'"
+              :title="'LINE base RTP 即時估算' + (rtpResult.note ? ' — ' + rtpResult.note : '') + '(點擊看明細)'">
+        <span class="cfg-rtp-badge-label">RTP</span>
+        <span class="cfg-rtp-badge-val">{{ rtpPct.toFixed(2) }}%</span>
+        <span v-if="rtpVsTarget !== null" class="cfg-rtp-badge-delta">
+          {{ rtpVsTarget >= 0 ? '+' : '' }}{{ rtpVsTarget.toFixed(1) }}
+        </span>
+      </button>
+
       <!-- ── #15 搜尋按鈕 ── -->
       <button class="cfg-search-btn"
               @click="openSearch"
@@ -1258,6 +1275,36 @@
             Mode × Reel × Symbol 三維權重表(熱力圖)。Symbol 預設取自
             <a href="#" @click.prevent="active='symbols'" class="cfg-link">03_Symbols</a>,
             首次進入該模式時自動建立 100 均勻權重。
+          </div>
+        </div>
+
+        <!-- v5.5:即時 RTP 估算面板 -->
+        <div class="cfg-rtp-panel" :class="{
+              'cfg-rtp-panel-ok':   rtpResult.ok && rtpVsTarget !== null && Math.abs(rtpVsTarget) <= 2,
+              'cfg-rtp-panel-low':  rtpResult.ok && rtpVsTarget !== null && rtpVsTarget < -2,
+              'cfg-rtp-panel-high': rtpResult.ok && rtpVsTarget !== null && rtpVsTarget > 2 }">
+          <div class="cfg-rtp-panel-main">
+            <span class="cfg-rtp-panel-icon">📈</span>
+            <template v-if="rtpResult.ok">
+              <span class="cfg-rtp-panel-big">{{ rtpPct.toFixed(2) }}%</span>
+              <span class="cfg-rtp-panel-cap">LINE base RTP（即時估算 · {{ rtpResult.mode }}）</span>
+              <span v-if="rtpResult.target" class="cfg-rtp-panel-target">
+                目標 {{ rtpResult.target }}%
+                <span class="cfg-rtp-panel-delta" :class="{
+                        pos: rtpVsTarget > 0, neg: rtpVsTarget < 0 }">
+                  （{{ rtpVsTarget >= 0 ? '+' : '' }}{{ rtpVsTarget.toFixed(2) }}）
+                </span>
+              </span>
+            </template>
+            <span v-else class="cfg-rtp-panel-na">{{ rtpResult.note || 'RTP 無法估算' }}</span>
+          </div>
+          <div v-if="rtpResult.ok && rtpResult.note" class="cfg-rtp-panel-note">⚠ {{ rtpResult.note }}</div>
+          <div v-if="rtpResult.ok && rtpResult.perLine && rtpResult.perLine.length" class="cfg-rtp-panel-lines">
+            <span class="cfg-rtp-panel-lines-label">各線貢獻（{{ rtpResult.lineCount }} 線）:</span>
+            <span v-for="l in rtpResult.perLine" :key="l.line_id" class="cfg-rtp-line-chip"
+                  :title="'線 ' + l.line_id + ':' + (l.rtp * 100).toFixed(3) + '%'">
+              #{{ l.line_id }} {{ (l.rtp * 100).toFixed(1) }}%
+            </span>
           </div>
         </div>
 
@@ -4415,6 +4462,464 @@
           <pre v-if="dbgOpen.bins" class="cfg-debug-pre">{{ binsDebugJson }}</pre>
         </details>
       </div>
+
+      <!-- ─── 14:投注結構(v5.3:Ante Bet + Buy Feature)─── -->
+      <div v-else-if="active === 'bet_config'" class="cfg-form cfg-betconfig-form">
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Ante Bet <span class="cfg-key">Ante_Bet</span></div>
+          <div class="cfg-hint">加注功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
+
+          <div class="cfg-field">
+            <label class="cfg-label">啟用 Ante Bet</label>
+            <label class="chk">
+              <input type="checkbox" v-model="betConfig.ante_bet_enabled">
+              <span class="box"></span>
+              <span>{{ betConfig.ante_bet_enabled ? '已啟用' : '關閉' }}</span>
+            </label>
+          </div>
+
+          <template v-if="betConfig.ante_bet_enabled">
+            <div class="cfg-ante-grid">
+              <div class="cfg-field">
+                <label class="cfg-label">成本倍數 <span class="cfg-key">×注額</span></label>
+                <input class="input input-w-num input-center" type="number" min="1" max="3" step="0.05"
+                       v-model.number="betConfig.ante_bet_mult">
+                <div class="cfg-hint">通常 1.25（玩家多付 25%）</div>
+              </div>
+              <div class="cfg-field">
+                <label class="cfg-label">觸發倍率 <span class="cfg-key">×基礎機率</span></label>
+                <input class="input input-w-num input-center" type="number" min="1" max="10" step="0.1"
+                       v-model.number="betConfig.ante_bet_trigger_mult">
+                <div class="cfg-hint">SCAT / 特色觸發率的倍數（如 2× = 觸發率翻倍）</div>
+              </div>
+            </div>
+            <div class="cfg-field" style="margin-top:4px;">
+              <label class="cfg-label">企劃說明 <span class="cfg-key">文件生成用</span></label>
+              <input class="input input-w-name" type="text" v-model.trim="betConfig.ante_bet_desc"
+                     placeholder="啟用後 SCAT 觸發率提升 ×2，費用 ×1.25 注額">
+            </div>
+          </template>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Buy Feature <span class="cfg-key">Buy_Feature</span></div>
+          <div class="cfg-hint">購免遊功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
+
+          <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
+            尚未設定 Buy Feature；不需要此功能的遊戲可留空。
+          </div>
+
+          <div class="cfg-bf-list">
+            <div v-for="(bf, bi) in betConfig.buy_features" :key="'bf' + bi" class="cfg-bf-row">
+              <div class="cfg-bf-cell">
+                <label class="cfg-label">BF_ID</label>
+                <input class="input input-w-id cfg-mono" type="text" v-model.trim="bf.bf_id" placeholder="BF_FG">
+              </div>
+              <div class="cfg-bf-cell">
+                <label class="cfg-label">目標模式</label>
+                <select class="input input-w-id" v-model="bf.target_mode">
+                  <option value="">（請選擇）</option>
+                  <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
+                </select>
+              </div>
+              <div class="cfg-bf-cell">
+                <label class="cfg-label">成本 <span class="cfg-key">×注額</span></label>
+                <input class="input input-w-num input-center" type="number" min="0" step="1"
+                       v-model.number="bf.cost_mult">
+              </div>
+              <div class="cfg-bf-cell">
+                <label class="cfg-label">RTP 目標 <span class="cfg-key">%</span></label>
+                <input class="input input-w-num input-center" type="number" min="0" max="102" step="0.1"
+                       v-model.number="bf.rtp_target">
+              </div>
+              <div class="cfg-bf-cell cfg-bf-cell-grow">
+                <label class="cfg-label">備註</label>
+                <input class="input input-w-name" type="text" v-model.trim="bf.notes"
+                       placeholder="適用 SuperBet 模式">
+              </div>
+              <div class="cfg-bf-cell">
+                <label class="cfg-label">啟用</label>
+                <label class="chk">
+                  <input type="checkbox" v-model="bf.enabled">
+                  <span class="box"></span>
+                </label>
+              </div>
+              <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeBuyFeature(bi)" title="刪除">✕</button>
+            </div>
+          </div>
+
+          <button class="cfg-mode-add-btn" @click="addBuyFeature">
+            <span style="font-size:16px">+</span>
+            <span>新增 Buy Feature</span>
+          </button>
+        </div>
+
+      </div><!-- /bet_config -->
+
+      <!-- ─── 04b:真實輪帶（v6.0-b）─── -->
+      <div v-else-if="active === 'reel_strips'" class="cfg-form cfg-strips-form">
+        <div class="cfg-section">
+          <div class="cfg-section-title">真實輪帶 <span class="cfg-key">04b_Reel_Strips</span></div>
+          <div class="cfg-hint">
+            實體輪帶序列（取代虛擬權重抽樣）。啟用後引擎以「隨機停點 + 連續視窗」方式落盤，
+            連續相同符號會自然形成 <strong>stacked</strong>。可與 04 權重雙向轉換。
+          </div>
+          <div class="cfg-field">
+            <label class="chk">
+              <input type="checkbox" v-model="reelStrips.enabled">
+              <span class="box"></span>
+              <span>{{ reelStrips.enabled ? '已啟用（引擎用輪帶）' : '關閉（引擎用 04 權重）' }}</span>
+            </label>
+          </div>
+        </div>
+
+        <template v-if="reelStrips.enabled">
+          <div v-if="modeNames.length === 0" class="cfg-empty-state">
+            <div class="cfg-empty-icon">🚧</div>
+            <div class="cfg-empty-text">請先到 <a href="#" @click.prevent="active='global'" class="cfg-link">01_Global</a> 新增模式。</div>
+          </div>
+
+          <template v-else>
+            <!-- 模式選擇 + 批次工具 -->
+            <div class="cfg-strips-bar">
+              <div class="cfg-strips-modes">
+                <button v-for="mn in modeNames" :key="mn"
+                        class="cfg-chip" :class="{ active: stripActiveMode === mn }"
+                        @click="stripActiveMode = mn">{{ mn }}</button>
+              </div>
+              <div class="cfg-strips-tools">
+                <label class="cfg-strips-tool-label">長度
+                  <input type="number" min="5" max="500" step="1" v-model.number="stripGenLen" class="input input-w-num input-center">
+                </label>
+                <label class="cfg-strips-tool-label">
+                  <input type="checkbox" v-model="stripGenStacked"> stacked
+                </label>
+                <button class="cfg-matrix-btn" @click="genAllStripsFromWeights(stripActiveMode, stripGenLen, stripGenStacked)"
+                        title="依 04 權重生成全部輪帶">⇄ 由權重生成全部</button>
+                <button class="cfg-matrix-btn" @click="applyAllStripsToWeights(stripActiveMode)"
+                        title="把全部輪帶計次寫回 04 權重">⇄ 全部轉回權重</button>
+              </div>
+            </div>
+
+            <!-- 每 reel 一條輪帶 -->
+            <div class="cfg-strips-list">
+              <div v-for="r in layout" :key="'strip'+r.reel_id" class="cfg-strip-row">
+                <div class="cfg-strip-head">
+                  <span class="cfg-strip-rid">R{{ r.reel_id }}</span>
+                  <span class="cfg-strip-len" :class="{ err: stripLen(stripActiveMode, r.reel_id) > 0 && stripLen(stripActiveMode, r.reel_id) < r.max_rows }">
+                    {{ stripLen(stripActiveMode, r.reel_id) }} 格<template v-if="stripLen(stripActiveMode, r.reel_id) < r.max_rows && stripLen(stripActiveMode, r.reel_id) > 0">（&lt; 顯示 {{ r.max_rows }}）</template>
+                  </span>
+                  <span class="cfg-strip-actions">
+                    <button class="cfg-matrix-btn" @click="genStripFromWeights(stripActiveMode, r.reel_id, stripGenLen, stripGenStacked)" title="由此 reel 的 04 權重生成">⇄ 生成</button>
+                    <button class="cfg-matrix-btn" @click="applyStripToWeights(stripActiveMode, r.reel_id)" title="此輪帶計次寫回 04 權重">⇄ 轉權重</button>
+                  </span>
+                </div>
+                <textarea class="input cfg-mono cfg-strip-text"
+                          v-model="stripStr[stripActiveMode][r.reel_id]"
+                          @input="commitStrip(stripActiveMode, r.reel_id)"
+                          rows="2"
+                          placeholder="H1, H1, L1, WILD, L2, ...（逗號分隔;連續相同=stacked）"></textarea>
+                <div v-if="stripLen(stripActiveMode, r.reel_id)" class="cfg-strip-dist">
+                  <span v-for="d in stripDist(stripActiveMode, r.reel_id)" :key="d.sid" class="cfg-strip-dist-chip">
+                    {{ d.sid }} ×{{ d.count }}（{{ d.pct.toFixed(0) }}%）
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+      </div><!-- /reel_strips -->
+
+      <!-- ─── 15:倍數系統(v5.4:Wild / Progress / Random)─── -->
+      <div v-else-if="active === 'multipliers'" class="cfg-form cfg-mult-form">
+
+        <!-- Wild 倍數 -->
+        <div class="cfg-section">
+          <div class="cfg-section-title">Wild 倍數 <span class="cfg-key">wild_mult</span></div>
+          <div class="cfg-hint">Wild 符號參與連線時附帶的倍數。可設固定值，或用權重表隨機抽。</div>
+          <div class="cfg-field">
+            <label class="chk">
+              <input type="checkbox" v-model="multipliers.wild_mult_enabled">
+              <span class="box"></span>
+              <span>{{ multipliers.wild_mult_enabled ? '已啟用' : '關閉' }}</span>
+            </label>
+          </div>
+          <template v-if="multipliers.wild_mult_enabled">
+            <div class="cfg-field">
+              <label class="cfg-label">固定倍數 <span class="cfg-key">權重表為空時使用</span></label>
+              <input class="input input-w-num input-center" type="number" min="1" step="any"
+                     v-model.number="multipliers.wild_mult_fixed">
+            </div>
+            <div class="cfg-mult-table-wrap">
+              <div class="cfg-mult-table-title">
+                權重表（隨機 Wild 倍數）
+                <span v-if="wildMultExpected > 0" class="cfg-mult-ev">期望 ×{{ wildMultExpected.toFixed(2) }}</span>
+              </div>
+              <div v-for="(v, vi) in multipliers.wild_mult_values" :key="'wm'+vi" class="cfg-mult-row">
+                <div class="cfg-mult-cell">
+                  <label class="cfg-label">倍數</label>
+                  <input class="input input-w-num input-center" type="number" min="1" step="any" v-model.number="v.mult">
+                </div>
+                <div class="cfg-mult-cell">
+                  <label class="cfg-label">權重</label>
+                  <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="v.weight">
+                </div>
+                <div class="cfg-mult-pct">{{ wildMultPct(vi).toFixed(1) }}%</div>
+                <button class="cfg-mode-delete-btn" @click="removeWildMultValue(vi)" title="刪除">✕</button>
+              </div>
+              <button class="cfg-mode-add-btn cfg-mult-add" @click="addWildMultValue">
+                <span style="font-size:14px">+</span> 新增倍數列
+              </button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Progress 進度倍數階梯 -->
+        <div class="cfg-section">
+          <div class="cfg-section-title">進度倍數 <span class="cfg-key">progress_ladder</span></div>
+          <div class="cfg-hint">cascade / 連爆每次累進的倍數階梯，逐模式設定（如 NG：1,2,3,5）。</div>
+          <div class="cfg-field">
+            <label class="chk">
+              <input type="checkbox" v-model="multipliers.progress_enabled">
+              <span class="box"></span>
+              <span>{{ multipliers.progress_enabled ? '已啟用' : '關閉' }}</span>
+            </label>
+          </div>
+          <template v-if="multipliers.progress_enabled">
+            <div class="cfg-field">
+              <label class="chk">
+                <input type="checkbox" v-model="multipliers.progress_reset_on_mode">
+                <span class="box"></span>
+                <span>切模式時重置倍數（FG 累積通常取消勾選）</span>
+              </label>
+            </div>
+            <div class="cfg-mult-ladder-list">
+              <div v-for="mn in modeNames" :key="'pl'+mn" class="cfg-mult-ladder-row">
+                <label class="cfg-label cfg-mult-ladder-mode">{{ mn }}</label>
+                <input class="input input-w-name cfg-mono" type="text"
+                       v-model="progressLadderStr[mn]"
+                       @input="commitProgressLadder(mn)"
+                       placeholder="1, 2, 3, 5">
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Random 隨機倍數符號 -->
+        <div class="cfg-section">
+          <div class="cfg-section-title">隨機倍數符號 <span class="cfg-key">random_mult</span></div>
+          <div class="cfg-hint">特定符號出現時，依權重表抽一個倍數（如 Money 符號 2×–500×）。</div>
+          <div class="cfg-field">
+            <label class="chk">
+              <input type="checkbox" v-model="multipliers.random_enabled">
+              <span class="box"></span>
+              <span>{{ multipliers.random_enabled ? '已啟用' : '關閉' }}</span>
+            </label>
+          </div>
+          <template v-if="multipliers.random_enabled">
+            <div class="cfg-field">
+              <label class="cfg-label">承載符號 <span class="cfg-key">Symbol_ID</span></label>
+              <input class="input input-w-id cfg-mono" type="text" v-model.trim="multipliers.random_symbol_id"
+                     placeholder="MULTI / MONEY">
+            </div>
+            <div class="cfg-mult-table-wrap">
+              <div class="cfg-mult-table-title">
+                權重表
+                <span v-if="randomMultExpected > 0" class="cfg-mult-ev">期望 ×{{ randomMultExpected.toFixed(2) }}</span>
+              </div>
+              <div v-for="(v, vi) in multipliers.random_values" :key="'rm'+vi" class="cfg-mult-row">
+                <div class="cfg-mult-cell">
+                  <label class="cfg-label">倍數</label>
+                  <input class="input input-w-num input-center" type="number" min="1" step="any" v-model.number="v.mult">
+                </div>
+                <div class="cfg-mult-cell">
+                  <label class="cfg-label">權重</label>
+                  <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="v.weight">
+                </div>
+                <div class="cfg-mult-pct">{{ randomMultPct(vi).toFixed(1) }}%</div>
+                <button class="cfg-mode-delete-btn" @click="removeRandomMultValue(vi)" title="刪除">✕</button>
+              </div>
+              <button class="cfg-mode-add-btn cfg-mult-add" @click="addRandomMultValue">
+                <span style="font-size:14px">+</span> 新增倍數列
+              </button>
+            </div>
+          </template>
+        </div>
+
+      </div><!-- /multipliers -->
+
+      <!-- ─── 16:金幣面額(v5.4:Hold&Win 核心)─── -->
+      <div v-else-if="active === 'coin_values'" class="cfg-form cfg-coin-form">
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">金幣面額 <span class="cfg-key">Coin_Values</span></div>
+          <div class="cfg-hint">
+            Hold&amp;Win / Link&amp;Win 的金幣符號面額表。每個面額可分模式設定權重，
+            並可連結 13_Jackpots 的固定獎（GRAND/MAJOR…）。
+          </div>
+          <div class="cfg-field">
+            <label class="chk">
+              <input type="checkbox" v-model="coinValues.enabled">
+              <span class="box"></span>
+              <span>{{ coinValues.enabled ? '已啟用' : '關閉' }}</span>
+            </label>
+          </div>
+
+          <template v-if="coinValues.enabled">
+            <div class="cfg-field">
+              <label class="cfg-label">金幣符號 <span class="cfg-key">Symbol_ID</span></label>
+              <input class="input input-w-id cfg-mono" type="text" v-model.trim="coinValues.coin_symbol_id"
+                     placeholder="COIN / MONEY">
+            </div>
+
+            <div v-if="coinValues.denominations.length === 0" class="cfg-hint" style="margin-bottom:8px;">
+              尚未定義面額；點下方新增。
+            </div>
+
+            <div class="cfg-coin-list">
+              <div v-for="(d, di) in coinValues.denominations" :key="'cd'+di" class="cfg-coin-row">
+                <div class="cfg-coin-head">
+                  <div class="cfg-coin-cell">
+                    <label class="cfg-label">標籤</label>
+                    <input class="input input-w-id" type="text" v-model.trim="d.label" placeholder="(選填)">
+                  </div>
+                  <div class="cfg-coin-cell">
+                    <label class="cfg-label">面額 <span class="cfg-key">×注額</span></label>
+                    <input class="input input-w-num input-center" type="number" min="0" step="any"
+                           v-model.number="d.value" :disabled="!!d.link_jackpot"
+                           :title="d.link_jackpot ? '已連結 JP,面額由 JP 倍數決定' : ''">
+                  </div>
+                  <div class="cfg-coin-cell">
+                    <label class="cfg-label">連結 JP <span class="cfg-key">選填</span></label>
+                    <select class="input input-w-id" v-model="d.link_jackpot">
+                      <option value="">（純面額）</option>
+                      <option v-for="j in jackpots" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                    </select>
+                  </div>
+                  <button class="cfg-mode-delete-btn cfg-coin-del" @click="removeCoinDenom(di)" title="刪除面額">✕</button>
+                </div>
+                <div class="cfg-coin-weights">
+                  <div class="cfg-coin-weights-label">各模式權重</div>
+                  <div v-for="mn in modeNames" :key="'cw'+di+mn" class="cfg-coin-wcell">
+                    <label class="cfg-label">{{ mn }}</label>
+                    <input class="input input-w-num input-center" type="number" min="0" step="1"
+                           v-model.number="d.weight_by_mode[mn]">
+                    <span class="cfg-coin-wpct">{{ coinDenomPct(di, mn).toFixed(0) }}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button class="cfg-mode-add-btn" @click="addCoinDenom">
+              <span style="font-size:16px">+</span>
+              <span>新增面額</span>
+            </button>
+
+            <div v-if="coinValues.denominations.length" class="cfg-coin-ev">
+              <div class="cfg-coin-ev-title">期望金幣面額（權重加權，含連結 JP）</div>
+              <div class="cfg-coin-ev-row">
+                <span v-for="mn in modeNames" :key="'ev'+mn" class="cfg-coin-ev-chip">
+                  {{ mn }}: ×{{ coinExpectedValue(mn).toFixed(2) }}
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+      </div><!-- /coin_values -->
+
+      <!-- ─── 17:Bonus 小遊戲（v6.0-c）─── -->
+      <div v-else-if="active === 'bonus_games'" class="cfg-form cfg-bonus-form">
+        <div class="cfg-section">
+          <div class="cfg-section-title">Bonus 小遊戲 <span class="cfg-key">17_Bonus_Games</span></div>
+          <div class="cfg-hint">
+            獨立 Bonus 關卡:<strong>輪盤</strong>（segments + 升級）、<strong>選獎</strong>（Pick'em，含結束項）、
+            <strong>收集</strong>（Collection meter）。可連結 13_Jackpots 的固定獎。引擎讀取;文件自動帶入。
+          </div>
+          <div class="cfg-bonus-add-row">
+            <button class="cfg-mode-add-btn" @click="addBonusGame('WHEEL')"><span style="font-size:15px">+</span> 輪盤</button>
+            <button class="cfg-mode-add-btn" @click="addBonusGame('PICK')"><span style="font-size:15px">+</span> 選獎</button>
+            <button class="cfg-mode-add-btn" @click="addBonusGame('COLLECTION')"><span style="font-size:15px">+</span> 收集</button>
+          </div>
+        </div>
+
+        <div v-if="bonusGames.games.length === 0" class="cfg-hint" style="margin:6px 0;">
+          尚未定義 Bonus 小遊戲;沒有額外關卡的遊戲可留空。
+        </div>
+
+        <div v-for="(g, gi) in bonusGames.games" :key="'bg'+gi" class="cfg-bonus-card">
+          <div class="cfg-bonus-head">
+            <span class="cfg-bonus-type-badge" :class="'cfg-bonus-type-' + g.type">{{ BONUS_TYPE_LABEL[g.type] }}</span>
+            <input class="input input-w-id cfg-mono" type="text" v-model.trim="g.bonus_id" placeholder="BG1" title="Bonus ID">
+            <input class="input input-w-name" type="text" v-model.trim="g.title" placeholder="關卡名稱（選填）">
+            <button class="cfg-mode-delete-btn" @click="removeBonusGame(gi)" title="刪除此 Bonus">✕</button>
+          </div>
+
+          <div class="cfg-bonus-meta">
+            <div class="cfg-bonus-mcell">
+              <label class="cfg-label">觸發說明</label>
+              <input class="input input-w-name" type="text" v-model.trim="g.trigger_desc" placeholder="3 個 BONUS 符號觸發">
+            </div>
+            <div class="cfg-bonus-mcell">
+              <label class="cfg-label">適用模式</label>
+              <input class="input input-w-id" type="text" v-model.trim="g.mode_scope" placeholder="ALL 或 NG,FG">
+            </div>
+            <div v-if="g.type === 'WHEEL'" class="cfg-bonus-mcell">
+              <label class="cfg-label">升級至 <span class="cfg-key">選填</span></label>
+              <select class="input input-w-id" v-model="g.wheel_upgrade_to">
+                <option value="">（無升級）</option>
+                <template v-for="og in bonusGames.games" :key="og.bonus_id">
+                  <option v-if="og.bonus_id && og.bonus_id !== g.bonus_id" :value="og.bonus_id">{{ og.bonus_id }}</option>
+                </template>
+              </select>
+            </div>
+            <div v-if="g.type === 'PICK'" class="cfg-bonus-mcell">
+              <label class="cfg-label">抽選次數 <span class="cfg-key">0=抽到結束</span></label>
+              <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="g.pick_count">
+            </div>
+            <div v-if="g.type === 'COLLECTION'" class="cfg-bonus-mcell">
+              <label class="cfg-label">目標收集數</label>
+              <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="g.collect_target">
+            </div>
+          </div>
+
+          <!-- 項目表 -->
+          <div class="cfg-bonus-items">
+            <div class="cfg-bonus-items-title">
+              {{ g.type === 'WHEEL' ? '輪盤分段' : g.type === 'PICK' ? '獎項池' : '收集獎勵' }}
+              <span v-if="bonusExpected(g) != null && bonusExpected(g) > 0" class="cfg-bonus-ev">期望 ×{{ bonusExpected(g).toFixed(2) }}</span>
+            </div>
+            <div v-for="(it, ii) in g.items" :key="'bi'+ii" class="cfg-bonus-item-row">
+              <input class="input input-w-id" type="text" v-model.trim="it.label" placeholder="標籤">
+              <div class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">{{ g.type === 'COLLECTION' ? '門檻' : '值×注額' }}</span>
+                <input class="input input-w-num input-center" type="number" min="0" step="any"
+                       v-model.number="it.value" :disabled="!!it.link_jackpot">
+              </div>
+              <div v-if="g.type !== 'COLLECTION'" class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">權重</span>
+                <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="it.weight">
+              </div>
+              <span v-if="g.type !== 'COLLECTION'" class="cfg-bonus-ipct">{{ (bonusItemPct(g, ii) || 0).toFixed(1) }}%</span>
+              <label v-if="g.type === 'PICK'" class="cfg-bonus-end-toggle" title="抽到此項即結束（pooper）">
+                <input type="checkbox" v-model="it.is_end"> 結束
+              </label>
+              <div class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">連結JP</span>
+                <select class="input input-w-id" v-model="it.link_jackpot">
+                  <option value="">—</option>
+                  <option v-for="j in jackpots" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                </select>
+              </div>
+              <button class="cfg-mode-delete-btn" @click="removeBonusItem(g, ii)" title="刪除">✕</button>
+            </div>
+            <button class="cfg-mode-add-btn cfg-bonus-item-add" @click="addBonusItem(g)">
+              <span style="font-size:14px">+</span> 新增項目
+            </button>
+          </div>
+        </div>
+      </div><!-- /bonus_games -->
 
       <!-- ═══════ 📄 文件生成（跨分頁輸出，非 A.xlsx 設定）═══════ -->
       <div v-else-if="active === 'docgen'" class="cfg-docgen-host">

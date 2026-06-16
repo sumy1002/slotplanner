@@ -9651,3 +9651,564 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 :root[data-theme="dark"] .swatch-cell { border-color: rgba(255,255,255,0.22); }
 :root[data-theme="dark"] .field-label-sm,
 :root[data-theme="dark"] .docgen-hint-line { color: rgba(235,228,220,0.62); }
+
+/* ============================================================
+   v5.3 批次 — 動態賠付表 + 投注結構(14_Bet_Config)
+   ============================================================ */
+
+/* ── 符號頁動態賠付表(取代固定 4 格 sym-pay-grid)── */
+.sym-pay-dynamic {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  max-width: 360px;
+}
+.sym-pay-drow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sym-pay-count-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.sym-pay-count-input {
+  width: 52px;
+  text-align: center;
+  font-size: 12px;
+  height: 28px;
+}
+.sym-pay-count-x {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+.sym-pay-dynamic .sym-pay-input {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  min-width: 0;
+  height: 28px;
+}
+.sym-pay-del-btn {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.sym-pay-del-btn:hover { background: rgba(176,72,61,0.12); color: #b0483d; }
+.sym-pay-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.sym-pay-add-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.sym-pay-hint {
+  font-size: 11px;
+  color: var(--text-light);
+  word-break: keep-all;
+}
+:root[data-theme="dark"] .sym-pay-count-x,
+:root[data-theme="dark"] .sym-pay-hint { color: rgba(235,228,220,0.6); }
+
+/* ── 14_Bet_Config 分頁 ── */
+.cfg-ante-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 16px;
+  margin: 8px 0;
+}
+.cfg-bf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cfg-bf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-bf-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.cfg-bf-cell .input { width: 100%; }
+.cfg-bf-cell-grow { flex: 1 1 180px; }
+.cfg-bf-del { margin-left: auto; flex-shrink: 0; }
+:root[data-theme="dark"] .cfg-bf-row {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+}
+@media (max-width: 720px) {
+  .cfg-ante-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   v5.4 批次 — 倍數系統(15) + 金幣面額(16)
+   ============================================================ */
+
+/* ── 倍數系統:權重表列 ── */
+.cfg-mult-table-wrap {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.38);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+}
+.cfg-mult-table-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.cfg-mult-ev {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-hex);
+  background: rgb(var(--tint-2) / 0.30);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.cfg-mult-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 6px 0;
+}
+.cfg-mult-cell { display: flex; flex-direction: column; gap: 3px; }
+.cfg-mult-pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  min-width: 52px;
+  text-align: right;
+}
+.cfg-mult-add { margin-top: 6px; font-size: 12px; padding: 5px 12px; white-space: nowrap; }
+.cfg-mult-ladder-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.cfg-mult-ladder-row { display: flex; align-items: center; gap: 12px; }
+.cfg-mult-ladder-mode {
+  min-width: 64px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .cfg-mult-table-wrap {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+}
+
+/* ── 金幣面額 ── */
+.cfg-coin-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 10px; }
+.cfg-coin-row {
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-coin-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.cfg-coin-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cfg-coin-cell .input { width: 100%; }
+.cfg-coin-del { margin-left: auto; flex-shrink: 0; }
+.cfg-coin-weights {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--glass-brd);
+}
+.cfg-coin-weights-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+.cfg-coin-weights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.cfg-coin-weights-label { flex: 1 1 100%; }
+.cfg-coin-wcell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+.cfg-coin-wcell .cfg-label { white-space: nowrap; }
+.cfg-coin-wpct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-light);
+}
+.cfg-coin-ev {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgb(var(--tint-2) / 0.18);
+  border-radius: var(--r-card);
+}
+.cfg-coin-ev-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.cfg-coin-ev-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.cfg-coin-ev-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-hex);
+  background: rgba(255,255,255,0.5);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .cfg-coin-row {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+}
+:root[data-theme="dark"] .cfg-coin-ev-chip { background: rgba(255,255,255,0.08); }
+
+/* ============================================================
+   v5.5 批次 — 即時 RTP 計算器(topbar 徽章 + reel_weights 面板)
+   ============================================================ */
+
+/* ── topbar RTP 徽章 ── */
+.cfg-rtp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background var(--t-fast), border-color var(--t-fast), transform 120ms var(--ease-spring);
+}
+.cfg-rtp-badge:hover { transform: translateY(-1px); }
+.cfg-rtp-badge-label {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-light);
+}
+.cfg-rtp-badge-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+.cfg-rtp-badge-delta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; }
+.cfg-rtp-badge.cfg-rtp-ok   { border-color: rgba(15,110,86,0.5);  background: rgba(15,110,86,0.10); }
+.cfg-rtp-badge.cfg-rtp-ok   .cfg-rtp-badge-delta { color: #0f6e56; }
+.cfg-rtp-badge.cfg-rtp-low  { border-color: rgba(176,72,61,0.5);  background: rgba(176,72,61,0.10); }
+.cfg-rtp-badge.cfg-rtp-low  .cfg-rtp-badge-delta { color: #b0483d; }
+.cfg-rtp-badge.cfg-rtp-high { border-color: rgba(201,136,16,0.5); background: rgba(201,136,16,0.10); }
+.cfg-rtp-badge.cfg-rtp-high .cfg-rtp-badge-delta { color: #b07a10; }
+
+/* ── reel_weights RTP 面板 ── */
+.cfg-rtp-panel {
+  flex-shrink: 0;
+  margin: 0 0 10px;
+  padding: 12px 16px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.42);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-rtp-panel-ok   { border-color: rgba(15,110,86,0.45);  background: rgba(15,110,86,0.07); }
+.cfg-rtp-panel-low  { border-color: rgba(176,72,61,0.45);  background: rgba(176,72,61,0.07); }
+.cfg-rtp-panel-high { border-color: rgba(201,136,16,0.45); background: rgba(201,136,16,0.07); }
+.cfg-rtp-panel-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cfg-rtp-panel-icon { font-size: 16px; align-self: center; }
+.cfg-rtp-panel-big {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.cfg-rtp-panel-cap { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+.cfg-rtp-panel-target { font-size: 12px; color: var(--text); white-space: nowrap; }
+.cfg-rtp-panel-delta.pos { color: #0f6e56; font-weight: 700; }
+.cfg-rtp-panel-delta.neg { color: #b0483d; font-weight: 700; }
+.cfg-rtp-panel-na { font-size: 12.5px; color: var(--text-light); }
+.cfg-rtp-panel-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #b07a10;
+  word-break: keep-all;
+}
+.cfg-rtp-panel-lines {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cfg-rtp-panel-lines-label { font-size: 11px; color: var(--text-light); white-space: nowrap; }
+.cfg-rtp-line-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.55);
+  border: 0.5px solid var(--glass-edge);
+  color: var(--text-light);
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .cfg-rtp-badge,
+:root[data-theme="dark"] .cfg-rtp-panel { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+:root[data-theme="dark"] .cfg-rtp-line-chip { background: rgba(255,255,255,0.06); }
+
+/* ============================================================
+   v6.0 批次（其一）— bcompare 設定檔目標對照
+   ============================================================ */
+.bcmp-target-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 0 14px;
+  padding: 9px 14px;
+  border-radius: var(--r-card);
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  font-size: 12px;
+}
+.bcmp-target-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bcmp-target-info { color: var(--text-light); white-space: nowrap; }
+.bcmp-target-info strong { color: var(--accent-hex); }
+.bcmp-target-tol { color: var(--text-light); white-space: nowrap; }
+.bcmp-tol-input {
+  width: 48px;
+  margin: 0 2px;
+  padding: 2px 4px;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,0.6);
+}
+.bcmp-target-none { color: var(--text-light); font-style: italic; white-space: nowrap; }
+.bcmp-target-refresh {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-brd);
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bcmp-target-refresh:hover { background: rgba(255,255,255,0.75); }
+
+.bcmp-th-t { color: var(--text); text-align: center; }
+.bcmp-td-target { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; white-space: nowrap; }
+.bcmp-td-target-na { color: var(--text-light); }
+
+/* 達標色:命中 cell 背景 + pill */
+.bcmp-hit-ok   { background: rgba(15,110,86,0.12); }
+.bcmp-hit-low  { background: rgba(176,72,61,0.12); }
+.bcmp-hit-high { background: rgba(201,136,16,0.12); }
+.bcmp-hit-pill {
+  display: inline-block;
+  margin-left: 5px;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+}
+.bcmp-hit-pill.bcmp-hit-ok   { background: #0f6e56; color: #fff; }
+.bcmp-hit-pill.bcmp-hit-low  { background: #b0483d; color: #fff; }
+.bcmp-hit-pill.bcmp-hit-high { background: #b07a10; color: #fff; }
+:root[data-theme="dark"] .bcmp-target-bar { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+:root[data-theme="dark"] .bcmp-tol-input,
+:root[data-theme="dark"] .bcmp-target-refresh { background: rgba(255,255,255,0.08); }
+
+/* ============================================================
+   v6.0-b 批次 — 真實輪帶（04b_Reel_Strips）
+   ============================================================ */
+.cfg-strips-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: var(--r-card);
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+}
+.cfg-strips-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.cfg-strips-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.cfg-strips-tool-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-light);
+}
+.cfg-strips-tool-label .input { width: 60px; }
+.cfg-strips-list { display: flex; flex-direction: column; gap: 12px; }
+.cfg-strip-row {
+  padding: 10px 14px;
+  border-radius: var(--r-card);
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cfg-strip-rid { font-weight: 700; font-size: 13px; color: var(--accent-hex); white-space: nowrap; }
+.cfg-strip-len { font-size: 11px; color: var(--text-light); white-space: nowrap; }
+.cfg-strip-len.err { color: #b0483d; font-weight: 700; }
+.cfg-strip-actions { margin-left: auto; display: flex; gap: 6px; }
+.cfg-strip-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 42px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cfg-strip-dist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.cfg-strip-dist-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.55);
+  border: 0.5px solid var(--glass-edge);
+  color: var(--text-light);
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .cfg-strips-bar,
+:root[data-theme="dark"] .cfg-strip-row { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+:root[data-theme="dark"] .cfg-strip-dist-chip { background: rgba(255,255,255,0.06); }
+
+/* ============================================================
+   v6.0-c 批次 — Bonus 小遊戲（17_Bonus_Games）
+   ============================================================ */
+.cfg-bonus-add-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.cfg-bonus-card {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: rgba(255,255,255,0.42);
+  border: 1px solid var(--glass-brd);
+  box-shadow: var(--shadow-sm);
+}
+.cfg-bonus-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cfg-bonus-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  color: #fff;
+}
+.cfg-bonus-type-WHEEL      { background: #8a5cc9; }
+.cfg-bonus-type-PICK       { background: #c95810; }
+.cfg-bonus-type-COLLECTION { background: #0f6e56; }
+.cfg-bonus-head .cfg-mode-delete-btn { margin-left: auto; }
+.cfg-bonus-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--glass-brd);
+}
+.cfg-bonus-mcell { display: flex; flex-direction: column; gap: 4px; }
+.cfg-bonus-items-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.cfg-bonus-ev {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-hex);
+  background: rgb(var(--tint-2) / 0.30);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.cfg-bonus-item-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 5px 0;
+}
+.cfg-bonus-icell { display: flex; flex-direction: column; gap: 3px; }
+.cfg-bonus-ilabel { font-size: 10px; color: var(--text-light); white-space: nowrap; }
+.cfg-bonus-ipct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+  min-width: 46px;
+  text-align: right;
+}
+.cfg-bonus-end-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-light);
+}
+.cfg-bonus-item-add { margin-top: 6px; font-size: 12px; padding: 5px 12px; white-space: nowrap; }
+:root[data-theme="dark"] .cfg-bonus-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
