@@ -1043,11 +1043,22 @@
       // ── 連動層:盤面 / 副盤 / 全域 變動時刷新 gameSpec(單一真相)──
       //    讓「盤面輪數、副輪、賠付模型、計分方向、megaways」一改,
       //    符號頁 / 硬約束 / Reel 權重 / 中獎線 / 格數 等下游能即時跟著(經 gameSpec)。
+      //    重點:直接傳「即時記憶體資料」給 refresh,不讓它讀 LS——
+      //    因為 layout 是經 scheduleSave(400ms 防抖)才寫 LS,讀 LS 會拿到舊值
+      //    (這正是「reelCount 只連動第一次、之後不動」的競態根因)。
       //    refresh() 內含 specEqual 防抖,值沒變不會 emit;故 deep watch 的多餘觸發無害。
       if (SP.gameSpec) {
         watch(
           [layout, panels, g],
-          () => { try { SP.gameSpec.refresh(); } catch (e) { /* noop */ } },
+          () => {
+            try {
+              SP.gameSpec.refresh({
+                layout: layout.map(r => ({ ...r })),
+                panels: panels.map(p => ({ ...p })),
+                g: { ...g },
+              });
+            } catch (e) { /* noop */ }
+          },
           { deep: true }
         );
       }

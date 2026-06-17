@@ -202,12 +202,15 @@
 
     // ── 從 LS / registry 重新計算，差異才更新 + emit ──
     //   pushReelCount=true 時，會把 reelCount 推回 registry（讓符號頁 reel_limit 跟著盤面）
+    //   opts.layout / opts.panels / opts.g：傳入「即時記憶體資料」時優先採用，
+    //     避開 config 編輯器 scheduleSave 的 400ms 防抖競態（否則會讀到舊 LS）。
     refresh(opts) {
-      const pushReelCount = !opts || opts.pushReelCount !== false;
+      opts = opts || {};
+      const pushReelCount = opts.pushReelCount !== false;
 
-      const layout = _readLS(LS_LAYOUT, []);
-      const panels = _readLS(LS_PANELS, []);
-      const g      = _readLS(LS_GLOBAL, {});
+      const layout = opts.layout != null ? opts.layout : _readLS(LS_LAYOUT, []);
+      const panels = opts.panels != null ? opts.panels : _readLS(LS_PANELS, []);
+      const g      = opts.g      != null ? opts.g      : _readLS(LS_GLOBAL, {});
       const fallback = this._registry ? this._registry.reelCount() : 5;
 
       const next = computeSpec(layout, panels, g, fallback);
