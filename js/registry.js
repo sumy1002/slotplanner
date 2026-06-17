@@ -56,6 +56,7 @@
       pay_4x: 0,
       pay_5x: 0,
       pay_6x: 0,
+      pay_rows: [],       // v6.1:動態賠付表(2–20 連);pay_3x–6x 為其同步出的相容欄
       mega_w: 1,          // Mega 寬度(覆蓋幾個 Reel)
       mega_h: 1,          // Mega 高度(覆蓋幾列)
       is_wild: false,
@@ -80,6 +81,7 @@
       pay_4x:     s.pay_4x     != null ? s.pay_4x     : 0,
       pay_5x:     s.pay_5x     != null ? s.pay_5x     : 0,
       pay_6x:     s.pay_6x     != null ? s.pay_6x     : 0,
+      pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
       mega_w:     s.mega_w     != null ? s.mega_w     : 1,
       mega_h:     s.mega_h     != null ? s.mega_h     : 1,
       is_wild:    s.is_wild    != null ? s.is_wild    : false,
@@ -272,6 +274,7 @@
           pay_4x:     s.pay_4x     || 0,
           pay_5x:     s.pay_5x     || 0,
           pay_6x:     s.pay_6x     || 0,
+          pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
           mega_w:     s.mega_w     || 1,
           mega_h:     s.mega_h     || 1,
           is_wild:    !!s.is_wild,
@@ -303,6 +306,7 @@
           pay_4x:     d.pay_4x     || 0,
           pay_5x:     d.pay_5x     || 0,
           pay_6x:     d.pay_6x     || 0,
+          pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
           mega_w:     d.mega_w     || 1,
           mega_h:     d.mega_h     || 1,
           is_wild:    !!d.is_wild,
@@ -358,6 +362,7 @@
             pay_4x:     d.pay_4x     || 0,
             pay_5x:     d.pay_5x     || 0,
             pay_6x:     d.pay_6x     || 0,
+            pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
             mega_w:     d.mega_w     || 1,
             mega_h:     d.mega_h     || 1,
             is_wild:    !!d.is_wild,

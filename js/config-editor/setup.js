@@ -4809,8 +4809,17 @@
       //  inspectorOpen:面板展開狀態(可手動收起讓畫面更大)
       // ──────────────────────────────────────────────────────
       const pinnedTest = ref(null);
-      const inspectorOpen = ref(true);   // 預設展開
+      // v6.1 版面修正:預設收合,空狀態只剩角落小標頭,不再蓋住 01_Global/09 規則內容。
+      // 釘住條件時 pinTest 會自動展開;取消釘住時自動收回。
+      const inspectorOpen = ref(false);  // 預設收合(避免空面板遮擋內容)
       const inspectorCtxExpanded = ref(false);  // ctx 編輯區是否展開
+
+      // v6.1:設定檔分頁側欄可收合(窄螢幕釋放橫向空間;記憶於本機)
+      const LS_TABRAIL_KEY = 'slotplanner.ui.tabRailCollapsed.v1';
+      const cfgTabRailCollapsed = ref(localStorage.getItem(LS_TABRAIL_KEY) === '1');
+      watch(cfgTabRailCollapsed, (v) => {
+        try { localStorage.setItem(LS_TABRAIL_KEY, v ? '1' : '0'); } catch (e) {}
+      });
 
       // 取 builder rows(統一介面,內部分支處理 rule 和 condBuilderState)
       function _getBuilderRows(kind, id) {
@@ -4820,13 +4829,16 @@
         }
         return condBuilderState.rows[condKey(kind, id)] || [];
       }
-      function pinTest(kind, id, label) {
+      function pinTest(kind, id, label, autoOpen = true) {
         if (!id) return;
         pinnedTest.value = { kind, id, label: label || id };
-        inspectorOpen.value = true;
+        // v6.1:僅「手動點釘住」時展開;自動 pin(切換分頁)保持收合,
+        // 避免空降的展開面板蓋住 觸發點/觸發條件 等控制項。
+        if (autoOpen) inspectorOpen.value = true;
       }
       function unpinTest() {
         pinnedTest.value = null;
+        inspectorOpen.value = false;   // v6.1:取消釘住後自動收回,釋放畫面空間
       }
       // 評估目前 pinned 條件 — 回傳跟 evalRuleNow 一樣的形狀
       function evalPinned() {
@@ -4852,20 +4864,20 @@
           // v3.1:合併 tab。根據當前 selectedKind 決定 pin 哪一種
           if (selectedKind.value === 'discard' && discards.length > 0) {
             const d = discards[selectedDiscardIdx.value] || discards[0];
-            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id);
+            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
           } else if (rules.length > 0) {
             const r = rules[selectedRuleIdx.value] || rules[0];
-            if (r.rule_id) pinTest('rule', r.rule_id, r.rule_id);
+            if (r.rule_id) pinTest('rule', r.rule_id, r.rule_id, false);
           } else if (discards.length > 0) {
             // 沒拼圖規則就退而求其次 pin 棄牌
             const d = discards[0];
-            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id);
+            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
           }
         } else if (id === 'global' && modes.length > 0) {
           // v3.1:模式定義已合進 global tab,在這裡 pin 模式條件
           // 跳過 NG(通常無條件),pin 第一個有條件的模式
           const m = modes.find(x => x.trigger_condition) || modes[0];
-          if (m && m.mode) pinTest('mode', m.mode, m.mode);
+          if (m && m.mode) pinTest('mode', m.mode, m.mode, false);
         }
       }
       // 監看 active 切換,自動 pin
@@ -7457,7 +7469,7 @@
         changesPanelOpen, changesByTab, changesSummary, baselineInfo,
         toggleChangesPanel, goToTabFromChanges, resetBaseline, formatBaselineTime,
         // ── #5 Test Inspector(09/10/11 共用)──
-        pinnedTest, inspectorOpen, inspectorCtxExpanded,
+        pinnedTest, inspectorOpen, inspectorCtxExpanded, cfgTabRailCollapsed,
         pinTest, unpinTest, evalPinned, pinnedKindLabel, isInPuzzleTab,
         // ── #15 Ctrl+K 搜尋 ──
         searchOpen, searchQuery, searchSelectedIdx, searchResults,

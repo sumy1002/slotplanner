@@ -330,7 +330,14 @@
   <div class="cfg-body">
 
     <!-- ── 左:分組分頁列 ── -->
-    <div class="cfg-tabs">
+    <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed }">
+      <!-- v6.1:收合切換(窄螢幕釋放橫向空間) -->
+      <button class="cfg-tabrail-toggle"
+              @click="cfgTabRailCollapsed = !cfgTabRailCollapsed"
+              :title="cfgTabRailCollapsed ? '展開分頁列' : '收合分頁列'">
+        <span class="cfg-tabrail-toggle-icon">{{ cfgTabRailCollapsed ? '»' : '«' }}</span>
+        <span class="cfg-tabrail-toggle-label">收合分頁列</span>
+      </button>
       <div v-for="grp in visibleTabGroups" :key="grp.id" class="cfg-tab-group">
         <div class="cfg-tab-group-header">
           <span class="cfg-tab-group-icon">{{ grp.icon }}</span>
@@ -343,7 +350,7 @@
              class="cfg-tab"
              :class="{ active: active === t.id, 'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
              @click="active = t.id"
-             :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : ''">
+             :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + ' · ' + t.sheet)">
           <span class="cfg-tab-icon">{{ t.icon }}</span>
           <div class="cfg-tab-text">
             <div class="cfg-tab-name">{{ t.name }}<span v-if="tabNotApplicable(t.id)" class="cfg-tab-na-lock" title="目前模式不適用">🔒</span></div>
@@ -368,7 +375,8 @@
         </div>
         <div class="cfg-tab"
              :class="{ active: active === 'docgen' }"
-             @click="active = 'docgen'">
+             @click="active = 'docgen'"
+             :title="'文件生成 · Excel / MD'">
           <span class="cfg-tab-icon">📋</span>
           <div class="cfg-tab-text">
             <div class="cfg-tab-name">文件生成</div>

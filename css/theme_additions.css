@@ -10212,3 +10212,144 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-bonus-item-add { margin-top: 6px; font-size: 12px; padding: 5px 12px; white-space: nowrap; }
 :root[data-theme="dark"] .cfg-bonus-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+
+/* ════════════════════════════════════════════════════════════
+   v6.1 版面修正批次(2026-06)
+   附加於檔尾 → cascade 最高、最易定位。修正以下 RWD/擠壓問題:
+   2) 01_Global 雙欄在 ~1024px 被壓窄 → chips 塌成單欄(三處 .cfg-global-grid
+      互相衝突,此處統一覆寫,1100px 以下才折成單欄)
+   3) Symbol 編輯器標題列按鈕(匯出/匯入 JSON/重設/啟用中)CJK 直排;標題折兩行
+   4) 06_Paylines「方向 左→右 於…調整」群組擠成直排
+   ════════════════════════════════════════════════════════════ */
+
+/* ── (2) 01_Global 雙欄:統一單一來源,左欄略寬,1100px 以下折單欄 ── */
+.cfg-global-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 0 18px;
+  align-items: start;
+  max-width: 1200px;
+}
+.cfg-global-col { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 1100px) {
+  .cfg-global-grid { grid-template-columns: 1fr; max-width: 760px; }
+}
+
+/* ── (3) Symbol 編輯器標題列:按鈕整顆不換行、不被壓縮;標題單行省略 ── */
+.btn-pill,
+.sym-edit-toggle {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* 標題列本身可換行 + 高度自適應,避免窄欄時按鈕被裁切或標題消失 */
+.topbar {
+  height: auto;
+  min-height: 50px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  align-content: center;
+}
+.topbar .title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.topbar-actions {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 6px;
+}
+
+/* ── (4) 06_Paylines 方向群組:整組水平、不逐字換行,過窄時整組換行 ── */
+.cfg-paylines-v2-list-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+}
+.cfg-paylines-v2-list-toolbar .cfg-paylines-overview-toggle {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cfg-payline-global-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin-left: auto;   /* 同列靠右;過窄時整組換行到下一列 */
+}
+.cfg-payline-global-dir-label,
+.cfg-payline-global-dir .cfg-payline-dir-readonly,
+.cfg-payline-global-dir .cfg-link { white-space: nowrap; }
+
+/* ── (1 補強) Test Inspector 收合時是極簡角落 pill;為內容區留底部餘裕,
+   即使展開也不會永久遮住最後一列控制項 ── */
+.cfg-form { padding-bottom: 64px; }
+
+/* ════════════════════════════════════════════════════════════
+   v6.1 Phase 2:設定檔分頁側欄可收合
+   220px ↔ 56px(僅圖示);窄螢幕釋放橫向空間,根治編輯區擠壓
+   ════════════════════════════════════════════════════════════ */
+.cfg-tabs { transition: width 0.18s var(--ease-ios); }
+
+/* 收合切換鈕(常駐分頁列頂端) */
+.cfg-tabrail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  background: transparent;
+  border: 1px dashed var(--divider);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.cfg-tabrail-toggle:hover {
+  background: var(--input-bg);
+  color: var(--text);
+  border-color: var(--input-focus-brd);
+}
+.cfg-tabrail-toggle-icon {
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+/* ── 收合態:只剩圖示 ── */
+.cfg-tabs-collapsed { width: 56px; padding: 10px 6px; align-items: stretch; }
+.cfg-tabs-collapsed .cfg-tabrail-toggle { justify-content: center; padding: 6px 0; }
+.cfg-tabs-collapsed .cfg-tabrail-toggle-label,
+.cfg-tabs-collapsed .cfg-tab-text,
+.cfg-tabs-collapsed .cfg-tab-group-label,
+.cfg-tabs-collapsed .cfg-tab-group-dirty-count { display: none; }
+.cfg-tabs-collapsed .cfg-tab {
+  justify-content: center;
+  padding: 8px 0;
+  gap: 0;
+  position: relative;
+}
+.cfg-tabs-collapsed .cfg-tab-group-header {
+  justify-content: center;
+  padding: 6px 0 4px;
+}
+.cfg-tabs-collapsed .cfg-tab-group-label { display: none; }
+/* 收合態徽章貼到圖示右上,避免溢出 56px */
+.cfg-tabs-collapsed .cfg-tab-issue-badge,
+.cfg-tabs-collapsed .cfg-tab-dirty-dot {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+}

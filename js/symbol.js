@@ -172,29 +172,24 @@
         </div>
         <div class="sep"></div>
 
-        <!-- 賠付表(#11:緊湊迷你卡)-->
+        <!-- 賠付表(v6.1:動態 pay_rows,支援 2–20 連) -->
         <div class="sym-edit-section">
           <div class="section-title">賠付表 <span class="section-subtitle">N 連線時的賠付倍數</span></div>
-          <div class="sym-pay-grid">
-            <div class="sym-pay-cell">
-              <label class="sym-pay-label">3×</label>
+          <div class="sym-pay-dynamic">
+            <div v-for="(row, i) in form.pay_rows" :key="i" class="sym-pay-drow">
+              <div class="sym-pay-count-wrap">
+                <input class="input input-sm cfg-mono sym-pay-count-input" type="number" step="1" min="2" max="20"
+                       v-model.number="row.count" @input="onFieldEdit" title="連線數">
+                <span class="sym-pay-count-x">×</span>
+              </div>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_3x" @input="onFieldEdit">
+                     v-model.number="row.pay" @input="onFieldEdit" placeholder="賠付倍數">
+              <button class="sym-pay-del-btn" @click="removePayRow(i)"
+                      :disabled="form.pay_rows.length <= 1" title="刪除此列">✕</button>
             </div>
-            <div class="sym-pay-cell">
-              <label class="sym-pay-label">4×</label>
-              <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_4x" @input="onFieldEdit">
-            </div>
-            <div class="sym-pay-cell">
-              <label class="sym-pay-label">5×</label>
-              <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_5x" @input="onFieldEdit">
-            </div>
-            <div class="sym-pay-cell">
-              <label class="sym-pay-label">6×</label>
-              <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
-                     v-model.number="form.pay_6x" @input="onFieldEdit">
+            <div class="sym-pay-actions">
+              <button class="btn-pill add sym-pay-add-btn" @click="addPayRow">＋ 新增連線數</button>
+              <span class="sym-pay-hint">支援 2–20 連;匯出至 03c_Paytable</span>
             </div>
           </div>
         </div>
@@ -331,6 +326,7 @@
         pay_4x: 0,
         pay_5x: 0,
         pay_6x: 0,
+        pay_rows: [],   // v6.1:動態賠付表(2–20 連);pay_3x–6x 由此同步,僅供向下相容
         mega_w: 1,
         mega_h: 1,
         is_wild: false,
@@ -394,6 +390,8 @@
         form.pay_4x     = s.pay_4x     != null ? s.pay_4x     : 0;
         form.pay_5x     = s.pay_5x     != null ? s.pay_5x     : 0;
         form.pay_6x     = s.pay_6x     != null ? s.pay_6x     : 0;
+        // v6.1:動態賠付表 — 以 pay_rows 為主,舊 pay_Nx 自動遷移;深拷貝避免編輯時改到原資料
+        form.pay_rows   = _readPayRows(s);
         form.mega_w     = s.mega_w     != null ? s.mega_w     : 1;
         form.mega_h     = s.mega_h     != null ? s.mega_h     : 1;
         form.is_wild    = !!s.is_wild;
@@ -428,6 +426,13 @@
         if (numErr.value || nameErr.value) return;
 
         const cur = symbols.value[idx];
+        // v6.1:整理 pay_rows(限 2–20 連、去除無效列、依連線數排序)並回填 pay_3x–6x 相容欄
+        const cleanRows = (form.pay_rows || [])
+          .map(r => ({ count: Math.max(2, Math.min(20, Math.round(Number(r.count) || 0))), pay: Number(r.pay) || 0 }))
+          .filter(r => r.count >= 2)
+          .sort((a, b) => a.count - b.count);
+        const payByCount = {};
+        cleanRows.forEach(r => { payByCount[r.count] = r.pay; });
         const updated = {
           ...cur,
           number: form.number.toString().trim(),
@@ -439,10 +444,11 @@
           // 擴充欄位
           symbol_id: form.symbol_id.toString().trim(),
           type: form.type || 'HIGH',
-          pay_3x: Number(form.pay_3x) || 0,
-          pay_4x: Number(form.pay_4x) || 0,
-          pay_5x: Number(form.pay_5x) || 0,
-          pay_6x: Number(form.pay_6x) || 0,
+          pay_rows: cleanRows,                       // v6.1:主要欄位
+          pay_3x: Number(payByCount[3]) || 0,        // 以下為向下相容(由 pay_rows 同步)
+          pay_4x: Number(payByCount[4]) || 0,
+          pay_5x: Number(payByCount[5]) || 0,
+          pay_6x: Number(payByCount[6]) || 0,
           mega_w: Math.max(1, Number(form.mega_w) || 1),
           mega_h: Math.max(1, Number(form.mega_h) || 1),
           is_wild: !!form.is_wild,
@@ -458,6 +464,37 @@
       function onFieldEdit() {
         if (writeTimer) clearTimeout(writeTimer);
         writeTimer = setTimeout(writeForm, 150);
+      }
+
+      // ── v6.1:動態賠付表 helpers ──
+      //   優先用全站 SP.migratePayRows(載入順序晚於本檔,執行期已就緒);
+      //   一律深拷貝成新物件,避免編輯 form 時改到工作區原資料。
+      function _readPayRows(s) {
+        let rows;
+        if (SP && typeof SP.migratePayRows === 'function') {
+          rows = SP.migratePayRows(s);
+        } else if (Array.isArray(s.pay_rows) && s.pay_rows.length > 0) {
+          rows = s.pay_rows;
+        } else {
+          rows = [];
+          for (const n of [2, 3, 4, 5, 6, 7, 8, 9]) {
+            const v = s['pay_' + n + 'x'];
+            if (v != null && Number(v) > 0) rows.push({ count: n, pay: Number(v) });
+          }
+          if (rows.length === 0) rows = [{ count: 3, pay: 0 }, { count: 4, pay: 0 }, { count: 5, pay: 0 }];
+        }
+        return rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 }));
+      }
+      function addPayRow() {
+        const rows = form.pay_rows;
+        const maxC = rows.length ? Math.max(...rows.map(r => Number(r.count) || 0)) : 2;
+        rows.push({ count: Math.min(20, maxC + 1), pay: 0 });
+        onFieldEdit();
+      }
+      function removePayRow(i) {
+        if (form.pay_rows.length <= 1) return;
+        form.pay_rows.splice(i, 1);
+        onFieldEdit();
       }
 
       // #9:Type 為單一來源,wild/scatter 由 Type 推導
@@ -857,6 +894,7 @@
         pickSwatch, isCurrentSwatch, swatchStyle,
         initialOf, pctOf,
         onFieldEdit, setType, bumpMega, resetMega,
+        addPayRow, removePayRow,
         exportJson, triggerImport, importJson,
         resetDefaults,
       };

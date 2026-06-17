@@ -112,7 +112,7 @@
   /* 注意:saturate(180%) 是 iOS 玻璃的靈魂,讓底色穿透時更鮮 */
   --blur-thin:    blur(12px) saturate(180%);
   --blur-md:      blur(24px) saturate(180%);
-  --blur-thick:   blur(40px) saturate(190%);
+  --blur-thick:   blur(30px) saturate(185%);   /* v6.1 效能:40→30px,card-shell 全幅玻璃減負 */
   --blur-overlay: blur(56px) saturate(200%);
 
   /* ── iOS inset highlight 系統 ── */
@@ -203,11 +203,14 @@ body::before {
     radial-gradient(circle 380px at 10% 72%,   rgba(120,155,185,0.40),  transparent 60%),
     radial-gradient(circle 400px at 78% -5%,   rgba(210,165,135,0.42),  transparent 60%),
     radial-gradient(circle 300px at 58% 94%,   rgba(185,135,110,0.38),  transparent 60%);
-  animation: bgFloat 32s ease-in-out infinite alternate;
+  /* v6.1 效能:獨立合成圖層 + 放慢動畫 + 縮小位移,
+     大幅降低其下 card-shell backdrop-filter 每幀重採樣成本(體感幾乎不變) */
+  will-change: transform;
+  animation: bgFloat 60s ease-in-out infinite alternate;
 }
 @keyframes bgFloat {
   0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(-12px, 8px, 0) scale(1.04); }
+  100% { transform: translate3d(-8px, 5px, 0) scale(1.02); }
 }
 
 .ring {
