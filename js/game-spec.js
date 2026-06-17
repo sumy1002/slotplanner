@@ -1,0 +1,267 @@
+// ============================================================
+//  game-spec.js — 中央連動層（單一真相來源 / Single Source of Truth）
+//
+//  目的：解決「各分頁各存各的 aconfig.*、彼此沒有 watcher」的連動斷裂。
+//  把幾個跨分頁的「權威輸入」收斂成唯一一份 reactive 狀態，
+//  其他分頁一律「讀 gameSpec」，不再各自重算或各自猜。
+//
+//  權威輸入 → 來源對照（v6.1 現況）：
+//    reelCount    ← 02_Layout 的 layout.length      (LS: aconfig.layout.v1)  ★ 真實盤面輪數
+//    maxRows      ← 02_Layout 各輪 max_rows 的最大值
+//    subReels[]   ← 02_Layout 附掛副盤(has_subreel) + 02b_Panels 自由副盤
+//                                                   (LS: aconfig.layout.v1 / aconfig.panels.v1)
+//    payModel     ← 01_Global g.pay_type + g.megaways(LS: aconfig.global.v1)
+//    scoreDir     ← 01_Global g.payline_direction
+//    isMegaways   ← 01_Global g.megaways
+//
+//  傳播（這版已接通的一條）：
+//    reelCount → registry.setReelCount()  → 符號頁 reel_limit 自動跟著盤面輪數增減
+//    （過去 layout 與 registry.reelCount 完全沒連動，這是符號#8 的根因）
+//
+//  使用方式：
+//    const gameSpec = new SP.GameSpec(registry);   // app.js 建立一次
+//    gameSpec.refresh();                            // 從 LS/registry 重算
+//    gameSpec.on('changed', () => { ... });         // 任何權威值變動時通知
+//    const s = gameSpec.state;                       // Vue reactive，元件可直接讀
+//
+//  生命週期：住在 app.js，provide('gameSpec') 下放給所有分頁共用一份。
+// ============================================================
+
+(function () {
+  'use strict';
+
+  const SP = (window.SlotPlanner = window.SlotPlanner || {});
+  const Vue = window.Vue;
+
+  // ── LS key（與 helpers.js 一致，避免硬耦合 import）──
+  const LS_LAYOUT = 'slotplanner.aconfig.layout.v1';
+  const LS_PANELS = 'slotplanner.aconfig.panels.v1';
+  const LS_GLOBAL = 'slotplanner.aconfig.global.v1';
+
+  // ── 賠付模型 / 方向 列舉（與全域設定 UI 一致）──
+  const PAY_MODELS  = ['LINE', 'WAYS', 'MEGAWAYS', 'SCATTER', 'CLUSTER'];
+  const SCORE_DIRS  = ['LTR', 'RTL', 'BOTH'];
+
+  // 副盤位置 → 中文標籤
+  const POS_LABEL = {
+    TOP: '上', BOTTOM: '底', LEFT: '左', RIGHT: '右',
+    OVER: '覆蓋', SIDE: '側', '': '',
+  };
+
+  function _readLS(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const v = JSON.parse(raw);
+      return v == null ? fallback : v;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  純函式：從原始資料推導出 spec（可單獨測試，無副作用）
+  // ════════════════════════════════════════════════════════════
+
+  // 統一副盤清單：附掛副盤(attached) + 自由副盤(panel)
+  function deriveSubReels(layout, panels) {
+    const out = [];
+
+    // 1) 02_Layout 附掛副盤（某主輪上掛的副盤）
+    (Array.isArray(layout) ? layout : []).forEach((r) => {
+      if (!r || !r.has_subreel) return;
+      const rid = r.reel_id;
+      const posKey = (r.subreel_position || '').toUpperCase();
+      const pos = POS_LABEL[posKey] != null ? POS_LABEL[posKey] : posKey;
+      out.push({
+        key: 'sub-r' + rid,
+        kind: 'attached',
+        label: 'R' + rid + (pos ? ('副(' + pos + ')') : '副'),
+        reel_id: rid,
+        position: posKey,
+        rows: Number(r.subreel_rows) || 0,
+        subreel_kind: r.subreel_kind || 'STACK',
+        symbol_set: r.subreel_symbol_set || '',
+        join_payline: false,     // 附掛副盤是否參與連線由 subreel_kind 決定，此處先給 false
+        scroll: r.subreel_kind !== 'STACK',  // STACK = 靜態堆疊；其餘視為會滾動
+      });
+    });
+
+    // 2) 02b_Panels 自由副盤
+    (Array.isArray(panels) ? panels : []).forEach((p) => {
+      if (!p) return;
+      out.push({
+        key: 'panel-' + p.panel_id,
+        kind: 'panel',
+        label: '副盤 ' + p.panel_id,
+        panel_id: p.panel_id,
+        col: Number(p.col) || 0,
+        row: Number(p.row) || 0,
+        width: Number(p.width) || 1,
+        height: Number(p.height) || 1,
+        scroll: !!p.scroll,
+        symbol_set: p.symbol_set || '',
+        join_payline: !!p.join_payline,
+      });
+    });
+
+    return out;
+  }
+
+  // 賠付模型：pay_type + megaways → 對外統一字串
+  function derivePayModel(g) {
+    const pt = String((g && g.pay_type) || 'LINE').toUpperCase();
+    if (pt === 'WAYS' && g && g.megaways) return 'MEGAWAYS';
+    return PAY_MODELS.indexOf(pt) >= 0 ? pt : 'LINE';
+  }
+
+  function deriveScoreDir(g) {
+    const d = String((g && g.payline_direction) || 'LTR').toUpperCase();
+    return SCORE_DIRS.indexOf(d) >= 0 ? d : 'LTR';
+  }
+
+  // 把原始資料整理成完整 spec 物件
+  function computeSpec(layout, panels, g, fallbackReelCount) {
+    const reelCount = Array.isArray(layout) && layout.length
+      ? layout.length
+      : (Number(fallbackReelCount) || 5);
+
+    const maxRows = (Array.isArray(layout) && layout.length)
+      ? layout.reduce((m, r) => Math.max(m, Number(r && r.max_rows) || 0), 0) || 1
+      : 3;
+
+    const subReels = deriveSubReels(layout, panels);
+    const payModel = derivePayModel(g);
+    const payType  = String((g && g.pay_type) || 'LINE').toUpperCase();
+    const isMega   = !!(g && g.megaways);
+    const scoreDir = deriveScoreDir(g);
+
+    return {
+      reelCount,
+      maxRows,
+      payModel,                                  // LINE | WAYS | MEGAWAYS | SCATTER | CLUSTER
+      payType,                                   // 原始 pay_type（不含 megaways 合成）
+      isMegaways: isMega,
+      scoreDir,                                  // LTR | RTL | BOTH
+      subReels,                                  // 統一副盤清單
+
+      // ── 衍生便利欄位（下游常用）──
+      reelLabels: Array.from({ length: reelCount }, (_, i) => 'R' + (i + 1)),
+      subReelLabels: subReels.map((s) => s.label),
+      // 連線型玩法（LINE/WAYS/MEGAWAYS）賠付連線數的上限 = 盤面輪數；
+      // 群集/任意(SCATTER/CLUSTER)則不受輪數限制（上限放寬到 20）。
+      maxLineLength: (payModel === 'SCATTER' || payModel === 'CLUSTER') ? 20 : reelCount,
+      isLineLike: (payModel === 'LINE' || payModel === 'WAYS' || payModel === 'MEGAWAYS'),
+    };
+  }
+
+  // 兩個 spec 是否相等（淺比較 + 陣列 JSON 比較），用來避免無意義的 emit
+  function specEqual(a, b) {
+    if (!a || !b) return false;
+    if (a.reelCount !== b.reelCount) return false;
+    if (a.maxRows !== b.maxRows) return false;
+    if (a.payModel !== b.payModel) return false;
+    if (a.payType !== b.payType) return false;
+    if (a.isMegaways !== b.isMegaways) return false;
+    if (a.scoreDir !== b.scoreDir) return false;
+    if (JSON.stringify(a.subReels) !== JSON.stringify(b.subReels)) return false;
+    return true;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  簡易 EventEmitter（與 registry.js 同款）
+  // ════════════════════════════════════════════════════════════
+  class Emitter {
+    constructor() { this._lis = {}; }
+    on(event, cb) {
+      (this._lis[event] || (this._lis[event] = [])).push(cb);
+      return () => this.off(event, cb);
+    }
+    off(event, cb) {
+      this._lis[event] = (this._lis[event] || []).filter((c) => c !== cb);
+    }
+    emit(event, ...args) {
+      (this._lis[event] || []).forEach((c) => {
+        try { c(...args); } catch (e) { console.warn('[gameSpec] listener error:', e); }
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  GameSpec
+  // ════════════════════════════════════════════════════════════
+  class GameSpec extends Emitter {
+    constructor(registry) {
+      super();
+      this._registry = registry || null;
+      // Vue.reactive：元件可直接 reactive 讀取
+      const init = computeSpec([], [], {}, this._registry ? this._registry.reelCount() : 5);
+      this.state = Vue ? Vue.reactive(init) : init;
+      this._suppressPush = false;
+    }
+
+    // ── 從 LS / registry 重新計算，差異才更新 + emit ──
+    //   pushReelCount=true 時，會把 reelCount 推回 registry（讓符號頁 reel_limit 跟著盤面）
+    refresh(opts) {
+      const pushReelCount = !opts || opts.pushReelCount !== false;
+
+      const layout = _readLS(LS_LAYOUT, []);
+      const panels = _readLS(LS_PANELS, []);
+      const g      = _readLS(LS_GLOBAL, {});
+      const fallback = this._registry ? this._registry.reelCount() : 5;
+
+      const next = computeSpec(layout, panels, g, fallback);
+
+      const prev = {
+        reelCount: this.state.reelCount, maxRows: this.state.maxRows,
+        payModel: this.state.payModel, payType: this.state.payType,
+        isMegaways: this.state.isMegaways, scoreDir: this.state.scoreDir,
+        subReels: this.state.subReels,
+      };
+      const changed = !specEqual(prev, next);
+
+      // 寫回 reactive state（逐欄賦值，保留同一個 reactive 物件參考）
+      Object.keys(next).forEach((k) => { this.state[k] = next[k]; });
+
+      // ── 傳播：reelCount → registry（符號頁 reel_limit 連動盤面輪數）──
+      if (pushReelCount && this._registry && !this._suppressPush) {
+        try {
+          if (this._registry.reelCount() !== next.reelCount) {
+            this._registry.setReelCount(next.reelCount);
+          }
+        } catch (e) {
+          console.warn('[gameSpec] setReelCount 傳播失敗:', e);
+        }
+      }
+
+      if (changed) this.emit('changed', this.state);
+      return this.state;
+    }
+
+    // ── 讀取捷徑 ──
+    get reelCount()    { return this.state.reelCount; }
+    get maxRows()      { return this.state.maxRows; }
+    get payModel()     { return this.state.payModel; }
+    get isMegaways()   { return this.state.isMegaways; }
+    get scoreDir()     { return this.state.scoreDir; }
+    get subReels()     { return this.state.subReels; }
+    get isLineLike()   { return this.state.isLineLike; }
+    get maxLineLength(){ return this.state.maxLineLength; }
+
+    // ── 提供給下游「同時取主輪 + 副輪」的清單（符號#8 / 硬約束 / Reel 權重用）──
+    //   回傳 [{ key, label, kind:'reel'|'sub' }]，主輪在前、副輪在後。
+    reelTargets() {
+      const main = this.state.reelLabels.map((lab, i) => ({
+        key: 'r' + (i + 1), label: lab, kind: 'reel', reel_id: i + 1,
+      }));
+      const subs = this.state.subReels.map((s) => ({
+        key: s.key, label: s.label, kind: 'sub', ref: s,
+      }));
+      return main.concat(subs);
+    }
+  }
+
+  // ── Export ──
+  SP.GameSpec = GameSpec;
+  SP.gameSpecHelpers = { computeSpec, deriveSubReels, derivePayModel, deriveScoreDir, PAY_MODELS, SCORE_DIRS };
+})();

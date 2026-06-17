@@ -21,6 +21,14 @@
     ? `已從 localStorage 載入 ${registry.symbols().length} 個 symbol`
     : `已建立預設 ${registry.symbols().length} 個 symbol`);
 
+  // ── 中央連動層(單一真相):從 LS/registry 收斂 reelCount/副輪/賠付模型/方向/megaways ──
+  //    建立後立即 refresh 一次,把盤面輪數推回 registry(符號頁 reel_limit 連動盤面)。
+  const gameSpec = new SP.GameSpec(registry);
+  gameSpec.refresh();
+  SP.gameSpec = gameSpec;   // 掛 window.SlotPlanner.gameSpec 供 console 檢視
+  console.log('[gameSpec]', `reelCount=${gameSpec.reelCount} payModel=${gameSpec.payModel} `
+    + `dir=${gameSpec.scoreDir} 副輪=${gameSpec.subReels.length}`);
+
   const app = createApp({
     setup() {
       const page        = ref(0);
@@ -86,6 +94,8 @@
         if (i === 2) i = 3;
         // v4.9-b:模擬引擎(6)已移除 — 自動遷移到「數據文件相關 → A/B 結果比較」
         if (i === 6) { i = 0; dataTab.value = 'bcompare'; }
+        // 連動層:切頁前刷新一次,確保目的分頁讀到最新的盤面/全域權威值
+        try { SP.gameSpec && SP.gameSpec.refresh(); } catch (e) {}
         page.value = i;
         if (i === 0) _statusForDataTab();
         else status.value = { ...pageDefaultStatus[i] };
@@ -392,6 +402,7 @@
       }
 
       provide('registry', registry);
+      provide('gameSpec', gameSpec);
 
       // ── 亮暗切換(app 層級,全站有效)──
       const LS_THEME_KEY = 'slotplanner.uiTheme.v1';
