@@ -4814,13 +4814,6 @@
       const inspectorOpen = ref(false);  // 預設收合(避免空面板遮擋內容)
       const inspectorCtxExpanded = ref(false);  // ctx 編輯區是否展開
 
-      // v6.1:設定檔分頁側欄可收合(窄螢幕釋放橫向空間;記憶於本機)
-      const LS_TABRAIL_KEY = 'slotplanner.ui.tabRailCollapsed.v1';
-      const cfgTabRailCollapsed = ref(localStorage.getItem(LS_TABRAIL_KEY) === '1');
-      watch(cfgTabRailCollapsed, (v) => {
-        try { localStorage.setItem(LS_TABRAIL_KEY, v ? '1' : '0'); } catch (e) {}
-      });
-
       // 取 builder rows(統一介面,內部分支處理 rule 和 condBuilderState)
       function _getBuilderRows(kind, id) {
         if (!id) return [];
@@ -7469,7 +7462,7 @@
         changesPanelOpen, changesByTab, changesSummary, baselineInfo,
         toggleChangesPanel, goToTabFromChanges, resetBaseline, formatBaselineTime,
         // ── #5 Test Inspector(09/10/11 共用)──
-        pinnedTest, inspectorOpen, inspectorCtxExpanded, cfgTabRailCollapsed,
+        pinnedTest, inspectorOpen, inspectorCtxExpanded,
         pinTest, unpinTest, evalPinned, pinnedKindLabel, isInPuzzleTab,
         // ── #15 Ctrl+K 搜尋 ──
         searchOpen, searchQuery, searchSelectedIdx, searchResults,
