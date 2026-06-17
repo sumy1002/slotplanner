@@ -230,6 +230,7 @@
       if (pushReelCount && this._registry && !this._suppressPush) {
         try {
           if (this._registry.reelCount() !== next.reelCount) {
+            console.log('[gameSpec] reelCount', this._registry.reelCount(), '→', next.reelCount, '(推 registry.setReelCount)');
             this._registry.setReelCount(next.reelCount);
           }
         } catch (e) {

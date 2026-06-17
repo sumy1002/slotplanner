@@ -1040,6 +1040,38 @@
           ? panels[activePanelIdx.value] : null);
       const panelsDebugJson = computed(() => JSON.stringify(panels, null, 2));
 
+      // ── 連動層:把盤面 / 副盤 / 全域 的「即時記憶體值」同步進 gameSpec(單一真相)──
+      //    syncGameSpec() 直接把記憶體資料傳給 refresh,不讀 LS——layout 是經
+      //    scheduleSave(400ms 防抖)才寫 LS,讀 LS 會拿到舊值(這正是「切頁讀到舊輪數、
+      //    要硬刷新才對」的根因)。
+      //    為求 100% 可靠:除了下方 watcher,也在 addReel / removeReel / applyLayoutPreset
+      //    末端「直接呼叫」此函式——純函式呼叫必定執行,不依賴 Vue reactivity 追蹤是否觸發。
+      function syncGameSpec(reason) {
+        if (!SP.gameSpec) return;
+        try {
+          SP.gameSpec.refresh({
+            layout: layout.map(r => ({ ...r })),
+            panels: panels.map(p => ({ ...p })),
+            g: { ...g },
+          });
+          console.log('[gameSpec] syncGameSpec(' + (reason || '') + ') reelCount=' + layout.length);
+        } catch (e) { /* noop */ }
+      }
+      if (SP.gameSpec) {
+        // 備援 watcher(若 reactivity 有觸發就更即時;沒觸發也有上面的直接呼叫兜底)
+        watch(() => layout.length, () => syncGameSpec('watch:len'));
+        watch(
+          () => JSON.stringify([
+            layout.map(r => [r.has_subreel, r.subreel_position, r.subreel_kind, r.subreel_rows, r.subreel_symbol_set, r.max_rows]),
+            panels.map(p => [p.panel_id, p.scroll, p.join_payline, p.symbol_set, p.col, p.row, p.width, p.height]),
+            g.pay_type, g.megaways, g.payline_direction,
+          ]),
+          () => syncGameSpec('watch:sig')
+        );
+        // 進入編輯器即同步一次
+        syncGameSpec('config-mount');
+      }
+
       function _nextPanelId() {
         let n = panels.length + 1;
         const ids = new Set(panels.map(p => p.panel_id));
@@ -1162,6 +1194,7 @@
         layout.push(makeReel(new_id));
         activeReelIdx.value = layout.length - 1;  // 自動跳到新 reel
         emit('status', { type: 'ok', msg: `已新增 Reel #${new_id}` });
+        syncGameSpec('addReel');   // 連動層:盤面輪數 → registry → 符號頁 reel_limit
       }
       function removeReel(idx) {
         if (layout.length <= 1) return;
@@ -1179,6 +1212,7 @@
           activeReelIdx.value = layout.length - 1;
         }
         emit('status', { type: 'ok', msg: '已刪除 Reel 並自動重編號' });
+        syncGameSpec('removeReel');   // 連動層:盤面輪數 → registry → 符號頁 reel_limit
       }
 
       // 把所有權重表(reel / grid / combo)的 reel 維度 key 依「舊 id → 新 id」搬移。
@@ -1434,6 +1468,7 @@
         activeReelIdx.value = 0;
         layoutPresetMenuOpen.value = false;
         emit('status', { type: 'ok', msg: `已套用盤面範本「${preset.label}」` });
+        syncGameSpec('preset');   // 連動層:盤面輪數 → registry → 符號頁 reel_limit
       }
 
       // ──────────────────────────────────────────────────────────
