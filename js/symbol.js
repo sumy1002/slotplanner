@@ -214,70 +214,58 @@
 
         <!-- v6.3 / Q3:倍數(×N)/ 彩金倍數(N×)/ 金幣面額 -->
         <div class="sym-edit-section">
-          <div class="section-title" style="display:flex; align-items:center; gap:8px;">
+          <div class="section-title sym-mult-title">
             <span>倍數 / 彩金</span>
             <span class="section-subtitle">符號自帶倍數(×N)與彩金面額(N×)</span>
-            <button class="btn-pill" style="margin-left:auto; font-size:11px;"
+            <button class="btn-pill sym-mult-refresh"
                     @click="refreshMultRefs" title="重讀模式 / JP 選項">⟳ 重讀</button>
           </div>
 
           <!-- 倍數 ×N(× 在數字前) -->
-          <div style="margin-top:6px;">
-            <div style="font-size:12px; font-weight:600; color:var(--text-light); margin-bottom:4px;">
-              倍數 <span style="font-weight:400;">（×N;多筆＝加權隨機，留空＝無）</span>
+          <div class="sym-mult-grp">
+            <div class="sym-mult-sublabel">
+              倍數 <span>（×N;多筆＝加權隨機，留空＝無）</span>
             </div>
-            <div v-for="(mv, i) in form.mult_values" :key="'mv'+i"
-                 style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-              <span style="font-size:13px; color:var(--text-light);">×</span>
-              <input class="input input-sm cfg-mono" type="number" step="any" min="0"
-                     v-model.number="mv.mult" @input="onFieldEdit" placeholder="倍數"
-                     style="width:72px;">
-              <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">權重</span>
-              <input class="input input-sm cfg-mono" type="number" step="any" min="0"
-                     v-model.number="mv.weight" @input="onFieldEdit" placeholder="權重"
-                     style="flex:1; min-width:56px;">
-              <button class="btn-pill del" @click="removeMultValue(i)" title="刪除此倍數"
-                      style="white-space:nowrap;">🗑</button>
+            <div v-for="(mv, i) in form.mult_values" :key="'mv'+i" class="sym-mult-row">
+              <span class="sym-mult-x">×</span>
+              <input class="input input-sm cfg-mono sym-mult-num" type="number" step="any" min="0"
+                     v-model.number="mv.mult" @input="onFieldEdit" placeholder="倍數">
+              <span class="sym-mult-wlabel">權重</span>
+              <input class="input input-sm cfg-mono sym-mult-weight" type="number" step="any" min="0"
+                     v-model.number="mv.weight" @input="onFieldEdit" placeholder="權重">
+              <button class="btn-pill del sym-mult-del" @click="removeMultValue(i)" title="刪除此倍數">🗑</button>
             </div>
-            <button class="btn-pill add" @click="addMultValue" style="margin-top:2px;">＋ 新增倍數</button>
+            <button class="btn-pill add" @click="addMultValue">＋ 新增倍數</button>
           </div>
 
-          <div style="height:10px;"></div>
+          <div class="sym-mult-sep"></div>
 
           <!-- 彩金倍數 N×(× 在數字後)/ 金幣面額 -->
-          <div>
-            <div style="font-size:12px; font-weight:600; color:var(--text-light); margin-bottom:4px;">
-              彩金倍數 / 面額 <span style="font-weight:400;">（N×;可連結 JP，各模式權重）</span>
+          <div class="sym-mult-grp">
+            <div class="sym-mult-sublabel">
+              彩金倍數 / 面額 <span>（N×;可連結 JP，各模式權重）</span>
             </div>
-            <div v-for="(pv, i) in form.prize_values" :key="'pv'+i" class="sym-prize-row"
-                 style="border:1px solid var(--glass-brd); border-radius:8px; padding:8px; margin-bottom:8px;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <input class="input input-sm cfg-mono" type="number" step="any" min="0"
-                       v-model.number="pv.value" @input="onFieldEdit" placeholder="面額"
-                       style="width:80px;">
-                <span style="font-size:13px; color:var(--text-light);">×</span>
-                <select class="input input-sm" v-model="pv.link_jackpot" @change="onFieldEdit"
-                        style="flex:1; min-width:90px;">
+            <div v-for="(pv, i) in form.prize_values" :key="'pv'+i" class="sym-prize-row">
+              <div class="sym-prize-head">
+                <input class="input input-sm cfg-mono sym-prize-value" type="number" step="any" min="0"
+                       v-model.number="pv.value" @input="onFieldEdit" placeholder="面額">
+                <span class="sym-mult-x">×</span>
+                <select class="input input-sm sym-prize-jp" v-model="pv.link_jackpot" @change="onFieldEdit">
                   <option value="">（純面額，不連結 JP）</option>
                   <option v-for="jp in jackpotOptions" :key="jp.jp_id" :value="jp.jp_id">{{ jp.name }}（{{ jp.jp_id }}）</option>
                 </select>
-                <button class="btn-pill del" @click="removePrizeValue(i)" title="刪除此面額"
-                        style="white-space:nowrap;">🗑</button>
+                <button class="btn-pill del sym-mult-del" @click="removePrizeValue(i)" title="刪除此面額">🗑</button>
               </div>
-              <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
-                <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">基礎權重</span>
-                <input class="input input-sm cfg-mono" type="number" step="any" min="0"
-                       v-model.number="pv.weight" @input="onFieldEdit" placeholder="權重"
-                       style="width:70px;">
+              <div class="sym-prize-baserow">
+                <span class="sym-mult-wlabel">基礎權重</span>
+                <input class="input input-sm cfg-mono sym-prize-weight" type="number" step="any" min="0"
+                       v-model.number="pv.weight" @input="onFieldEdit" placeholder="權重">
               </div>
-              <div v-if="modeNames.length"
-                   style="display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:6px;">
-                <label v-for="mn in modeNames" :key="mn"
-                       style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text-light);">
-                  <span style="white-space:nowrap;">W_{{ mn }}</span>
+              <div v-if="modeNames.length" class="sym-prize-modes">
+                <label v-for="mn in modeNames" :key="mn" class="sym-prize-mode">
+                  <span>W_{{ mn }}</span>
                   <input class="input input-sm cfg-mono" type="number" step="any" min="0"
-                         v-model.number="pv.weight_by_mode[mn]" @input="onFieldEdit"
-                         style="width:54px;">
+                         v-model.number="pv.weight_by_mode[mn]" @input="onFieldEdit">
                 </label>
               </div>
             </div>

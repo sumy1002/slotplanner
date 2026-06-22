@@ -1394,7 +1394,7 @@
         prevSign = sign;
       }
     }
-    // 對稱（回文）加分
+    // 非對稱(非回文)罰分:sym=1 表示左右不對稱 → 下方 +6 罰分(對稱線更優先)
     let sym = 0;
     const n = line.length;
     for (let i = 0; i < Math.floor(n / 2); i++) {

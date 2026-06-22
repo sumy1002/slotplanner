@@ -1087,6 +1087,10 @@
                 <option :value="0">任意輪</option>
                 <option v-for="n in layout.length" :key="'tr'+n" :value="n">R{{ n }}</option>
               </select>
+              <!-- v6.3:指定輪目前僅記錄(引擎無逐輪 condition),選指定輪時顯著提示,避免企劃誤判已逐輪生效 -->
+              <div v-if="Number(activePanel.trigger_reel) >= 1" class="cfg-trigger-reel-warn">
+                ⚠ 引擎目前以「全盤出現觸發符號」判定;指定輪 R{{ activePanel.trigger_reel }} 僅記錄於事件 payload / 規則描述與文件,不會限制觸發只在該輪發生。
+              </div>
               <button class="cfg-mode-add-btn" style="margin-top:8px;" @click="genTriggerRule(activePanel)">
                 <span style="font-size:15px;">+</span><span>產生對應規則</span>
               </button>
@@ -2622,50 +2626,48 @@
               <div v-if="paylineGenOpen" class="cfg-payline-gen-panel">
                 <div class="cfg-payline-add-menu-title">中獎線自動產生</div>
 
-                <!-- 不規則盤面阻擋提示 -->
-                <div v-if="!paylineBoardUniform" class="cfg-payline-gen-warn">
-                  目前盤面各輪列數不一致,自動產生僅支援等高盤面(如 3×3 / 5×3 / 5×4 / 6×4)。
+                <!-- v6.3:不等高盤面改為「資訊提示」而非阻擋 — 演算法逐輪夾擠各輪上限 -->
+                <div v-if="!paylineBoardUniform" class="cfg-payline-gen-note">
+                  盤面各輪列數不一致;將逐輪夾擠產生平滑線(每輪限其各自列數上限)。
                 </div>
 
-                <template v-else>
-                  <!-- 方式 -->
-                  <div class="cfg-payline-gen-row">
-                    <div class="cfg-payline-gen-label">方式</div>
-                    <div class="cfg-payline-gen-chips">
-                      <button class="cfg-chip" :class="{ active: paylineGenMethod==='general' }"
-                              @click="paylineGenMethod='general'">一般線</button>
-                      <button class="cfg-chip" :class="{ active: paylineGenMethod==='adjacent' }"
-                              @click="paylineGenMethod='adjacent'">相鄰≤1</button>
-                    </div>
+                <!-- 方式 -->
+                <div class="cfg-payline-gen-row">
+                  <div class="cfg-payline-gen-label">方式</div>
+                  <div class="cfg-payline-gen-chips">
+                    <button class="cfg-chip" :class="{ active: paylineGenMethod==='general' }"
+                            @click="paylineGenMethod='general'">一般線</button>
+                    <button class="cfg-chip" :class="{ active: paylineGenMethod==='adjacent' }"
+                            @click="paylineGenMethod='adjacent'">相鄰≤1</button>
                   </div>
-                  <div class="cfg-hint cfg-payline-gen-hint">
-                    一般線 = 水平 + V/Λ + 對角 + 淺彎(相鄰跨列≤2);相鄰≤1 = 相鄰輪列差不超過 1。
-                  </div>
+                </div>
+                <div class="cfg-hint cfg-payline-gen-hint">
+                  一般線 = 水平 + V/Λ + 對角 + 淺彎(相鄰跨列≤2);相鄰≤1 = 相鄰輪列差不超過 1。
+                </div>
 
-                  <!-- 線數 -->
-                  <div class="cfg-payline-gen-row">
-                    <div class="cfg-payline-gen-label">線數</div>
-                    <div class="cfg-payline-gen-stepper">
-                      <button class="cfg-stepper-btn" @click="paylineGenCount = Math.max(10, (Number(paylineGenCount)||10) - 1)">−</button>
-                      <input type="number" min="10" max="50" v-model.number="paylineGenCount" class="cfg-payline-gen-num" />
-                      <button class="cfg-stepper-btn" @click="paylineGenCount = Math.min(50, (Number(paylineGenCount)||10) + 1)">+</button>
-                    </div>
-                    <div class="cfg-payline-gen-avail">上限 {{ paylineGenAvailable }}</div>
+                <!-- 線數 -->
+                <div class="cfg-payline-gen-row">
+                  <div class="cfg-payline-gen-label">線數</div>
+                  <div class="cfg-payline-gen-stepper">
+                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.max(10, (Number(paylineGenCount)||10) - 1)">−</button>
+                    <input type="number" min="10" max="50" v-model.number="paylineGenCount" class="cfg-payline-gen-num" />
+                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.min(50, (Number(paylineGenCount)||10) + 1)">+</button>
                   </div>
+                  <div class="cfg-payline-gen-avail">上限 {{ paylineGenAvailable }}</div>
+                </div>
 
-                  <!-- 寫入模式 -->
-                  <div class="cfg-payline-gen-row">
-                    <div class="cfg-payline-gen-label">寫入</div>
-                    <div class="cfg-payline-gen-chips">
-                      <button class="cfg-chip" :class="{ active: paylineGenMode==='replace' }"
-                              @click="paylineGenMode='replace'">取代全部</button>
-                      <button class="cfg-chip" :class="{ active: paylineGenMode==='append' }"
-                              @click="paylineGenMode='append'">追加</button>
-                    </div>
+                <!-- 寫入模式 -->
+                <div class="cfg-payline-gen-row">
+                  <div class="cfg-payline-gen-label">寫入</div>
+                  <div class="cfg-payline-gen-chips">
+                    <button class="cfg-chip" :class="{ active: paylineGenMode==='replace' }"
+                            @click="paylineGenMode='replace'">取代全部</button>
+                    <button class="cfg-chip" :class="{ active: paylineGenMode==='append' }"
+                            @click="paylineGenMode='append'">追加</button>
                   </div>
+                </div>
 
-                  <button class="cfg-payline-gen-run" @click="runPaylineGen">產生</button>
-                </template>
+                <button class="cfg-payline-gen-run" @click="runPaylineGen">產生</button>
               </div>
             </div>
           </div>
@@ -4847,6 +4849,10 @@
       </div><!-- /reel_strips -->
 
       <!-- ─── 15:倍數系統(v5.4:Wild / Progress / Random)─── -->
+      <!-- ⚠ DORMANT(v6.3 / Q3):此分頁已併入「符號頁 → 倍數/彩金」與「模式 progress」,
+           TABS 已標 hidden:true → active 永遠不會是 'multipliers',本區塊不可達。
+           保留僅為過渡安全;確認遷移穩定後,排程於 v6.4 連同 setup 對應事件一併移除。
+           註:multipliers 資料物件仍由遷移/匯出層使用,移除的只是這段「編輯 UI」。 -->
       <div v-else-if="active === 'multipliers'" class="cfg-form cfg-mult-form">
 
         <!-- Wild 倍數 -->
@@ -4965,6 +4971,9 @@
       </div><!-- /multipliers -->
 
       <!-- ─── 16:金幣面額(v5.4:Hold&Win 核心)─── -->
+      <!-- ⚠ DORMANT(v6.3 / Q3):已併入「符號頁 → 倍數/彩金」的 prize_values;
+           TABS 標 hidden:true → 不可達。排程 v6.4 連同 setup 對應事件移除。
+           coin_values 資料物件仍供遷移/匯出層使用,移除的只是這段編輯 UI。 -->
       <div v-else-if="active === 'coin_values'" class="cfg-form cfg-coin-form">
 
         <div class="cfg-section">

@@ -2396,6 +2396,10 @@
       function removeBuyFeature(idx) { betConfig.buy_features.splice(idx, 1); }
 
       // ── v5.4:倍數系統(15_Multipliers)──
+      // ⚠ DORMANT UI(v6.3 / Q3):下列 addWildMultValue/wildMultPct/...等「編輯器函式」
+      //   只服務已隱藏的 multipliers/coin_values 分頁(template 對應區塊不可達),排程 v6.4 移除。
+      //   ⚠ 但 `multipliers` / `coinValues` reactive 物件本身「不可移除」:
+      //      仍由一次性遷移(migrateQ3)、自動存檔 watch、validate 驗證、docgen 反推使用。
       const multipliers = reactive(loadMultipliers());
       function addWildMultValue() { multipliers.wild_mult_values.push(makeMultValue(2, 100)); }
       function removeWildMultValue(i) { multipliers.wild_mult_values.splice(i, 1); }
@@ -3141,8 +3145,10 @@
       });
 
       // 此盤面 + 當前方式 的可用上限(LINE 前 3 格唯一規則下)
+      //   v6.3:① 只在面板開啟時才計算(避免關閉時每次 reactive 變動都跑全量 DFS)
+      //         ② 支援不等高盤面(演算法逐輪夾擠各輪上限)
       const paylineGenAvailable = computed(() => {
-        if (!paylineBoardUniform.value || layout.length === 0) return 0;
+        if (!paylineGenOpen.value || layout.length === 0) return 0;
         const rows = layout.map(r => r.max_rows);
         const res = generatePaylinePoints({
           reelCount: layout.length, rows,
@@ -3165,10 +3171,7 @@
           emit('status', { type: 'wait', msg: '請先在 02_Layout 設定盤面結構' });
           return;
         }
-        if (!paylineBoardUniform.value) {
-          emit('status', { type: 'err', msg: '自動產生目前僅支援等高盤面(各輪列數相同)' });
-          return;
-        }
+        // v6.3:不再硬擋不等高盤面 — generatePaylinePoints 會逐輪夾擠各輪列數上限。
         const count = _clampGenCount();
         const rows = layout.map(r => r.max_rows);
         const res = generatePaylinePoints({

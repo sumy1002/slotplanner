@@ -171,6 +171,20 @@
     return rows;
   }
 
+  // ── v6.3:倍數 / 彩金「單一真相」彙整 ──
+  //   已遷移(migrated_to_symbols)時,倍數/彩金一律以「符號」為準(避免 docgen 同時
+  //   輸出符號版與 legacy 版兩套、且 legacy 物件會與使用者後續編輯不同步)。
+  //   未遷移(遷移前的過渡狀態)才回退 legacy multipliers / coin_values 物件。
+  //   回傳:{ migrated, multSyms, prizeSyms }(symbol 版)— 供 md / xlsx 共用。
+  function _symbolMultView(cfg) {
+    const mpc = cfg.multipliers || {};
+    const migrated = !!mpc.migrated_to_symbols;
+    const syms = Array.isArray(cfg.symbols) ? cfg.symbols : [];
+    const multSyms  = syms.filter(s => Array.isArray(s.mult_values)  && s.mult_values.length);
+    const prizeSyms = syms.filter(s => Array.isArray(s.prize_values) && s.prize_values.length);
+    return { migrated, multSyms, prizeSyms };
+  }
+
   // ════════════════════════════════════════════════════════════════════
   //  手填敘述（meta）— 預設 / 讀寫 / 補齊
   // ════════════════════════════════════════════════════════════════════
@@ -553,9 +567,13 @@
     const bc = cfg.betConfig || {};
     const mpc = cfg.multipliers || {};
     const cvc = cfg.coinValues || {};
+    // v6.3:已遷移時倍數/彩金以「符號」為單一真相;未遷移才回退 legacy 物件。
+    const smv = _symbolMultView(cfg);
     const hasBet  = bc.ante_bet_enabled || (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length);
-    const hasMul  = mpc.wild_mult_enabled || mpc.progress_enabled || mpc.random_enabled;
-    const hasCoin = cvc.enabled && Array.isArray(cvc.denominations) && cvc.denominations.length;
+    const hasMul  = smv.migrated ? (smv.multSyms.length > 0)
+                                 : (mpc.wild_mult_enabled || mpc.progress_enabled || mpc.random_enabled);
+    const hasCoin = smv.migrated ? (smv.prizeSyms.length > 0)
+                                 : (cvc.enabled && Array.isArray(cvc.denominations) && cvc.denominations.length);
     if (hasBet || hasMul || hasCoin) {
       const wsV = wb.addWorksheet('數值機制');
       wsV.columns = [{ width: 18 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 30 }];
@@ -590,7 +608,36 @@
 
       // 倍數系統
       if (hasMul) {
-        vBand('倍數系統（Multipliers）');
+        if (smv.migrated) {
+          // v6.3:符號版 — 列出每個帶倍數的符號的 ×N 與權重
+          vBand('倍數系統（符號 ×N）');
+          vHead(['符號', '倍數', '權重', '機率', '']);
+          smv.multSyms.forEach(s => {
+            const vals = s.mult_values || [];
+            const tot = vals.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1;
+            vals.forEach((v, i) => {
+              _cell(wsV, VR, 1, i === 0 ? (s.name || _symId(s)) : '', {});
+              _cell(wsV, VR, 2, '×' + (Number(v.mult) || 0), { h: 'center' });
+              _cell(wsV, VR, 3, Number(v.weight) || 0, { h: 'center' });
+              _cell(wsV, VR, 4, ((Number(v.weight) || 0) / tot * 100).toFixed(1) + '%', { h: 'center' });
+              VR++;
+            });
+          });
+          // 進度倍數仍可能存於各模式 progress_ladder(Q3 已移入模式)
+          const ladModes = (cfg.modes || []).filter(md => Array.isArray(md.progress_ladder) && md.progress_ladder.length);
+          if (ladModes.length) {
+            vHead(['進度倍數', '模式', '階梯', '重置', '']);
+            ladModes.forEach(md => {
+              _cell(wsV, VR, 1, '', {});
+              _cell(wsV, VR, 2, md.mode, { h: 'center' });
+              _cell(wsV, VR, 3, md.progress_ladder.join(' → '), { h: 'center' });
+              _cell(wsV, VR, 4, md.progress_reset === false ? '不重置' : '重置', { h: 'center' });
+              VR++;
+            });
+          }
+          VR++;
+        } else {
+          vBand('倍數系統（Multipliers）');
         if (mpc.wild_mult_enabled) {
           const vals = Array.isArray(mpc.wild_mult_values) ? mpc.wild_mult_values : [];
           if (vals.length) {
@@ -634,10 +681,29 @@
           });
         }
         VR++;
+        }
       }
 
       // 金幣面額
       if (hasCoin) {
+        if (smv.migrated) {
+          // v6.3:符號版 — 各帶 prize_values 的符號(面額 / 連結 JP / 各模式權重)
+          vBand('彩金倍數 / 面額（符號 N×）');
+          const modeNames = cfg.modes.map(md => md.mode).filter(Boolean);
+          vHead(['符號', '面額×注額', '連結JP', ...modeNames.slice(0, 2).map(mn => 'W_' + mn)]);
+          smv.prizeSyms.forEach(s => {
+            (s.prize_values || []).forEach((pv, i) => {
+              _cell(wsV, VR, 1, i === 0 ? (s.name || _symId(s)) : '', {});
+              _cell(wsV, VR, 2, pv.link_jackpot ? '（依JP）' : (Number(pv.value) || 0), { h: 'center' });
+              _cell(wsV, VR, 3, pv.link_jackpot || '—', { h: 'center' });
+              modeNames.slice(0, 2).forEach((mn, j) => {
+                const w = pv.weight_by_mode ? (Number(pv.weight_by_mode[mn]) || 0) : 0;
+                _cell(wsV, VR, 4 + j, w, { h: 'center' });
+              });
+              VR++;
+            });
+          });
+        } else {
         vBand('金幣面額（Hold&Win · 符號:' + (cvc.coin_symbol_id || 'COIN') + '）');
         const modeNames = cfg.modes.map(md => md.mode).filter(Boolean);
         vHead(['標籤 / 面額', '面額×注額', '連結JP', ...modeNames.slice(0, 2).map(mn => 'W_' + mn)]);
@@ -651,6 +717,7 @@
           });
           VR++;
         });
+        }
       }
     }
 
@@ -833,8 +900,11 @@
       L.push('');
     }
 
+    // v6.3:已遷移時,倍數/彩金一律由上方「## 倍數 / 彩金」(符號版)承載;
+    //   這裡的 legacy 區塊只在「遷移前過渡狀態」才輸出,避免同份文件出現兩套且不同步。
     const _mp = cfg.multipliers || {};
-    if (_mp.wild_mult_enabled || _mp.progress_enabled || _mp.random_enabled) {
+    const _migrated = !!_mp.migrated_to_symbols;
+    if (!_migrated && (_mp.wild_mult_enabled || _mp.progress_enabled || _mp.random_enabled)) {
       L.push('## 倍數系統');
       L.push('');
       if (_mp.wild_mult_enabled) {
@@ -860,7 +930,7 @@
     }
 
     const _cv = cfg.coinValues || {};
-    if (_cv.enabled && Array.isArray(_cv.denominations) && _cv.denominations.length) {
+    if (!_migrated && _cv.enabled && Array.isArray(_cv.denominations) && _cv.denominations.length) {
       L.push('## 金幣面額（Hold&Win）');
       L.push('');
       L.push(`- 金幣符號：**${_cv.coin_symbol_id || 'COIN'}**`);

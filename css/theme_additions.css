@@ -10427,3 +10427,89 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-color: rgba(220, 60, 50, 0.4);
   color: #c0392b;
 }
+
+/* ============================================================
+   v6.3 優化:① 中獎線產生面板「資訊提示」(取代不等高硬擋)
+              ② 觸發輪「指定輪僅記錄」警示
+              ③ 符號頁「倍數 / 彩金」區 — 從 inline style 收斂為 class
+   ============================================================ */
+
+/* ① 不等高盤面資訊提示(中性藍,有別於 .cfg-payline-gen-warn 的琥珀色) */
+.cfg-payline-gen-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--accent-hex, #5a3db0);
+  background: rgba(90, 61, 176, 0.08);
+  border: 1px solid var(--accent-brd, rgba(90, 61, 176, 0.3));
+  border-radius: var(--r-btn);
+  padding: 7px 9px;
+  margin: 2px 0 4px;
+}
+
+/* ② 觸發輪指定輪警示 */
+.cfg-trigger-reel-warn {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--warn-hex, #b8860b);
+  background: rgba(255, 196, 0, 0.10);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  border-radius: var(--r-btn);
+  padding: 7px 9px;
+  margin: 8px 0 2px;
+}
+
+/* ③ 符號頁:倍數 / 彩金 區 */
+.sym-mult-title { display: flex; align-items: center; gap: 8px; }
+.sym-mult-refresh { margin-left: auto; font-size: 11px; }
+
+.sym-mult-grp { margin-top: 6px; }
+.sym-mult-sublabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 4px;
+}
+.sym-mult-sublabel > span { font-weight: 400; }
+.sym-mult-sep { height: 10px; }
+
+.sym-mult-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sym-mult-x   { font-size: 13px; color: var(--text-light); }
+.sym-mult-wlabel { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+.sym-mult-num    { width: 72px; }
+.sym-mult-weight { flex: 1; min-width: 56px; }
+.sym-mult-del    { white-space: nowrap; }
+
+.sym-prize-row {
+  border: 1px solid var(--glass-brd);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+.sym-prize-head { display: flex; align-items: center; gap: 8px; }
+.sym-prize-value { width: 80px; }
+.sym-prize-jp    { flex: 1; min-width: 90px; }
+.sym-prize-baserow { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.sym-prize-weight  { width: 70px; }
+.sym-prize-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+.sym-prize-mode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-light);
+}
+.sym-prize-mode > span { white-space: nowrap; }
+.sym-prize-mode input { width: 54px; }
+
+/* 暗色:prize-row 邊框與既有 sym-edit-section 一致(glass-brd 已隨主題切換) */
+:root[data-theme="dark"] .sym-prize-row { background: rgba(255,255,255,0.02); }
