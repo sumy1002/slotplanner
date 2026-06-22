@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlotPlanner Pro ・ v7.0 Clean 預覽</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/theme_additions.css">
+<style>
+  /* 預覽專用排版(僅此檔,不影響正式樣式) */
+  .pv-content { padding: 22px 26px; overflow:auto; }
+  .pv-kicker { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:5px; }
+  .pv-h1 { font-size:22px; font-weight:600; color:var(--text); margin:0 0 3px; }
+  .pv-sub { font-size:13px; color:var(--text-light); margin:0 0 20px; }
+  .pv-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+  .pv-tile { background:var(--glass-2); border:0.5px solid var(--glass-edge); border-radius:var(--r-lg); padding:14px 16px; box-shadow:var(--shadow-sm); }
+  .pv-tile .lab { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-light); margin-bottom:9px; }
+  .pv-tile .dot { width:8px; height:8px; border-radius:3px; }
+  .pv-tile .val { font-size:20px; font-weight:600; color:var(--text); }
+  .pv-tile .val small { font-size:13px; font-weight:400; color:var(--text-muted); }
+  .pv-card { background:var(--glass-2); border:0.5px solid var(--glass-edge); border-radius:var(--r-lg); padding:18px 20px; box-shadow:var(--shadow-md); }
+  .pv-cardhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .pv-cardhead h2 { font-size:16px; font-weight:600; margin:0; color:var(--text); }
+  .pv-pill { font-size:12px; color:var(--ok-text); background:var(--ok-bg); padding:4px 11px; border-radius:var(--r-pill); }
+  .pv-row { display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; }
+  .pv-field { min-width:120px; }
+  .pv-field label { display:block; font-size:12px; color:var(--text-light); margin-bottom:7px; }
+  .pv-foot { margin-top:16px; padding-top:13px; border-top:0.5px solid var(--divider); font-size:12px; color:var(--text-muted); }
+  .pv-seg { display:inline-flex; background:var(--glass-3); border-radius:var(--r-sm); padding:3px; }
+  .pv-seg span { font-size:12px; padding:7px 14px; border-radius:var(--r-xs); color:var(--text-light); cursor:pointer; }
+  .pv-seg span.on { background:var(--glass-2); color:var(--text); box-shadow:var(--shadow-sm); }
+  .pv-btnbar { display:flex; gap:8px; }
+  .pv-toggle { display:flex; gap:8px; align-items:center; margin-bottom:18px; }
+</style>
+</head>
+<body>
+<div id="app" class="app">
+  <div class="card-shell">
+
+    <aside class="sidebar">
+      <div class="sidebar-title">
+        <span class="logo">✧ 工具箱</span>
+        <button class="collapse-btn">‹</button>
+      </div>
+      <div class="nav-btn active"><span>🗂️</span><span class="nav-label">設定檔編輯器</span></div>
+      <div class="nav-divider"></div>
+      <div class="nav-btn"><span>📄</span><span class="nav-label">批次處理</span></div>
+      <div class="nav-btn"><span>📄</span><span class="nav-label">資料比對</span></div>
+      <div style="flex:1"></div>
+      <div class="nav-btn"><span>🌙</span><span class="nav-label">外觀</span></div>
+    </aside>
+
+    <div class="right">
+      <div class="topbar">
+        <strong style="font-size:14px;">中獎線與盤面</strong>
+        <div class="pv-btnbar">
+          <button class="btn btn-secondary">匯出</button>
+          <button class="btn btn-primary">儲存</button>
+        </div>
+      </div>
+
+      <div class="content pv-content">
+        <div class="pv-kicker">設定檔編輯器</div>
+        <h1 class="pv-h1">中獎線與盤面</h1>
+        <p class="pv-sub">逐輪夾擠,自動排列最優先的線型組合。</p>
+
+        <div class="pv-grid">
+          <div class="pv-tile"><div class="lab"><span class="dot" style="background:#4f46e5"></span>盤面</div><div class="val">5 <small>輪</small></div></div>
+          <div class="pv-tile"><div class="lab"><span class="dot" style="background:#1d9e75"></span>中獎線</div><div class="val">25 <small>條</small></div></div>
+          <div class="pv-tile"><div class="lab"><span class="dot" style="background:#ef9f27"></span>倍數</div><div class="val">×8 <small>最高</small></div></div>
+        </div>
+
+        <div class="pv-card">
+          <div class="pv-cardhead">
+            <h2>中獎線自動產生</h2>
+            <span class="pv-pill">不等高盤面 OK</span>
+          </div>
+          <div class="pv-toggle">
+            <span style="font-size:13px;color:var(--text-light)">自動跟隨盤面更新</span>
+          </div>
+          <div class="pv-row">
+            <div class="pv-field" style="width:110px">
+              <label>線數上限</label>
+              <input class="input" type="text" value="25">
+            </div>
+            <div class="pv-field">
+              <label>方式</label>
+              <div class="pv-seg"><span class="on">LINE</span><span>WAYS</span></div>
+            </div>
+            <div class="pv-btnbar">
+              <button class="btn btn-primary">產生</button>
+              <button class="btn btn-secondary">清空</button>
+              <button class="btn btn-danger">移除全部</button>
+            </div>
+          </div>
+          <div class="pv-foot">演算法逐輪夾擠 · 保證集排最前 · LINE 前 3 格去重</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 預覽:點「外觀」切換亮/暗,確認兩種模式
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    if(b.textContent.includes('外觀')) b.addEventListener('click',()=>{
+      const r=document.documentElement;
+      r.setAttribute('data-theme', r.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  });
+</script>
+</body>
+</html>

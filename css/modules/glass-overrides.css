@@ -660,3 +660,41 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   fill: var(--accent-hex) !important;
   font-weight: 800 !important;
 }
+
+/* ============================================================
+   v7.0 Clean — 收尾覆寫(取消殘留玻璃高光 / 重模糊)
+   ============================================================ */
+/* content 頂端白高光帶 — 取消(白灰面不需要) */
+.content::before { display: none !important; }
+
+/* 鏡面光帶 ::after — 全數取消(--specular 已 transparent,這裡保險) */
+.card-shell::after,
+.filter-modal::after,
+.cfg-tpl-diff-modal::after,
+.glass-panel::after,
+.glass-panel-raised::after { display: none !important; }
+
+/* modal 遮罩:取消重模糊,改乾淨暗色 scrim */
+.modal-backdrop,
+.cfg-tpl-diff-backdrop {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(20,28,46,0.32) !important;
+}
+:root[data-theme="dark"] .modal-backdrop,
+:root[data-theme="dark"] .cfg-tpl-diff-backdrop {
+  background: rgba(0,0,0,0.55) !important;
+}
+
+/* 主按鈕在暗色:亮一階靛紫 */
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .btn-glass.is-primary {
+  background: #6366f1 !important;
+  border-color: #6366f1 !important;
+  color: #ffffff !important;
+}
+:root[data-theme="dark"] .btn-primary:hover,
+:root[data-theme="dark"] .btn-glass.is-primary:hover {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+}

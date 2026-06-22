@@ -48,79 +48,95 @@
    v4.2:霧藍×陶土橘 暗色版本
    背景深藍灰底,Accent 提亮為淺陶土橘 */
 :root[data-theme="dark"] {
-  /* 主背景:深藍灰,呼應亮色霧藍 */
-  --bg: #151c24;
-  --bg-mid: #1c2730;
-  --bg-pink: #22201e;
-  --bg-end: #1a1612;
+  /* 主背景:深石板灰(v7.0 Clean)*/
+  --bg: #0f1419;
+  --bg-mid: #0f1419;
+  --bg-pink: #0f1419;
+  --bg-end: #0f1419;
 
-  /* 玻璃層級(暗模式)*/
-  --glass-1: rgba(255,255,255,0.04);
-  --glass-2: rgba(255,255,255,0.08);
-  --glass-3: rgba(255,255,255,0.12);
-  --glass-4: rgba(255,255,255,0.18);
-  --glass-5: rgba(30,36,44,0.93);
-  --glass-edge: rgba(255,255,255,0.13);
+  /* 表面層級(暗模式,實色)*/
+  --glass-1: #161b22;
+  --glass-2: #1b212b;
+  --glass-3: #232a35;
+  --glass-4: #2b333f;
+  --glass-5: #1b212b;
+  --glass-edge: rgba(255,255,255,0.10);
 
   /* 舊 alias */
   --glass-bg: var(--glass-2);
   --glass-brd: var(--glass-edge);
+  --glass-top: rgba(255,255,255,0.06);
 
   /* 側邊欄 */
   --sidebar-bg: var(--glass-2);
   --sidebar-brd: var(--glass-edge);
 
   /* 文字色 */
-  --text: #dde4ea;
-  --text-light: rgba(210,220,228,0.55);
-  --text-muted: rgba(210,220,228,0.38);
-  --nav-inactive: rgba(210,220,228,0.48);
+  --text: #e5e9f0;
+  --text-light: rgba(229,233,240,0.62);
+  --text-muted: rgba(229,233,240,0.40);
+  --nav-inactive: rgba(229,233,240,0.55);
 
-  /* Accent:暗底上提亮的陶土橘 */
-  --accent: rgba(210,155,120,0.22);
-  --accent-brd: rgba(210,155,120,0.45);
-  --accent-hex: #e0a070;
-  --hover: rgba(210,155,120,0.30);
-  --press: rgba(210,155,120,0.36);
+  /* Accent:暗底靛紫 */
+  --accent: rgba(99,102,241,0.20);
+  --accent-brd: rgba(99,102,241,0.42);
+  --accent-hex: #a5b4fc;
+  --hover: rgba(99,102,241,0.28);
+  --press: rgba(99,102,241,0.34);
+
+  /* tint 通道(暗) */
+  --tint-1:      129 140 248;
+  --tint-2:      99 102 241;
+  --tint-accent: 129 140 248;
+  --tint-muted:  140 148 165;
+  --tint-deep:   229 233 240;
+  --tint-pale:   60 66 96;
+  --tint-wash:   40 46 60;
+  --tint-soft:   80 88 130;
+  --tint-shadow: 0 0 0;
 
   /* 輸入框 */
-  --input-bg: var(--glass-2);
-  --input-brd: var(--glass-edge);
-  --input-focus: rgba(210,155,120,0.10);
-  --input-focus-brd: rgba(210,155,120,0.52);
+  --input-bg: #222933;
+  --input-brd: rgba(255,255,255,0.12);
+  --input-focus: #2a323d;
+  --input-focus-brd: #6366f1;
+  --input-err-bg: rgba(229,80,80,0.14);
+  --input-err-brd: rgba(229,90,90,0.45);
 
   --card-brd: var(--glass-edge);
-  --content-bg: rgba(255,255,255,0.02);
-  --left-pane-bg: rgba(255,255,255,0.04);
+  --content-bg: #131a22;
+  --left-pane-bg: #161b22;
 
-  /* 陰影 */
-  --shadow-sm:
-    0 1px 3px rgba(0,0,0,0.38),
-    inset 0 1px 0 rgba(255,255,255,0.05);
-  --shadow-md:
-    0 4px 14px rgba(0,0,0,0.48),
-    inset 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-lg:
-    0 10px 32px rgba(0,0,0,0.58),
-    inset 0 1px 0 rgba(255,255,255,0.07);
-  --shadow-xl:
-    0 24px 60px rgba(0,0,0,0.68),
-    inset 0 1px 0 rgba(255,255,255,0.08);
-  --inset-glass:
-    inset 0 1px 0 rgba(255,255,255,0.08),
-    inset 0 0 0 1px rgba(255,255,255,0.04),
-    inset 0 -1px 0 rgba(0,0,0,0.20);
-  --inset-btn:
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    inset 0 -1px 0 rgba(0,0,0,0.20);
+  /* 語意狀態(暗) */
+  --ok-bg:   rgba(40,180,130,0.16);
+  --ok-text: #6fe0b4;
+  --ok-dot:  #34d399;
+  --err-bg:  rgba(229,80,80,0.16);
+  --err-text:#ff9b90;
+  --err-dot: #f87171;
+  --wait-bg: var(--glass-1);
+  --wait-dot:#a5b4fc;
+
+  /* DropZone */
+  --drop-default: #1b212b;
+  --drop-drag:    rgba(99,102,241,0.18);
+  --drop-selected:rgba(40,180,130,0.16);
+
+  /* 陰影(暗,柔和) */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.45);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.55);
+  --shadow-xl: 0 16px 44px rgba(0,0,0,0.60);
+  --inset-glass: none;
+  --inset-btn: none;
 
   /* 焦點 ring */
-  --focus-ring: 0 0 0 4px rgba(210,155,120,0.28);
+  --focus-ring: 0 0 0 3px rgba(99,102,241,0.40);
 
   /* 危險紅 */
-  --danger: rgba(229,115,115,0.32);
-  --danger-text: #ff9080;
-  --danger-brd: rgba(229,115,115,0.45);
+  --danger: rgba(229,80,80,0.20);
+  --danger-text: #ff9b90;
+  --danger-brd: rgba(229,90,90,0.45);
 
   /* 分隔線 */
   --divider: rgba(255,255,255,0.08);
@@ -128,15 +144,11 @@
 
 /* 暗色背景漸層 — v4.2 深藍灰,帶霧藍+陶土橘光球 */
 :root[data-theme="dark"] body {
-  background: linear-gradient(125deg, #151c24 0%, #1c2730 55%, #1a1612 100%) !important;
+  background: var(--bg) !important;
   color: var(--text);
 }
 :root[data-theme="dark"] body::before {
-  background:
-    radial-gradient(circle 700px at -5% -8%,   rgba(100,140,175,0.20),  transparent 58%),
-    radial-gradient(circle 600px at 96% 80%,   rgba(185,120,90,0.18),   transparent 58%),
-    radial-gradient(circle 420px at 38% 18%,   rgba(110,150,185,0.15),  transparent 60%),
-    radial-gradient(circle 360px at 10% 72%,   rgba(90,125,160,0.14),   transparent 60%) !important;
+  background: none !important;
 }
 
 /* 暗色模式下的「半透明白底」元件 — 主動翻轉

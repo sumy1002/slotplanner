@@ -12,95 +12,93 @@
    ============================================================ */
 
 :root {
-  /* ── 背景漸層 — v4.2 霧藍 × 陶土橘(低飽和撞色)── */
-  /* 冷霧藍往暖陶土橘漸變,透過 card-shell 厚 blur 在面板下化為柔色光。 */
-  --bg:     #b8c6d2;   /* 霧藍 */
-  --bg-mid: #a8b8c8;   /* 中霧藍 */
-  --bg-pink:#c8b4a0;   /* 陶土過渡(legacy 命名保留) */
-  --bg-end: #ccb4a0;   /* 陶土橘 */
+  /* ── 背景 — v7.0 Clean:冷調白灰(取消漸層,改純色頁面)── */
+  --bg:     #f6f7f9;
+  --bg-mid: #f6f7f9;
+  --bg-pink:#f6f7f9;   /* legacy 命名保留 */
+  --bg-end: #f6f7f9;
 
-  /* ── 玻璃層級系統(亮模式)── */
-  /* v4.2 霧藍底色較淺,玻璃白度略提高讓面板清晰浮現 */
-  --glass-1: rgba(255,255,255,0.32);   /* 底層 panel / 弱玻璃 */
-  --glass-2: rgba(255,255,255,0.48);   /* 一般 card */
-  --glass-3: rgba(255,255,255,0.62);   /* 互動元素 idle */
-  --glass-4: rgba(255,255,255,0.84);   /* hover/focus */
-  --glass-5: rgba(255,255,255,0.95);   /* modal 內容 */
-  --glass-edge: rgba(255,255,255,0.90); /* 邊框/高光 */
+  /* ── 表面層級系統(亮模式)— v7.0:玻璃改實色中性面 ── */
+  --glass-1: #f6f7f9;   /* 頁面色弱面板 */
+  --glass-2: #ffffff;   /* 卡片 / 側邊欄 / topbar */
+  --glass-3: #f1f2f5;   /* 互動元素 idle / hover 基底 */
+  --glass-4: #eceef2;   /* hover/focus */
+  --glass-5: #ffffff;   /* modal 內容 */
+  --glass-edge: #e8eaee; /* 髮絲邊框 */
 
   /* 舊 token alias(向後相容)*/
   --glass-bg:  var(--glass-2);
   --glass-brd: var(--glass-edge);
-  --glass-top: rgba(255,255,255,1.0);
+  --glass-top: #ffffff;
 
   /* ── 側邊欄 ── */
   --sidebar-bg:  var(--glass-2);
   --sidebar-brd: var(--glass-edge);
 
-  /* ── Accent — 陶土橘(撞色主軸,呼應背景右側光暈)── */
-  --accent:     rgba(190,130,105,0.28);
-  --accent-brd: rgba(190,130,105,0.55);
-  --accent-hex: #7a3c20;   /* 深陶土,文字用 */
-  --hover:      rgba(210,155,125,0.40);
-  --press:      rgba(190,130,105,0.38);
+  /* ── Accent — v7.0 靛紫(克制主色)── */
+  --accent:     #eef0fe;   /* 軟填底(active nav / chip)*/
+  --accent-brd: #d6d8fb;   /* 軟邊 */
+  --accent-hex: #4338ca;   /* 文字/logo/active 用的深靛 */
+  --hover:      #e3e5fd;   /* 軟填 hover */
+  --press:      #d6d8fb;
 
-  /* ── 暖色 tint 通道(v4.0.1:取代散落的舊紫 accent tint;以 rgb(var(--x) / α) 帶任意透明度)── */
-  --tint-1:      225 170 120;  /* 淺暖 tint(最常用,原 periwinkle accent tint)*/
-  --tint-2:      210 140 90;   /* 中暖 */
-  --tint-accent: 190 130 105;  /* = accent 本體通道 */
-  --tint-muted:  120 95 70;    /* 暖灰(原灰紫陰影/disabled)*/
-  --tint-deep:   60 38 22;     /* 深暖 */
-  --tint-pale:   240 212 182;  /* 極淺暖 */
-  --tint-wash:   248 240 230;  /* 近白暖 */
-  --tint-soft:   242 202 162;  /* 淺暖 */
-  --tint-shadow: 55 42 30;     /* 深暖灰(陰影)*/
+  /* ── tint 通道(v7.0:重指向靛紫/中性,取代舊暖橘)── */
+  --tint-1:      79 70 229;    /* 靛紫(最常用 accent tint)*/
+  --tint-2:      99 102 241;   /* 亮靛 */
+  --tint-accent: 79 70 229;    /* = accent 本體通道 */
+  --tint-muted:  120 125 140;  /* 中性灰 */
+  --tint-deep:   27 30 40;     /* 墨 */
+  --tint-pale:   224 226 252;  /* 極淺靛 */
+  --tint-wash:   246 247 252;  /* 近白灰 */
+  --tint-soft:   209 213 250;  /* 淺靛 */
+  --tint-shadow: 20 28 46;     /* 冷灰陰影 */
 
   /* ── 危險色 ── */
-  --danger:      rgba(255,200,200,0.42);
-  --danger-brd:  rgba(255,150,150,0.60);
-  --danger-text: #8a2020;
+  --danger:      #fdecec;
+  --danger-brd:  #f3c0c0;
+  --danger-text: #b42318;
 
   /* ── 文字 ── */
-  --text:        #1e2830;   /* 深藍灰,冷調 */
-  --text-light:  rgba(30,40,48,0.55);
-  --text-muted:  rgba(30,40,48,0.38);
-  --nav-inactive:rgba(30,40,48,0.48);
+  --text:        #1b1e28;
+  --text-light:  rgba(27,30,40,0.62);
+  --text-muted:  rgba(27,30,40,0.42);
+  --nav-inactive:rgba(27,30,40,0.55);
 
   /* ── 輸入框 ── */
-  --input-bg:        var(--glass-3);
-  --input-brd:       var(--glass-edge);
-  --input-focus:     rgba(240,225,215,0.70);
-  --input-focus-brd: rgba(190,130,105,0.62);
-  --input-err-bg:    rgba(255,220,220,0.50);
-  --input-err-brd:   rgba(220,120,120,0.60);
+  --input-bg:        #fafbfc;
+  --input-brd:       #dde0e6;
+  --input-focus:     #ffffff;
+  --input-focus-brd: #4f46e5;
+  --input-err-bg:    #fdecec;
+  --input-err-brd:   #f3c0c0;
 
   --card-brd:    var(--glass-edge);
-  --content-bg:  rgba(255,255,255,0.22);
-  --left-pane-bg:rgba(210,220,228,0.45);
+  --content-bg:  #f6f7f9;
+  --left-pane-bg:#fbfbfc;
 
   /* ── 語意狀態 ── */
-  --ok-bg:   rgba(180,215,195,0.38);
-  --ok-text: #1e5a3a;
-  --ok-dot:  rgba(80,175,125,0.85);
-  --err-bg:  rgba(255,200,200,0.38);
-  --err-text:#7a2020;
-  --err-dot: rgba(220,100,100,0.80);
+  --ok-bg:   #e6f6f0;
+  --ok-text: #0f6e56;
+  --ok-dot:  #1d9e75;
+  --err-bg:  #fdecec;
+  --err-text:#b42318;
+  --err-dot: #e24b4a;
   --wait-bg: var(--glass-1);
-  --wait-dot:rgba(190,130,105,0.80);
+  --wait-dot:#4f46e5;
 
   /* ── DropZone ── */
-  --drop-default: rgba(255,255,255,0.32);
-  --drop-drag:    rgba(210,155,125,0.28);
-  --drop-selected:rgba(190,215,200,0.32);
+  --drop-default: #fafbfc;
+  --drop-drag:    #eef0fe;
+  --drop-selected:#e6f6f0;
 
-  --divider: rgba(30,40,48,0.10);
+  --divider: #eef0f2;
 
-  /* ── 圓角階梯(收斂到 5 階)── */
-  --r-xs:   6px;   /* chip/badge */
-  --r-sm:  10px;   /* input/小按鈕 */
-  --r-md:  14px;   /* 按鈕、tab */
-  --r-lg:  20px;   /* card / panel */
-  --r-xl:  24px;   /* modal */
+  /* ── 圓角階梯(v7.0 收斂得更俐落)── */
+  --r-xs:   6px;
+  --r-sm:   8px;
+  --r-md:  10px;
+  --r-lg:  14px;
+  --r-xl:  18px;
   --r-pill: 999px;
 
   /* 舊 token alias */
@@ -108,68 +106,35 @@
   --r-btn:   var(--r-md);
   --r-input: var(--r-sm);
 
-  /* ── iOS 26 風 模糊階梯(blur + saturate)── */
-  /* 注意:saturate(180%) 是 iOS 玻璃的靈魂,讓底色穿透時更鮮 */
-  --blur-thin:    blur(12px) saturate(180%);
-  --blur-md:      blur(24px) saturate(180%);
-  --blur-thick:   blur(30px) saturate(185%);   /* v6.1 效能:40→30px,card-shell 全幅玻璃減負 */
-  --blur-overlay: blur(56px) saturate(200%);
+  /* ── v7.0 Clean:取消所有 backdrop blur(改實色面)── */
+  --blur-thin:    none;
+  --blur-md:      none;
+  --blur-thick:   none;
+  --blur-overlay: none;
 
-  /* ── iOS inset highlight 系統 ── */
-  /* glass-inset:面板/卡片用,上緣亮帶 + 1px 內框 + 下緣微反射 */
-  --inset-glass:
-    inset 0 1px 0 rgba(255,255,255,0.85),
-    inset 0 0 0 1px rgba(255,255,255,0.10),
-    inset 0 -1px 0 rgba(0,0,0,0.04);
-  /* btn-inset:按鈕用,上緣高光更明顯,下緣壓深感 */
-  --inset-btn:
-    inset 0 1px 0 rgba(255,255,255,0.92),
-    inset 0 -1px 0 rgba(0,0,0,0.06);
+  /* ── v7.0:取消玻璃 inset 高光 ── */
+  --inset-glass: none;
+  --inset-btn:   none;
 
-  /* ── 玻璃陰影 ── */
-  --shadow-sm:
-    inset 0 1px 0 rgba(255,255,255,0.85),
-    0 1px 3px rgba(60,55,45,0.06),
-    0 0 0 0.5px rgba(255,255,255,0.4);
-  --shadow-md:
-    inset 0 1px 0 rgba(255,255,255,0.90),
-    inset 0 -0.5px 0 rgba(0,0,0,0.04),
-    0 3px 12px rgba(60,55,45,0.08),
-    0 1px 3px rgba(60,55,45,0.05);
-  --shadow-lg:
-    inset 0 1.5px 0 rgba(255,255,255,0.95),
-    inset 0 -1px 0 rgba(0,0,0,0.05),
-    0 8px 28px rgba(60,55,45,0.12),
-    0 2px 6px rgba(60,55,45,0.06);
-  --shadow-xl:
-    inset 0 1.5px 0 rgba(255,255,255,1),
-    inset 0 -1px 0 rgba(0,0,0,0.06),
-    0 20px 60px rgba(60,55,45,0.18),
-    0 4px 12px rgba(60,55,45,0.10);
+  /* ── 陰影(v7.0:柔和寫實,無 inset 白高光)── */
+  --shadow-sm: 0 1px 2px rgba(20,28,46,0.05);
+  --shadow-md: 0 1px 3px rgba(20,28,46,0.06);
+  --shadow-lg: 0 4px 16px rgba(20,28,46,0.10);
+  --shadow-xl: 0 8px 30px rgba(20,28,46,0.10);
 
-  /* ── Motion(iOS spring 曲線)── */
-  /* cubic-bezier(0.32, 0.72, 0, 1) 是 iOS 標準緩動 */
+  /* ── Motion ── */
   --ease-ios:    cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 彈跳 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --t-fast: 140ms var(--ease-ios);
   --t-base: 240ms var(--ease-ios);
   --t-slow: 380ms var(--ease-ios);
   --t-pop:  340ms var(--ease-spring);
 
-  /* ── focus ring(全站統一)── */
-  --focus-ring: 0 0 0 4px rgba(190,130,105,0.22);
+  /* ── focus ring(全站統一,靛紫)── */
+  --focus-ring: 0 0 0 3px rgba(79,70,229,0.20);
 
-  /* ── v4.1 鏡面光帶(斜向掃過玻璃的高光)── */
-  /* 大面玻璃用(card-shell / modal / 大卡片);各面以 opacity 調強弱。
-     峰值集中在斜軸 38~52%,避免在面板正中央留下白槓影響閱讀。 */
-  --specular: linear-gradient(122deg,
-    transparent 0%,
-    transparent 30%,
-    rgba(255,255,255,0.05) 38%,
-    rgba(255,255,255,0.30) 46%,
-    rgba(255,255,255,0.10) 52%,
-    transparent 62%,
-    transparent 100%);
+  /* ── v7.0:取消鏡面光帶 ── */
+  --specular: transparent;
 }
 
 * { box-sizing: border-box; }
@@ -178,8 +143,7 @@ html, body {
   margin: 0; padding: 0; height: 100%;
   font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
   font-size: 14px; color: var(--text);
-  background:
-    linear-gradient(125deg, var(--bg) 0%, var(--bg-mid) 38%, var(--bg-pink) 68%, var(--bg-end) 100%);
+  background: var(--bg);
   overflow: hidden;
   /* iOS 觸控反饋去掉 */
   -webkit-tap-highlight-color: transparent;
@@ -194,29 +158,14 @@ html, body {
    冷藍光球 + 暖陶土橘光球,透過 card-shell 厚 blur 在面板下
    化為柔和色彩穿透。低飽和,耐看不刺眼。
    ============================================================ */
-body::before {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(circle 700px at -5% -8%,   rgba(140,175,205,0.60),  transparent 58%),
-    radial-gradient(circle 600px at 96% 80%,   rgba(195,145,115,0.52),  transparent 58%),
-    radial-gradient(circle 420px at 38% 18%,   rgba(155,190,215,0.45),  transparent 60%),
-    radial-gradient(circle 380px at 10% 72%,   rgba(120,155,185,0.40),  transparent 60%),
-    radial-gradient(circle 400px at 78% -5%,   rgba(210,165,135,0.42),  transparent 60%),
-    radial-gradient(circle 300px at 58% 94%,   rgba(185,135,110,0.38),  transparent 60%);
-  /* v6.1 效能:獨立合成圖層 + 放慢動畫 + 縮小位移,
-     大幅降低其下 card-shell backdrop-filter 每幀重採樣成本(體感幾乎不變) */
-  will-change: transform;
-  animation: bgFloat 60s ease-in-out infinite alternate;
-}
+/* v7.0 Clean:取消柔色光暈,改純色頁面 */
+body::before { content: none; display: none; }
 @keyframes bgFloat {
   0%   { transform: translate3d(0, 0, 0) scale(1); }
   100% { transform: translate3d(-8px, 5px, 0) scale(1.02); }
 }
 
-.ring {
-  position: fixed; border: 1.5px solid rgba(255,255,255,0.55);
-  border-radius: 50%; pointer-events: none; z-index: 0;
-}
+.ring { display: none; }
 
 /* ============================================================
    App shell — iOS 26 厚玻璃
@@ -239,29 +188,10 @@ body::before {
   display: flex;
   overflow: hidden;
 }
-/* card-shell 頂部 1px 鏡面高光帶 */
-.card-shell::before {
-  content: '';
-  position: absolute; top: 0; left: 14%; right: 14%;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(255,255,255,0.95) 50%,
-    transparent 100%);
-  pointer-events: none;
-  z-index: 2;
-}
-/* v4.1 斜向鏡面光帶 — 偏上半部、低強度,不蓋住中央工作區 */
-.card-shell::after {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 62%;
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-  background: var(--specular);
-  opacity: 0.5;
-  mix-blend-mode: screen;
-  pointer-events: none;
-  z-index: 1;
-}
+/* v7.0 Clean:取消頂部鏡面高光帶 */
+.card-shell::before { content: none; display: none; }
+/* v7.0 Clean:取消斜向鏡面光帶 */
+.card-shell::after { content: none; display: none; }
 
 /* ============================================================
    Sidebar
@@ -1029,4 +959,28 @@ code {
     transition-duration: 0.01ms !important;
   }
   body::before { animation: none !important; }
+}
+
+/* ============================================================
+   v7.0 Clean — 收尾覆寫(solid 主按鈕 + 中性化)
+   ============================================================ */
+/* 主按鈕改實色靛紫 + 白字(與軟填 active nav 區隔) */
+.btn-primary,
+.btn-glass.is-primary {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+.btn-primary:hover,
+.btn-glass.is-primary:hover {
+  background: #4338ca !important;
+  border-color: #4338ca !important;
+}
+.btn-primary:active,
+.btn-glass.is-primary:active { background: #3730a3 !important; }
+
+/* active nav:軟靛底 + 深靛字(取消玻璃陰影,改細邊) */
+.nav-btn.active {
+  box-shadow: none;
+  border: 0.5px solid var(--accent-brd);
 }
