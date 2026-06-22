@@ -439,7 +439,7 @@
         <details class="cfg-section cfg-section-collapsible" open>
           <summary class="cfg-section-summary">
             <span class="cfg-section-title cfg-section-title-inline">賠付模型</span>
-            <span class="cfg-section-summary-preview">{{ activePayModel }}<span v-if="scanDirApplicable"> · {{ curScanDir }}</span><span v-if="g.pay_type==='CLUSTER'"> · min {{ g.cluster_min_size }}</span></span>
+            <span class="cfg-section-summary-preview">{{ activePayModel }}<span v-if="scanDirApplicable"> · {{ scanDirLabel(curScanDir) }}</span><span v-if="g.pay_type==='CLUSTER'"> · min {{ g.cluster_min_size }}</span></span>
           </summary>
           <div class="cfg-section-body">
 
@@ -454,7 +454,7 @@
                       :title="m.desc"
                       @click="selectPayModel(m.id)">{{ m.label }}</button>
             </div>
-            <div class="cfg-hint">LINE = 中獎線 / WAYS = 全路徑 / MEGAWAYS = 全路徑 + 每輪列數可變 / SCATTER = 任意位置 / CLUSTER = 同符相鄰群</div>
+            <div class="cfg-hint">Line = 中獎線 / WAYS = 全路徑 / MEGAWAYS = 全路徑 + 每輪列數可變 / Grid = 任意位置(散佈) / Cluster = 同符相鄰群</div>
           </div>
 
           <div class="cfg-field" v-if="scanDirApplicable">
@@ -465,9 +465,14 @@
               <button v-for="d in WAYS_DIRS" :key="d"
                       class="cfg-chip"
                       :class="{ active: curScanDir === d }"
-                      @click="setScanDir(d)">{{ d }}</button>
+                      @click="setScanDir(d)">{{ scanDirLabel(d) }}</button>
             </div>
-            <div class="cfg-hint">LTR = 左到右 / RTL = 右到左 / BOTH = 雙向。此為全域唯一的計分方向,同時套用到中獎線與全路徑(WAYS / Megaways)。</div>
+            <div class="cfg-hint">L→R = 左到右 / L←R = 右到左 / 雙向 = 兩端都算。此為全域唯一的計分方向,同時套用到中獎線與全路徑(WAYS / Megaways)。</div>
+            <!-- #8:雙向計分時才出現「最長連線僅計分一次」 -->
+            <label class="cfg-checkbox-row" v-if="curScanDir === 'BOTH'" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+              <input type="checkbox" v-model="g.longest_line_once">
+              <span>最長連線僅計分一次 <span class="cfg-hint" style="display:inline;">（雙向時,同一條最長連線不重複左右各算一次）</span></span>
+            </label>
           </div>
 
           <div class="cfg-field" v-if="g.pay_type === 'CLUSTER'">
@@ -776,12 +781,37 @@
           </div>
         </div>
 
-          <!-- 區塊 4(v5.1):JP 定義 — 匯出至 13_Jackpots(選用分頁,引擎忽略;
-               文件生成的 JACKPOT 表會自動帶入此處內容) -->
+          <!-- v6.2 #0:JP 定義已移到獨立分頁(active === 'jackpots'),見下方 13_Jackpots panel -->
+        </div>
+              </div><!-- /cfg-global-flow -->
+      </div>
+
+      <!-- ═══════ 13_Jackpots JP 彩金(v6.2 #0 獨立分頁)═══════ -->
+      <div v-else-if="active === 'jackpots'" class="cfg-form">
+        <div class="cfg-form-header">
+          <div class="cfg-form-title">💰 13_Jackpots · JP 彩金</div>
+          <div class="cfg-form-sub">定義 JACKPOT 名稱、類型與觸發;文件生成自動帶入,匯出寫入選用分頁 13_Jackpots(模擬引擎忽略)。</div>
+        </div>
+
         <div class="cfg-section">
-          <div class="cfg-section-title">JP 定義 <span class="cfg-key">13_Jackpots</span></div>
-          <div class="cfg-modes-inline-hint">
-            定義 JACKPOT 名稱與倍數;<strong>文件生成</strong>會自動帶入,匯出 A.xlsx 時寫入選用分頁 13_Jackpots(模擬引擎忽略此分頁)。
+          <!-- #2 全域類型 -->
+          <div class="cfg-field" style="margin-bottom:10px;">
+            <label class="cfg-label">全域類型 <span class="cfg-key">套用到所有 JP</span></label>
+            <div class="cfg-chip-row">
+              <button class="cfg-chip" :class="{ active: jpGlobalType==='FIXED' }" @click="setJpGlobalType('FIXED')" title="全部 JP 皆為固定倍數">固定</button>
+              <button class="cfg-chip" :class="{ active: jpGlobalType==='PROGRESSIVE' }" @click="setJpGlobalType('PROGRESSIVE')" title="全部 JP 皆為累積彩池">累積</button>
+              <button class="cfg-chip" :class="{ active: jpGlobalType==='CUSTOM' }" @click="setJpGlobalType('CUSTOM')" title="每個 JP 各自選類型">其他(各自設定)</button>
+            </div>
+            <div class="cfg-hint">選「固定」或「累積」會一次套用到全部 JP;選「其他」則每個 JP 可各自選類型。</div>
+          </div>
+
+          <!-- #1 快選新增 -->
+          <div class="cfg-field" style="margin-bottom:10px;">
+            <label class="cfg-label">快選新增 <span class="cfg-key">一按即新增命名 JP</span></label>
+            <div class="cfg-chip-row">
+              <button v-for="p in JP_PRESETS" :key="p" class="cfg-chip cfg-chip-sm" @click="addJackpotPreset(p)" title="新增一個命名為此的 JP">＋ {{ p }}</button>
+            </div>
+            <div class="cfg-hint">預設 0 個 JP。點上面任一顆即新增對應命名(MINI→GRAND 由小到大),也可用下方「新增 JP」自訂。</div>
           </div>
 
           <div v-if="jackpots.length === 0" class="cfg-hint" style="margin-bottom:8px;">
@@ -798,7 +828,8 @@
                 <label class="cfg-label">名稱</label>
                 <input class="input input-w-id" type="text" v-model.trim="j.name" placeholder="GRAND">
               </div>
-              <div class="cfg-jp-cell">
+              <!-- 類型:僅在全域=其他時,每個 JP 才各自選 -->
+              <div class="cfg-jp-cell" v-if="jpGlobalType === 'CUSTOM'">
                 <label class="cfg-label">類型 <span class="cfg-key">Kind</span></label>
                 <div class="cfg-chip-row">
                   <button class="cfg-chip cfg-chip-sm" :class="{ active: j.kind !== 'PROGRESSIVE' }"
@@ -821,8 +852,43 @@
               </div>
               <div class="cfg-jp-cell cfg-jp-cell-grow">
                 <label class="cfg-label">觸發說明</label>
-                <input class="input input-w-name" type="text" v-model.trim="j.trigger_desc" placeholder="集滿 6 顆金幣">
+                <input class="input input-w-name" type="text" v-model.trim="j.trigger_desc" placeholder="集滿 6 顆金幣（留空則用下方條件自動生成）">
               </div>
+              <!-- v6.2 #4:觸發方式(累積 / 收集)+ 各自條件 -->
+              <div class="cfg-jp-cell">
+                <label class="cfg-label">觸發方式</label>
+                <div class="cfg-chip-row">
+                  <button class="cfg-chip cfg-chip-sm" :class="{ active: (j.trigger_type || 'COLLECT') === 'ACCUMULATE' }"
+                          @click="j.trigger_type = 'ACCUMULATE'" title="隨投注 / 機制累積">累積</button>
+                  <button class="cfg-chip cfg-chip-sm" :class="{ active: (j.trigger_type || 'COLLECT') === 'COLLECT' }"
+                          @click="j.trigger_type = 'COLLECT'" title="收集符號 / 進入模式觸發">收集</button>
+                </div>
+              </div>
+              <template v-if="(j.trigger_type || 'COLLECT') === 'ACCUMULATE'">
+                <div class="cfg-jp-cell">
+                  <label class="cfg-label">押注提撥 <span class="cfg-key">%</span></label>
+                  <input class="input input-center input-w-num" type="number" min="0" max="100" step="any" v-model.number="j.accum_pct">
+                </div>
+                <div class="cfg-jp-cell cfg-jp-cell-grow">
+                  <label class="cfg-label">或指定機制 / 符號</label>
+                  <input class="input input-w-name" type="text" v-model.trim="j.accum_mech" placeholder="例：每次連爆 +1 進度">
+                </div>
+              </template>
+              <template v-else>
+                <div class="cfg-jp-cell">
+                  <label class="cfg-label">出現機率 <span class="cfg-key">%</span></label>
+                  <input class="input input-center input-w-num" type="number" min="0" max="100" step="any" v-model.number="j.collect_prob">
+                </div>
+                <div class="cfg-jp-cell cfg-jp-cell-grow">
+                  <label class="cfg-label">或進入模式 <span class="cfg-key">FG/BG</span></label>
+                  <input class="input input-w-name" type="text" v-model.trim="j.collect_enter" placeholder="例：進入 FG 才開始收集">
+                </div>
+                <!-- v6.3 / Q2(b):反查 — 哪些蒐集副盤餵入此 JP -->
+                <div class="cfg-jp-cell cfg-jp-cell-grow" v-if="panelsFeedingJp(j.jp_id).length">
+                  <label class="cfg-label">餵入副盤 <span class="cfg-key">來自 02 蒐集盤</span></label>
+                  <div class="cfg-hint">{{ panelsFeedingJp(j.jp_id).map(p => p.panel_id).join('、') }}</div>
+                </div>
+              </template>
               <div class="cfg-jp-cell cfg-jp-cell-modes">
                 <label class="cfg-label">適用模式</label>
                 <div class="cfg-chip-row">
@@ -839,11 +905,9 @@
 
           <button class="cfg-mode-add-btn" @click="addJackpot">
             <span style="font-size: 16px;">+</span>
-            <span>新增 JP</span>
+            <span>新增 JP(自訂)</span>
           </button>
         </div>
-        </div>
-              </div><!-- /cfg-global-flow -->
       </div>
 
       <!-- ═══════ 02_Layout 盤面結構 ═══════ -->
@@ -853,6 +917,12 @@
           <div class="cfg-form-sub">
             定義每個 Reel 的位置與高度,可組出不規則盤(diamond / 含 SubReel)。
             Y_Offset 正值偏下、負值偏上,所有 Reel 以「列號」(row index)對齊。
+          </div>
+
+          <!-- v6.2 盤面#2:Megaways 模式提示 -->
+          <div v-if="g.megaways"
+               style="margin-top:8px; padding:8px 10px; background:rgba(120,90,200,0.10); border:1px solid rgba(120,90,200,0.30); border-radius:8px; font-size:12px; color:var(--text);">
+            ⥯ <strong>Megaways 模式</strong>:每轉各輪顯示的列數會隨機變動(通常 2–7)。此處的「列數」代表<strong>最大可見列數</strong>;重點在決定<strong>輪數</strong>,固定列高較不重要。
           </div>
 
           <!-- v3.3:盤面範本快速套用 -->
@@ -881,7 +951,7 @@
               <button
                 class="cfg-layout-reel-chip"
                 :class="{
-                  active: activeReelIdx === idx,
+                  active: activeReelIdx === idx && activePanelIdx < 0,
                   'group-selected': selectedReelIdxs.includes(idx),
                   'has-sub': r.has_subreel,
                   'drag-over': dragOverIdx === idx && dragReelIdx !== idx,
@@ -903,7 +973,7 @@
               </button>
               <button v-if="r.has_subreel"
                       class="cfg-layout-subreel-chip"
-                      :class="{ active: activeReelIdx === idx }"
+                      :class="{ active: activeReelIdx === idx && activePanelIdx < 0 }"
                       @click="onReelChipClick(idx, $event)"
                       :title="'R' + r.reel_id + ' 的副盤 · ' + (SUBREEL_KINDS.find(k=>k.key===(r.subreel_kind||'STACK'))||{}).label + ' · ' + (r.subreel_position || 'BOTTOM') + ' · ' + r.subreel_rows + ' 列 · 點擊編輯'">
                 <span class="cfg-layout-subreel-chip-icon">{{ (SUBREEL_KINDS.find(k=>k.key===(r.subreel_kind||'STACK'))||{}).icon || '↳' }}</span>
@@ -941,7 +1011,6 @@
           <div class="cfg-layout-v2-detail cfg-panel-detail" v-if="activePanel && activePanelIdx >= 0">
             <div class="cfg-layout-v2-detail-header">
               <span class="cfg-panel-detail-title">🧩 自由副盤 {{ activePanel.panel_id }}</span>
-              <button class="cfg-chip" @click="activePanelIdx = -1" title="回到主輪編輯">← 編主輪</button>
             </div>
 
             <div class="cfg-field">
@@ -983,15 +1052,49 @@
             </div>
 
             <div class="cfg-field">
-              <label class="cfg-label">滾動 <span class="cfg-key">Scroll</span></label>
+              <label class="cfg-label">副盤類型 <span class="cfg-key">Panel_Type</span></label>
               <div class="cfg-chip-row">
-                <button class="cfg-chip" :class="{ active: !activePanel.scroll }"
-                        @click="activePanel.scroll = false">靜態（無滾動）</button>
-                <button class="cfg-chip" :class="{ active: activePanel.scroll }"
-                        @click="activePanel.scroll = true">滾動</button>
+                <button class="cfg-chip" :class="{ active: (activePanel.panel_type||'SCROLL') === 'SCROLL' }"
+                        @click="activePanel.panel_type = 'SCROLL'; activePanel.scroll = true"
+                        title="有圖示且會滾動,跟一般 slot 一樣">滾動</button>
+                <button class="cfg-chip" :class="{ active: (activePanel.panel_type||'SCROLL') === 'COLLECT' }"
+                        @click="activePanel.panel_type = 'COLLECT'; activePanel.scroll = false"
+                        title="格子用來放置/蒐集(如 bingo 盤),本身不滾動">蒐集</button>
+                <button class="cfg-chip" :class="{ active: (activePanel.panel_type||'SCROLL') === 'TRIGGER' }"
+                        @click="activePanel.panel_type = 'TRIGGER'; activePanel.scroll = false"
+                        title="本有圖示但未激活,需其他輪滾出指定符號才作用">觸發</button>
+              </div>
+              <div class="cfg-hint">
+                <template v-if="(activePanel.panel_type||'SCROLL') === 'SCROLL'">有圖示且滾動,跟一般 slot 相同。</template>
+                <template v-else-if="(activePanel.panel_type||'SCROLL') === 'COLLECT'">格子用來放置/蒐集(如 bingo 盤),本身不滾動圖示。</template>
+                <template v-else>本來有圖示但未激活,需其他輪滾出「觸發符號」才作用。</template>
+              </div>
+              <div v-if="activePanel.join_payline && (activePanel.panel_type||'SCROLL') !== 'SCROLL'"
+                   style="margin-top:6px; padding:6px 8px; background:rgba(230,160,30,0.12); border:1px solid rgba(230,160,30,0.4); border-radius:6px; font-size:12px; color:var(--text);">
+                ⚠ 非滾動的副盤(蒐集/觸發)通常與主盤連線無關,你卻同時開了「參與主盤連線」。可以保留,但請再確認這是刻意的。
               </div>
             </div>
 
+            <!-- 觸發型:觸發符號 -->
+            <div v-if="(activePanel.panel_type||'SCROLL') === 'TRIGGER'" class="cfg-field">
+              <label class="cfg-label">觸發符號 <span class="cfg-key">Trigger_Symbol</span></label>
+              <input class="input input-w-name" type="text" v-model.trim="activePanel.trigger_symbol"
+                     placeholder="例：BONUS（其他輪滾出此符號時激活本副盤）">
+              <div class="cfg-hint">填符號名稱 / 代號;留空表示尚未指定。</div>
+              <!-- v6.3 / Q2(c):指定輪 + 產生對應規則 -->
+              <label class="cfg-label" style="margin-top:8px;">觸發輪 <span class="cfg-key">Trigger_Reel</span></label>
+              <select class="input" v-model.number="activePanel.trigger_reel">
+                <option :value="0">任意輪</option>
+                <option v-for="n in layout.length" :key="'tr'+n" :value="n">R{{ n }}</option>
+              </select>
+              <button class="cfg-mode-add-btn" style="margin-top:8px;" @click="genTriggerRule(activePanel)">
+                <span style="font-size:15px;">+</span><span>產生對應規則</span>
+              </button>
+              <div class="cfg-hint">產生「當觸發符號出現 → 廣播 activate_{{ activePanel.panel_id }} 事件」的規則並寫入「腳本規則」分頁。引擎以全盤出現判定;指定輪資訊記於事件 payload / 規則描述。</div>
+            </div>
+
+            <!-- v6.2 #4/#12:蒐集型不滾動圖示,故不顯示符號集/權重來源 -->
+            <template v-if="(activePanel.panel_type||'SCROLL') !== 'COLLECT'">
             <div class="cfg-field">
               <label class="cfg-label">符號集 <span class="cfg-key">Symbol_Set</span></label>
               <select class="input" v-model="activePanel.symbol_set">
@@ -1013,6 +1116,18 @@
               <button class="cfg-chip cfg-chip-go-weights"
                       @click="active='reel_weights'"
                       title="跳到 04_Reel_Weights 的副盤權重區">→ 前往 04 設定此副盤權重</button>
+            </div>
+            </template>
+            <div v-else class="cfg-field">
+              <div class="cfg-hint">蒐集型副盤的格子用來放置/蒐集（如 bingo 盤），不滾動圖示，故無符號集 / 權重設定。</div>
+              <!-- v6.3 / Q2(b):連結 COLLECT 型 JP -->
+              <label class="cfg-label" style="margin-top:8px;">餵入 JP <span class="cfg-key">Collect_Target_JP</span></label>
+              <select class="input" v-model="activePanel.collect_target_jp">
+                <option value="">（不連結 JP）</option>
+                <option v-for="j in collectJpOptions" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}（{{ j.jp_id }}）</option>
+              </select>
+              <div class="cfg-hint" v-if="!collectJpOptions.length">尚無 COLLECT(收集)型 JP;可到「JP 彩金」分頁新增並設為「收集」型。</div>
+              <div class="cfg-hint" style="color:var(--danger,#c0392b)" v-if="panelCollectJpWarn(activePanel)">{{ panelCollectJpWarn(activePanel) }}</div>
             </div>
           </div>
 
@@ -1077,15 +1192,31 @@
                       <label class="cfg-label">
                         縱向偏移 <span class="cfg-key">Y_Offset</span>
                       </label>
-                      <input class="input input-w-num" type="number" v-model.number="activeReel.y_offset">
+                      <div class="cfg-stepper">
+                        <button class="cfg-stepper-btn"
+                                :disabled="(activeReel.y_offset || 0) <= -4"
+                                @click="activeReel.y_offset = Math.max(-4, (activeReel.y_offset || 0) - 1)">−</button>
+                        <span class="cfg-stepper-val">{{ activeReel.y_offset || 0 }}</span>
+                        <button class="cfg-stepper-btn"
+                                :disabled="(activeReel.y_offset || 0) >= 4"
+                                @click="activeReel.y_offset = Math.min(4, (activeReel.y_offset || 0) + 1)">+</button>
+                      </div>
                       <div class="cfg-hint">正值偏下、負值偏上；0 = 基準列對齊</div>
                     </div>
                     <div class="cfg-field cfg-field-compact">
                       <label class="cfg-label">
-                        主 Reel 列數 <span class="cfg-key">Max_Rows</span>
+                        {{ g.megaways ? '最大列數' : '主 Reel 列數' }} <span class="cfg-key">Max_Rows</span>
                       </label>
-                      <input class="input input-w-num" type="number" min="1" max="9" v-model.number="activeReel.max_rows">
-                      <div class="cfg-hint">此 Reel 顯示幾列符號（建議 1–9）</div>
+                      <div class="cfg-stepper">
+                        <button class="cfg-stepper-btn"
+                                :disabled="(activeReel.max_rows || 1) <= 1"
+                                @click="activeReel.max_rows = Math.max(1, (activeReel.max_rows || 1) - 1)">−</button>
+                        <span class="cfg-stepper-val">{{ activeReel.max_rows }}</span>
+                        <button class="cfg-stepper-btn"
+                                :disabled="(activeReel.max_rows || 1) >= 9"
+                                @click="activeReel.max_rows = Math.min(9, (activeReel.max_rows || 1) + 1)">+</button>
+                      </div>
+                      <div class="cfg-hint">{{ g.megaways ? '此 Reel 最多可見列數;每轉實際列數隨機變動' : '此 Reel 顯示幾列符號（建議 1–9）' }}</div>
                     </div>
                   </div>
                 </div>
@@ -1182,10 +1313,12 @@
                 </div>
 
 
-                <!-- 快速導覽 hint -->
+                <!-- 快速導覽 hint(#3:操作說明與計數分兩行) -->
                 <div class="cfg-layout-v2-nav-hint">
-                  <span>← →</span> 選 Reel · <span>↑ ↓</span> 縱向偏移 · <span>+ −</span> 列數;也可在右側預覽<span>點選</span>或<span>拖曳互換</span>(連列高/副輪/權重一起換)
-                  <span class="cfg-layout-v2-nav-count">共 {{ layout.length }} 個 Reel · {{ totalCells }} 格</span>
+                  <div style="display:block;">
+                    <span>← →</span> 選 Reel · <span>↑ ↓</span> 縱向偏移 · <span>+ −</span> 列數;也可在右側預覽<span>點選</span>或<span>拖曳互換</span>(連列高/副輪/權重一起換)
+                  </div>
+                  <div class="cfg-layout-v2-nav-count" style="display:block; margin-top:4px;">共 {{ layout.length }} 個 Reel · {{ totalCells }} 格</div>
                 </div>
 
               </div><!-- /cfg-layout-v2-fields-main -->
@@ -1253,6 +1386,9 @@
               </span>
               <span class="cfg-layout-v2-legend-item">
                 <span class="cfg-layout-v2-legend-dot active"></span> 選中
+              </span>
+              <span v-if="g.megaways" class="cfg-layout-v2-legend-item" style="color:rgb(120,90,200); font-weight:700;">
+                ⥯ Megaways:列數每轉變動(此圖示為最大列)
               </span>
             </div>
             <!-- 使用說明 -->
@@ -1662,7 +1798,7 @@
                   <div class="cfg-aux-weights-title">
                     <span>🧩 副盤權重</span>
                     <span class="cfg-aux-weights-hint">
-                      副輪(獨立權重)每列匯出為「<code>Reel.sub</code>」;Panel 全 0 = 不建專屬池,改走「符號集等權 → 沿用保底」fallback
+                      副輪(獨立權重)每列匯出為「<code>Reel.sub</code>」;Panel 全 0 = 不建專屬池,改走「符號集等權 → 沿用保底」fallback;蒐集型(COLLECT)副盤不滾動圖示,不列於此
                     </span>
                   </div>
                   <table class="cfg-matrix cfg-aux-matrix">
@@ -1696,8 +1832,8 @@
                           <button class="cfg-matrix-btn" @click="auxNormalizeRow('sub', reelActiveMode, r.reel_id)" title="整列正規化至 100">⚖</button>
                         </td>
                       </tr>
-                      <!-- 自由副盤列 -->
-                      <tr v-for="p in panels" :key="'auxpnl'+p.panel_id" class="cfg-aux-row cfg-aux-row-panel">
+                      <!-- 自由副盤列(僅 SCROLL/TRIGGER;COLLECT 不滾動圖示故不需權重)-->
+                      <tr v-for="p in scrollingPanels" :key="'auxpnl'+p.panel_id" class="cfg-aux-row cfg-aux-row-panel">
                         <td class="cfg-matrix-rowhead cfg-aux-rowhead-panel"
                             :title="'自由副盤 ' + p.panel_id + ' · 目前來源:' + panelWeightSourceLabel(p, reelActiveMode)">
                           {{ p.panel_id }}
@@ -2406,6 +2542,10 @@
                 <span>{{ paylineOverviewMode ? '✦' : '◇' }}</span>
                 <span>{{ paylineOverviewMode ? '總覽 ON' : '總覽' }}</span>
               </button>
+              <button v-if="paylines.length > 0" class="cfg-payline-clear-btn"
+                      @click="clearAllPaylines" title="清空全部中獎線">
+                <span>🗑</span><span>清空</span>
+              </button>
               <!-- #16:計分方向已收斂到 01_Global · 賠付模型,此處僅顯示 -->
               <div class="cfg-payline-global-dir" title="計分方向已移到 01_Global · 賠付模型">
                 <span class="cfg-payline-global-dir-label">方向</span>
@@ -2471,9 +2611,64 @@
                 </button>
               </div>
             </div>
-          </div>
 
-          <!-- ════ 右欄:超大 SVG + 頂部 inline 工具列 ════ -->
+            <!-- v6.2 / Q4:自動產生(批次) -->
+            <div class="cfg-payline-gen-host">
+              <button class="cfg-payline-gen-btn"
+                      :class="{ active: paylineGenOpen }"
+                      @click="togglePaylineGen">
+                <span>⚙</span><span>自動產生</span><span class="cfg-payline-add-caret">▾</span>
+              </button>
+              <div v-if="paylineGenOpen" class="cfg-payline-gen-panel">
+                <div class="cfg-payline-add-menu-title">中獎線自動產生</div>
+
+                <!-- 不規則盤面阻擋提示 -->
+                <div v-if="!paylineBoardUniform" class="cfg-payline-gen-warn">
+                  目前盤面各輪列數不一致,自動產生僅支援等高盤面(如 3×3 / 5×3 / 5×4 / 6×4)。
+                </div>
+
+                <template v-else>
+                  <!-- 方式 -->
+                  <div class="cfg-payline-gen-row">
+                    <div class="cfg-payline-gen-label">方式</div>
+                    <div class="cfg-payline-gen-chips">
+                      <button class="cfg-chip" :class="{ active: paylineGenMethod==='general' }"
+                              @click="paylineGenMethod='general'">一般線</button>
+                      <button class="cfg-chip" :class="{ active: paylineGenMethod==='adjacent' }"
+                              @click="paylineGenMethod='adjacent'">相鄰≤1</button>
+                    </div>
+                  </div>
+                  <div class="cfg-hint cfg-payline-gen-hint">
+                    一般線 = 水平 + V/Λ + 對角 + 淺彎(相鄰跨列≤2);相鄰≤1 = 相鄰輪列差不超過 1。
+                  </div>
+
+                  <!-- 線數 -->
+                  <div class="cfg-payline-gen-row">
+                    <div class="cfg-payline-gen-label">線數</div>
+                    <div class="cfg-payline-gen-stepper">
+                      <button class="cfg-stepper-btn" @click="paylineGenCount = Math.max(10, (Number(paylineGenCount)||10) - 1)">−</button>
+                      <input type="number" min="10" max="50" v-model.number="paylineGenCount" class="cfg-payline-gen-num" />
+                      <button class="cfg-stepper-btn" @click="paylineGenCount = Math.min(50, (Number(paylineGenCount)||10) + 1)">+</button>
+                    </div>
+                    <div class="cfg-payline-gen-avail">上限 {{ paylineGenAvailable }}</div>
+                  </div>
+
+                  <!-- 寫入模式 -->
+                  <div class="cfg-payline-gen-row">
+                    <div class="cfg-payline-gen-label">寫入</div>
+                    <div class="cfg-payline-gen-chips">
+                      <button class="cfg-chip" :class="{ active: paylineGenMode==='replace' }"
+                              @click="paylineGenMode='replace'">取代全部</button>
+                      <button class="cfg-chip" :class="{ active: paylineGenMode==='append' }"
+                              @click="paylineGenMode='append'">追加</button>
+                    </div>
+                  </div>
+
+                  <button class="cfg-payline-gen-run" @click="runPaylineGen">產生</button>
+                </template>
+              </div>
+            </div>
+          </div>
           <div class="cfg-paylines-v2-stage">
 
             <!-- 空狀態 -->
@@ -2874,12 +3069,12 @@
               <!-- 套用模式 + 備註 -->
               <div class="cfg-constraints-v2-section cfg-constraints-v2-footer">
                 <div class="cfg-field cfg-field-compact">
-                  <label class="cfg-label">套用模式 <span class="cfg-key">mode_scope</span></label>
+                  <label class="cfg-label">套用模式 <span class="cfg-key">mode_scope · 可複選</span></label>
                   <div class="cfg-chip-row">
                     <button v-for="s in allModeScopes" :key="s"
                             class="cfg-chip cfg-chip-sm"
-                            :class="{ active: constraints[selectedConstraintIdx].mode_scope === s }"
-                            @click="constraints[selectedConstraintIdx].mode_scope = s">{{ s }}</button>
+                            :class="{ active: constraintHasMode(constraints[selectedConstraintIdx], s) }"
+                            @click="toggleConstraintMode(constraints[selectedConstraintIdx], s)">{{ s }}</button>
                   </div>
                 </div>
                 <div class="cfg-field cfg-field-compact">
@@ -3518,20 +3713,20 @@
               </button>
             </div>
 
-            <!-- 過濾 chip -->
-            <div class="cfg-rules-filter-bar">
-              <button class="cfg-chip cfg-chip-sm"
+            <!-- 過濾 chip(#1:強制一行不折) -->
+            <div class="cfg-rules-filter-bar" style="display:flex; flex-wrap:nowrap; gap:4px; overflow-x:auto;">
+              <button class="cfg-chip cfg-chip-sm" style="flex:0 0 auto; white-space:nowrap;"
                       :class="{ active: rulesListFilter === 'all' }"
                       @click="rulesListFilter = 'all'">全部</button>
-              <button class="cfg-chip cfg-chip-sm"
+              <button class="cfg-chip cfg-chip-sm" style="flex:0 0 auto; white-space:nowrap;"
                       :class="{ active: rulesListFilter === 'puzzle' }"
                       @click="rulesListFilter = 'puzzle'"
                       title="只看拼圖規則">🧩 拼圖</button>
-              <button class="cfg-chip cfg-chip-sm cfg-chip-hard"
+              <button class="cfg-chip cfg-chip-sm cfg-chip-hard" style="flex:0 0 auto; white-space:nowrap;"
                       :class="{ active: rulesListFilter === 'hard' }"
                       @click="rulesListFilter = 'hard'"
                       title="只看 HARD 棄牌(風控)">HARD</button>
-              <button class="cfg-chip cfg-chip-sm cfg-chip-soft"
+              <button class="cfg-chip cfg-chip-sm cfg-chip-soft" style="flex:0 0 auto; white-space:nowrap;"
                       :class="{ active: rulesListFilter === 'soft' }"
                       @click="rulesListFilter = 'soft'"
                       title="只看 SOFT 棄牌(體感)">SOFT</button>
@@ -4471,15 +4666,15 @@
         </details>
       </div>
 
-      <!-- ─── 14:投注結構(v5.3:Ante Bet + Buy Feature)─── -->
+      <!-- ─── 14:加押 / 購買(v6.2:Extra Bet + Buy Feature,皆開關前置)─── -->
       <div v-else-if="active === 'bet_config'" class="cfg-form cfg-betconfig-form">
 
         <div class="cfg-section">
-          <div class="cfg-section-title">Ante Bet <span class="cfg-key">Ante_Bet</span></div>
-          <div class="cfg-hint">加注功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
+          <div class="cfg-section-title">Extra Bet <span class="cfg-key">加押</span></div>
+          <div class="cfg-hint">加押功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
 
           <div class="cfg-field">
-            <label class="cfg-label">啟用 Ante Bet</label>
+            <label class="cfg-label">啟用 Extra Bet</label>
             <label class="chk">
               <input type="checkbox" v-model="betConfig.ante_bet_enabled">
               <span class="box"></span>
@@ -4511,56 +4706,68 @@
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-section-title">Buy Feature <span class="cfg-key">Buy_Feature</span></div>
-          <div class="cfg-hint">購免遊功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
+          <div class="cfg-section-title">Buy Feature <span class="cfg-key">購買</span></div>
+          <div class="cfg-hint">購買功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
 
-          <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
-            尚未設定 Buy Feature；不需要此功能的遊戲可留空。
+          <!-- #2:Buy Feature 主開關(先決定是否啟用,再顯示內容) -->
+          <div class="cfg-field">
+            <label class="cfg-label">啟用 Buy Feature</label>
+            <label class="chk">
+              <input type="checkbox" v-model="betConfig.buy_feature_enabled">
+              <span class="box"></span>
+              <span>{{ betConfig.buy_feature_enabled ? '已啟用' : '關閉' }}</span>
+            </label>
           </div>
 
-          <div class="cfg-bf-list">
-            <div v-for="(bf, bi) in betConfig.buy_features" :key="'bf' + bi" class="cfg-bf-row">
-              <div class="cfg-bf-cell">
-                <label class="cfg-label">BF_ID</label>
-                <input class="input input-w-id cfg-mono" type="text" v-model.trim="bf.bf_id" placeholder="BF_FG">
-              </div>
-              <div class="cfg-bf-cell">
-                <label class="cfg-label">目標模式</label>
-                <select class="input input-w-id" v-model="bf.target_mode">
-                  <option value="">（請選擇）</option>
-                  <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
-                </select>
-              </div>
-              <div class="cfg-bf-cell">
-                <label class="cfg-label">成本 <span class="cfg-key">×注額</span></label>
-                <input class="input input-w-num input-center" type="number" min="0" step="1"
-                       v-model.number="bf.cost_mult">
-              </div>
-              <div class="cfg-bf-cell">
-                <label class="cfg-label">RTP 目標 <span class="cfg-key">%</span></label>
-                <input class="input input-w-num input-center" type="number" min="0" max="102" step="0.1"
-                       v-model.number="bf.rtp_target">
-              </div>
-              <div class="cfg-bf-cell cfg-bf-cell-grow">
-                <label class="cfg-label">備註</label>
-                <input class="input input-w-name" type="text" v-model.trim="bf.notes"
-                       placeholder="適用 SuperBet 模式">
-              </div>
-              <div class="cfg-bf-cell">
-                <label class="cfg-label">啟用</label>
-                <label class="chk">
-                  <input type="checkbox" v-model="bf.enabled">
-                  <span class="box"></span>
-                </label>
-              </div>
-              <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeBuyFeature(bi)" title="刪除">✕</button>
+          <template v-if="betConfig.buy_feature_enabled">
+            <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
+              尚未設定購買項目；點下方「新增 Buy Feature」開始定義各模式的購買成本與 RTP 目標。
             </div>
-          </div>
 
-          <button class="cfg-mode-add-btn" @click="addBuyFeature">
-            <span style="font-size:16px">+</span>
-            <span>新增 Buy Feature</span>
-          </button>
+            <div class="cfg-bf-list">
+              <div v-for="(bf, bi) in betConfig.buy_features" :key="'bf' + bi" class="cfg-bf-row">
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">BF_ID</label>
+                  <input class="input input-w-id cfg-mono" type="text" v-model.trim="bf.bf_id" placeholder="BF_FG">
+                </div>
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">目標模式</label>
+                  <select class="input input-w-id" v-model="bf.target_mode">
+                    <option value="">（請選擇）</option>
+                    <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
+                  </select>
+                </div>
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">成本 <span class="cfg-key">×注額</span></label>
+                  <input class="input input-w-num input-center" type="number" min="0" step="1"
+                         v-model.number="bf.cost_mult">
+                </div>
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">RTP 目標 <span class="cfg-key">%</span></label>
+                  <input class="input input-w-num input-center" type="number" min="0" max="102" step="0.1"
+                         v-model.number="bf.rtp_target">
+                </div>
+                <div class="cfg-bf-cell cfg-bf-cell-grow">
+                  <label class="cfg-label">備註</label>
+                  <input class="input input-w-name" type="text" v-model.trim="bf.notes"
+                         placeholder="適用 SuperBet 模式">
+                </div>
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">啟用</label>
+                  <label class="chk">
+                    <input type="checkbox" v-model="bf.enabled">
+                    <span class="box"></span>
+                  </label>
+                </div>
+                <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeBuyFeature(bi)" title="刪除">✕</button>
+              </div>
+            </div>
+
+            <button class="cfg-mode-add-btn" @click="addBuyFeature">
+              <span style="font-size:16px">+</span>
+              <span>新增 Buy Feature</span>
+            </button>
+          </template>
         </div>
 
       </div><!-- /bet_config -->
@@ -4871,7 +5078,13 @@
             </div>
             <div class="cfg-bonus-mcell">
               <label class="cfg-label">適用模式</label>
-              <input class="input input-w-id" type="text" v-model.trim="g.mode_scope" placeholder="ALL 或 NG,FG">
+              <div class="cfg-chip-row">
+                <button class="cfg-chip cfg-chip-sm" :class="{ active: bonusHasMode(g, 'ALL') }"
+                        @click="toggleBonusMode(g, 'ALL')">全部</button>
+                <button v-for="mn in modeNames" :key="mn"
+                        class="cfg-chip cfg-chip-sm" :class="{ active: bonusHasMode(g, mn) }"
+                        @click="toggleBonusMode(g, mn)">{{ mn }}</button>
+              </div>
             </div>
             <div v-if="g.type === 'WHEEL'" class="cfg-bonus-mcell">
               <label class="cfg-label">升級至 <span class="cfg-key">選填</span></label>
@@ -4917,7 +5130,7 @@
                 <span class="cfg-bonus-ilabel">連結JP</span>
                 <select class="input input-w-id" v-model="it.link_jackpot">
                   <option value="">—</option>
-                  <option v-for="j in jackpots" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                  <option v-for="j in bonusJpOptions(g, it)" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
                 </select>
               </div>
               <button class="cfg-mode-delete-btn" @click="removeBonusItem(g, ii)" title="刪除">✕</button>

@@ -2101,8 +2101,8 @@
   background: rgba(255,255,255,0.32);
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-card);
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  padding: 10px 12px;         /* v6.2 規則#2:原 12px 14px */
+  margin-bottom: 8px;         /* v6.2 規則#2:原 12px */
   box-shadow: var(--shadow-sm);
 }
 .cfg-puzzle-header {
@@ -3900,7 +3900,7 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 18px 22px 28px;
+  padding: 12px 16px 18px;   /* v6.2 規則#2:右側編輯區留白收斂(原 18px 22px 28px) */
   display: flex;
   flex-direction: column;
 }
@@ -3921,8 +3921,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 10px;        /* v6.2 規則#2:原 16px */
+  padding-bottom: 8px;        /* v6.2 規則#2:原 12px */
   border-bottom: 1px dashed var(--divider);
 }
 .cfg-split-detail-id {
@@ -7138,8 +7138,8 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 14px;
-  margin: 10px 0 14px;
+  padding: 8px 12px;          /* v6.2 規則#2:原 10px 14px */
+  margin: 8px 0 10px;         /* v6.2 規則#2:原 10px 0 14px */
   background: linear-gradient(135deg,
     rgb(var(--tint-1) / 0.10) 0%,
     rgb(var(--tint-1) / 0.05) 100%);
@@ -8512,7 +8512,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;                   /* v6.2 盤面#0:原 8px,讓圖例/說明與盤面有呼吸空間 */
   padding: 12px 14px;
   background: var(--glass-2);
   border: 1px solid var(--glass-edge);
@@ -8535,13 +8535,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
    輪數/Panel 增加時整張盤等比縮小但永遠完整可見 */
 .cfg-layout-v2-preview .cfg-layout-svg-wrap {
   flex: 1;
-  min-height: 180px;
-  align-items: flex-start;
+  min-height: 220px;          /* v6.2 盤面#0:原 180px */
+  align-items: center;        /* v6.2 盤面#0:盤面垂直置中,用掉下方原本浪費的空白(原 flex-start) */
 }
 .cfg-layout-v2-preview .cfg-layout-svg {
   width: 100%;
   height: auto;
-  max-height: 460px;
+  max-height: 560px;          /* v6.2 盤面#0:原 460px,讓較高的盤(megaways)能畫大一點 */
 }
 .cfg-layout-v2-preview-legend {
   display: flex;
@@ -10289,3 +10289,141 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* ── (1 補強) Test Inspector 收合時是極簡角落 pill;為內容區留底部餘裕,
    即使展開也不會永久遮住最後一列控制項 ── */
 .cfg-form { padding-bottom: 64px; }
+
+/* ══════════════════════════════════════════════════════════
+   v6.2 / Q4:中獎線自動產生面板（沿用 add-host/add-menu 視覺）
+   ══════════════════════════════════════════════════════════ */
+.cfg-payline-gen-host {
+  position: relative;
+  flex-shrink: 0;
+  padding: 0 8px 8px;
+  background: rgba(255,255,255,0.28);
+}
+.cfg-payline-gen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.40);
+  border: 1.5px dashed var(--glass-brd);
+  border-radius: var(--r-btn);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cfg-payline-gen-btn:hover,
+.cfg-payline-gen-btn.active {
+  background: rgba(255,255,255,0.7);
+  border-style: solid;
+  border-color: var(--accent-brd);
+  color: var(--accent-hex);
+}
+.cfg-payline-gen-panel {
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 8px;
+  right: 8px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  padding: 8px 10px 10px;
+  z-index: 50;
+  animation: paylineMenuPop 0.14s ease-out;
+}
+.cfg-payline-gen-warn {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warn-hex, #b8860b);
+  background: rgba(255, 196, 0, 0.10);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  border-radius: var(--r-btn);
+  padding: 7px 9px;
+  margin: 2px 0;
+}
+.cfg-payline-gen-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.cfg-payline-gen-label {
+  flex-shrink: 0;
+  width: 32px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+}
+.cfg-payline-gen-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.cfg-payline-gen-hint {
+  margin: 0 0 4px;
+}
+.cfg-payline-gen-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cfg-payline-gen-num {
+  width: 48px;
+  text-align: center;
+  padding: 4px 2px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-btn);
+  background: rgba(255,255,255,0.7);
+  font-family: inherit;
+  font-size: 12px;
+}
+.cfg-payline-gen-avail {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.cfg-payline-gen-run {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--accent);
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-btn);
+  color: var(--accent-hex);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.cfg-payline-gen-run:hover { filter: brightness(0.96); }
+
+/* v6.2 / Q4:中獎線「清空全部」鈕（list toolbar） */
+.cfg-payline-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.4);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-btn);
+  color: var(--text-light);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cfg-payline-clear-btn:hover {
+  background: rgba(220, 60, 50, 0.12);
+  border-color: rgba(220, 60, 50, 0.4);
+  color: #c0392b;
+}

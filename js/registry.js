@@ -14,13 +14,11 @@
 (function () {
   'use strict';
 
-  // ── 預設 swatch 顏色（15 組 bg/fg 配對，與桌面版同步） ──
+  // ── 預設 swatch 顏色（v6.2:12 組,橫排三列 × 4;[bg, fg(對比文字色)]） ──
   const SWATCH_COLORS = [
-    ['#EDD9C0', '#7a5a3a'], ['#D8C8F0', '#5a3d8a'], ['#F8C0CE', '#8a3050'],
-    ['#87CEEB', '#2a6a8a'], ['#C8E8C0', '#3a6a30'], ['#F5E6A3', '#7a6020'],
-    ['#F0C8A8', '#8a4820'], ['#B8D8F0', '#2a508a'], ['#E8D0F0', '#6a3a8a'],
-    ['#D0F0E8', '#2a7a5a'], ['#F0E8D0', '#7a6030'], ['#C0E8F8', '#2a608a'],
-    ['#F8C8D0', '#8a2050'], ['#D8F0C8', '#3a7030'], ['#F0D8B0', '#8a5020'],
+    ['#DABA90', '#6a5230'], ['#C9A95E', '#5a4410'], ['#D4847D', '#7a2e28'], ['#B4463C', '#ffffff'],
+    ['#B9B3E6', '#3d3470'], ['#8257C7', '#ffffff'], ['#EDC9E1', '#8a4a72'], ['#D071B8', '#ffffff'],
+    ['#AFD8E4', '#2a6378'], ['#71B7D0', '#1c4a5a'], ['#BEE9CA', '#2f6a3f'], ['#8FD581', '#2c5e26'],
   ];
 
   const DEFAULT_SYMBOL_NAMES = [
@@ -35,6 +33,26 @@
   let _idCounter = 0;
   function nextId() { _idCounter += 1; return _idCounter; }
 
+  // ── v6.3 / Q3:符號自帶倍數陣列正規化 ──
+  //   mult_values  「倍數」×N(× 在數字前):空=無、1筆=固定、多筆=加權隨機
+  //   prize_values 「彩金倍數」N×(× 在數字後)/ 金幣面額:含 per-mode 權重與 link_jackpot
+  function _normMultValues(arr) {
+    return Array.isArray(arr)
+      ? arr.map(v => ({ mult: Number(v && v.mult) || 0, weight: Number(v && v.weight) || 0 }))
+      : [];
+  }
+  function _normPrizeValues(arr) {
+    return Array.isArray(arr)
+      ? arr.map(v => ({
+          value:        Number(v && v.value) || 0,
+          weight:       Number(v && v.weight) || 0,
+          link_jackpot: (v && v.link_jackpot != null) ? String(v.link_jackpot) : '',
+          weight_by_mode: (v && v.weight_by_mode && typeof v.weight_by_mode === 'object')
+            ? { ...v.weight_by_mode } : {},
+        }))
+      : [];
+  }
+
   // ════════════════════════════════════════════════════════════
   //  SymbolData — 純 object 表示，配 helper 函式
   //  對應 SymbolData class
@@ -48,10 +66,11 @@
       max_count: 0,
       use_max: false,
       reel_limit: new Array(reelCount).fill(true),
+      subreel_limit: {},  // v6.2 #8:副輪出現限制(key=副輪 key, 預設不勾→不在此物件即 false)
       enabled: true,     // v4.0 / #13:符號開關(false = 暫停,不匯出、不進權重同步,但保留資料)
       // ── A.xlsx 03_Symbols 擴充欄位 ──
       symbol_id: '',      // A.xlsx 用的 Symbol_ID(像 H1 / WILD,可與 name 不同)
-      type: 'HIGH',       // HIGH / LOW / WILD / SCATTER / BONUS / SPECIAL
+      type: '一般得分',    // 一般得分 / WILD / SCATTER / FREE / BONUS / COIN / Other
       pay_3x: 0,
       pay_4x: 0,
       pay_5x: 0,
@@ -59,6 +78,9 @@
       pay_rows: [],       // v6.1:動態賠付表(2–20 連);pay_3x–6x 為其同步出的相容欄
       mega_w: 1,          // Mega 寬度(覆蓋幾個 Reel)
       mega_h: 1,          // Mega 高度(覆蓋幾列)
+      can_expand: false,  // v6.2 #10:此符號可擴張(實際擴張規則於規則頁設定,此處僅標籤)
+      mult_values: [],    // v6.3 / Q3:「倍數」×N(× 數字前);加權隨機陣列
+      prize_values: [],   // v6.3 / Q3:「彩金倍數」N× / 金幣面額;含 per-mode 權重與 link_jackpot
       is_wild: false,
       is_scatter: false,
     };
@@ -73,10 +95,11 @@
       max_count: s.max_count,
       use_max: s.use_max,
       reel_limit: [...s.reel_limit],
+      subreel_limit: (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {},
       enabled:    s.enabled    != null ? s.enabled    : true,
       // 新欄位(向下相容:舊資料缺欄位給預設值)
       symbol_id:  s.symbol_id  != null ? s.symbol_id  : '',
-      type:       s.type       != null ? s.type       : 'HIGH',
+      type:       s.type       != null ? s.type       : '一般得分',
       pay_3x:     s.pay_3x     != null ? s.pay_3x     : 0,
       pay_4x:     s.pay_4x     != null ? s.pay_4x     : 0,
       pay_5x:     s.pay_5x     != null ? s.pay_5x     : 0,
@@ -84,6 +107,9 @@
       pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
       mega_w:     s.mega_w     != null ? s.mega_w     : 1,
       mega_h:     s.mega_h     != null ? s.mega_h     : 1,
+      can_expand: s.can_expand != null ? !!s.can_expand : false,
+      mult_values:  _normMultValues(s.mult_values),
+      prize_values: _normPrizeValues(s.prize_values),
       is_wild:    s.is_wild    != null ? s.is_wild    : false,
       is_scatter: s.is_scatter != null ? s.is_scatter : false,
     };
@@ -266,10 +292,11 @@
           max_count: s.max_count,
           use_max: s.use_max,
           reel_limit: [...s.reel_limit],
+          subreel_limit: (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {},
           enabled:    s.enabled !== false,
           // ── 擴充欄位 ──
           symbol_id:  s.symbol_id  || '',
-          type:       s.type       || 'HIGH',
+          type:       s.type       || '一般得分',
           pay_3x:     s.pay_3x     || 0,
           pay_4x:     s.pay_4x     || 0,
           pay_5x:     s.pay_5x     || 0,
@@ -277,9 +304,12 @@
           pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
           mega_w:     s.mega_w     || 1,
           mega_h:     s.mega_h     || 1,
+          can_expand: !!s.can_expand,
+          mult_values:  _normMultValues(s.mult_values),
+          prize_values: _normPrizeValues(s.prize_values),
           is_wild:    !!s.is_wild,
           is_scatter: !!s.is_scatter,
-          swatch: this._swatchMap[s.id] || ['#EDD9C0', '#7a5a3a'],
+          swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
     }
@@ -298,10 +328,11 @@
           max_count: d.max_count || 0,
           use_max: !!d.use_max,
           reel_limit: Array.isArray(d.reel_limit) ? [...d.reel_limit] : new Array(reelCount).fill(true),
+          subreel_limit: (d.subreel_limit && typeof d.subreel_limit === 'object') ? { ...d.subreel_limit } : {},
           enabled:    d.enabled != null ? d.enabled : true,
           // ── 擴充欄位(舊版資料沒有就給預設)──
           symbol_id:  d.symbol_id  != null ? d.symbol_id  : '',
-          type:       d.type       || 'HIGH',
+          type:       d.type       || '一般得分',
           pay_3x:     d.pay_3x     || 0,
           pay_4x:     d.pay_4x     || 0,
           pay_5x:     d.pay_5x     || 0,
@@ -309,13 +340,16 @@
           pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
           mega_w:     d.mega_w     || 1,
           mega_h:     d.mega_h     || 1,
+          can_expand: !!d.can_expand,
+          mult_values:  _normMultValues(d.mult_values),
+          prize_values: _normPrizeValues(d.prize_values),
           is_wild:    !!d.is_wild,
           is_scatter: !!d.is_scatter,
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
         symbols.push(s);
-        swatchMap[s.id] = Array.isArray(d.swatch) ? [...d.swatch] : ['#EDD9C0', '#7a5a3a'];
+        swatchMap[s.id] = Array.isArray(d.swatch) ? [...d.swatch] : ['#DABA90', '#6a5230'];
         maxId = Math.max(maxId, s.id);
       }
       _idCounter = maxId;
@@ -354,10 +388,11 @@
             max_count: d.max_count || 0,
             use_max: !!d.use_max,
             reel_limit: Array.isArray(d.reel_limit) ? [...d.reel_limit] : new Array(reelCount).fill(true),
+            subreel_limit: (d.subreel_limit && typeof d.subreel_limit === 'object') ? { ...d.subreel_limit } : {},
             // v4.0:補齊擴充欄位(原本這條載入路徑會把這些欄位丟掉,進階屬性無法持久化)
             enabled:    d.enabled != null ? d.enabled : true,
             symbol_id:  d.symbol_id  != null ? d.symbol_id  : '',
-            type:       d.type       || 'HIGH',
+            type:       d.type       || '一般得分',
             pay_3x:     d.pay_3x     || 0,
             pay_4x:     d.pay_4x     || 0,
             pay_5x:     d.pay_5x     || 0,
@@ -365,12 +400,15 @@
             pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
             mega_w:     d.mega_w     || 1,
             mega_h:     d.mega_h     || 1,
+            can_expand: !!d.can_expand,
+            mult_values:  _normMultValues(d.mult_values),
+            prize_values: _normPrizeValues(d.prize_values),
             is_wild:    !!d.is_wild,
             is_scatter: !!d.is_scatter,
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);
-          swatchMap[s.id] = Array.isArray(d.swatch) ? [...d.swatch] : ['#EDD9C0', '#7a5a3a'];
+          swatchMap[s.id] = Array.isArray(d.swatch) ? [...d.swatch] : ['#DABA90', '#6a5230'];
           maxId = Math.max(maxId, s.id);
         }
         return { reelCount, symbols, swatchMap, maxId };

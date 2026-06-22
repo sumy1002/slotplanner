@@ -29,6 +29,31 @@
   console.log('[gameSpec]', `reelCount=${gameSpec.reelCount} payModel=${gameSpec.payModel} `
     + `dir=${gameSpec.scoreDir} 副輪=${gameSpec.subReels.length}`);
 
+  // ── v6.3 / Q3:一次性遷移 — 把舊 15_Multipliers / 16_Coin_Values / progress 併入符號 + 模式 ──
+  //   冪等(multipliers.migrated_to_symbols 旗標);失敗僅警告不影響啟動。
+  (function migrateQ3() {
+    try {
+      const H = SP.ConfigEditor && SP.ConfigEditor.Helpers;
+      if (!H || typeof H.migrateSymbolMults !== 'function') return;
+      const multipliers = H.loadMultipliers();
+      if (multipliers && multipliers.migrated_to_symbols) return;   // 已遷移
+      const coinValues = H.loadCoinValues();
+      const modes = H.loadModes();
+      const syms = registry.symbols();          // clones(含 mult_values/prize_values)
+      const swatch = registry.swatchMap();
+      const res = H.migrateSymbolMults(syms, multipliers, coinValues, modes);
+      if (res.changed) {
+        registry.applyAll(syms, swatch);
+        H.saveModes(modes);
+      }
+      multipliers.migrated_to_symbols = true;    // 不論是否有變更皆標記,避免每次啟動重試
+      H.saveMultipliers(multipliers);
+      console.log('[Q3 migrate]', res.changed ? '已併入符號 / 模式' : '無資料可遷移,標記完成');
+    } catch (e) {
+      console.warn('[Q3 migrate] 失敗(略過):', e);
+    }
+  })();
+
   const app = createApp({
     setup() {
       const page        = ref(0);
@@ -100,6 +125,9 @@
         if (i === 0) _statusForDataTab();
         else status.value = { ...pageDefaultStatus[i] };
       }
+      // v6.2 規則#11:供其他頁(如符號頁)帶意圖切到設定檔編輯器
+      //   config-page 是 v-if(page===3,:key=3)會重掛,setup 於 onMounted 讀取並消費此意圖
+      SP.goConfig = (intent) => { SP.pendingConfigIntent = intent || null; goPage(3); };
 
       function onChildStatus(s) { status.value = { ...s }; }
 

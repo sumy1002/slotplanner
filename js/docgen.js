@@ -23,6 +23,30 @@
 
   const LS_DOCMETA_KEY = 'slotplanner.docmeta.v1';
 
+  // v6.2 文件生成 #1:四組常用下拉預設(企劃可改可補,僅作為快速選項)
+  const PAYLINE_METHODS = [
+    '滾輪停止後，從最左輪算起有連續3個以上相同圖示即可得分',
+    '滾輪停止後，從最左輪算起有連續3個(部分2個)以上相同圖示即可得分',
+    '滾輪停止後，從最左輪算起有連續3個(部分2個)以上相同圖示即可得分(含主盤及副盤)',
+    '滾輪停止後，從最左輪算起在得分線上有連續3個以上相同圖示即可得分',
+    '滾輪停止後，從最左輪算起在得分線上有連續3個(部分2個)以上相同圖示即可得分',
+    '滾輪停止後，盤面上任意位置有8個以上相同圖示即可得分',
+    '滾輪停止後，相同圖示相鄰5個以上即可得分(斜線不算)',
+  ];
+  const REFILL_METHODS = [
+    '連線時會消除得分圖示，並由上方圖示向下補滿，直到無法發生連線時，即計算遊戲一回合',
+    '連線時會消除得分圖示，並由上方圖示向下補滿，直到無法發生達成得分條件時，即計算遊戲一回合',
+    '連線時會消除得分線上所有圖示，並由上方圖示向下補滿，直到無法發生連線時，即計算遊戲一回合',
+  ];
+  const SCROLL_METHODS = ['整輪滾動↓', '單格滾動', '由左至右→', '由右至左←'];
+  const SCORE_FORMULAS = [
+    '押注額 × 圖示賠率 × 額外倍數 = 獲得彩金',
+    '押注額 × 圖示數量賠率 × 圖示倍數加總 = 獲得彩金',
+    '押注額 × 圖示賠率 = 獲得彩金',
+    '押注額 × 連線圖示組合數 × 圖示賠率 = 獲得彩金',
+    '押注額 × 連線圖示組合數 × 圖示賠率 × 額外倍數 = 獲得彩金',
+  ];
+
   // ════════════════════════════════════════════════════════════════════
   //  讀 LS 設定檔 → 正規化
   // ════════════════════════════════════════════════════════════════════
@@ -36,7 +60,8 @@
   }
 
   // 特殊圖示判定：wild / scatter / 類型屬特殊
-  const SPECIAL_TYPES = new Set(['WILD', 'SCATTER', 'BONUS', 'SPECIAL']);
+  //   v6.2:符號型別改制後,FREE / COIN 也屬功能型特殊圖示(SPECIAL 保留相容舊存檔)
+  const SPECIAL_TYPES = new Set(['WILD', 'SCATTER', 'BONUS', 'FREE', 'COIN', 'SPECIAL']);
   function _isSpecial(s) {
     return !!(s.is_wild || s.is_scatter || SPECIAL_TYPES.has((s.type || '').toUpperCase()));
   }
@@ -60,6 +85,10 @@
         return `${name}（SCATTER）為散佈圖示，不需落在連線上；盤面任意位置出現達指定數量即觸發對應功能（例如進入 FREE GAME）。`;
       case 'BONUS':
         return `${name}（BONUS）達成指定出現條件後觸發 BONUS GAME / 獎勵關卡。`;
+      case 'FREE':
+        return `${name}（FREE）為免費遊戲觸發圖示，盤面出現達指定數量即觸發 FREE GAME。`;
+      case 'COIN':
+        return `${name}（COIN）為金幣圖示，出現時帶有面額／彩金值（常用於 Hold & Win 玩法），請補充其面額與收集規則。`;
       default:
         return `${name} 為特殊圖示，具備專屬的觸發或替代行為，請補充其出現輪、數量門檻與效果。`;
     }
@@ -67,9 +96,10 @@
 
   function _payTypeLabel(g) {
     const pt = (g.pay_type || 'LINE').toUpperCase();
-    const map = { LINE: '連線（Payline）', WAYS: '全路徑（Ways）', SCATTER: '散佈（Scatter）', CLUSTER: '群聚（Cluster）' };
+    // v6.2 文件生成#2:依企劃用語 — LINE=連線、WAYS=百搭、SCATTER=圖示數量、CLUSTER=相鄰群
+    const map = { LINE: '連線', WAYS: '百搭', SCATTER: '圖示數量', CLUSTER: '相鄰群' };
     let label = map[pt] || pt;
-    if (g.megaways) label += '／Megaways';
+    if (g.megaways) label = label ? `${label}／Megaways` : 'Megaways';
     return label;
   }
 
@@ -118,6 +148,8 @@
         waysCount,
         reelCount: heights.length,
         payTypeLabel: _payTypeLabel(g),
+        payType: (g.pay_type || 'LINE').toUpperCase(),                                  // v6.2
+        isWaysLike: ((g.pay_type || 'LINE').toUpperCase() === 'WAYS') || !!g.megaways,    // v6.2:全路徑/megaways
         startingMode: g.starting_mode || (modes[0] && modes[0].mode) || 'NG',
       },
     };
@@ -148,22 +180,39 @@
     if (!Array.isArray(arr) || !arr.length) return null;
     const rows = arr
       .filter(j => j && (j.name || j.jp_id))
-      .map(j => ({
-        name: j.name || j.jp_id,
-        mult: Number(j.mult) || 0,
-        kind: j.kind || 'FIXED',                       // v5.2
-        increment_pct: Number(j.increment_pct) || 0,   // v5.2
-        must_hit_by: Number(j.must_hit_by) || 0,       // v5.2
-        trigger_desc: j.trigger_desc || '',            // v5.2
-      }));
+      .map(j => {
+        // v6.2 #4:觸發說明手填優先;留空則用結構化欄位組合
+        let td = j.trigger_desc || '';
+        if (!td) {
+          const tt = j.trigger_type || 'COLLECT';
+          const parts = [];
+          if (tt === 'ACCUMULATE') {
+            if (Number(j.accum_pct) > 0) parts.push(`押注提撥 ${j.accum_pct}%`);
+            if (j.accum_mech) parts.push(j.accum_mech);
+            td = parts.length ? `累積（${parts.join('；')}）` : '累積';
+          } else {
+            if (Number(j.collect_prob) > 0) parts.push(`出現機率 ${j.collect_prob}%`);
+            if (j.collect_enter) parts.push(j.collect_enter);
+            td = parts.length ? `收集（${parts.join('；')}）` : '收集';
+          }
+        }
+        return {
+          name: j.name || j.jp_id,
+          mult: Number(j.mult) || 0,
+          kind: j.kind || 'FIXED',                       // v5.2
+          increment_pct: Number(j.increment_pct) || 0,   // v5.2
+          must_hit_by: Number(j.must_hit_by) || 0,       // v5.2
+          trigger_desc: td,                              // v6.2 #4:含自動組合
+        };
+      });
     return rows.length ? rows : null;
   }
 
-  function defaultMeta(config) {
+  function defaultMeta(config, inherit = true) {
     const cfg = config || collectConfig();
-    // 各模式一句話描述（預帶 modes.notes）
+    // 各模式一句話描述（連動開啟時預帶 modes.notes;關閉則留白由企劃手填）
     const modeDesc = {};
-    cfg.modes.forEach(m => { if (m.mode) modeDesc[m.mode] = m.notes || ''; });
+    cfg.modes.forEach(m => { if (m.mode) modeDesc[m.mode] = inherit ? (m.notes || '') : ''; });
     // 各特殊圖示行為（預設空白）
     const specialBehavior = {};
     cfg.specialSyms.forEach(s => { specialBehavior[_symId(s)] = ''; });
@@ -175,15 +224,19 @@
       theme_pick: '',
       style_pick: '',
       flags: { wild: cfg.specialSyms.some(s => s.is_wild), payline: false, symbol_count: false, special: cfg.specialSyms.length > 0 },
+      inherit_config: true,   // v6.2 文件生成#0:是否自動帶入各分頁設定(連動);關閉則只用手填,基本資訊仍跟全域
       payline_desc: '',
-      score_formula: '押注額 × 連線圖示組合數 × 圖示賠率 ＝ 獲得彩金',
+      payline_method: PAYLINE_METHODS[0],   // v6.2 文件生成#1:連線方式(下拉)
+      refill_method: REFILL_METHODS[0],      // v6.2:補盤方式(下拉)
+      scroll_main: SCROLL_METHODS[0],        // v6.2:滾動方式-主盤
+      scroll_sub: '',                        // v6.2:滾動方式-副盤(無副盤可留空)
+      score_formula: SCORE_FORMULAS[3],
       game_overview: '',
       mode_desc: modeDesc,
       special_behavior: specialBehavior,
       jackpot: {
-        // v5.1:優先自動帶入設定檔的 JP 定義(slotplanner.aconfig.jackpots.v1,
-        //   即 A.xlsx 13_Jackpots);設定檔沒有 JP 才退回通用四級樣板。
-        rows: _jackpotRowsFromConfig() || [
+        // v5.1:連動開啟時優先帶入設定檔 JP(13_Jackpots);關閉或無 JP 則退回通用四級樣板。
+        rows: (inherit ? _jackpotRowsFromConfig() : null) || [
           { name: 'GRAND', mult: 1800 },
           { name: 'MAJOR', mult: 300 },
           { name: 'MINOR', mult: 30 },
@@ -216,7 +269,8 @@
   // 補齊：config 變動後，meta 可能缺少新模式 / 新特殊圖示的鍵
   function mergeMeta(meta, config) {
     const cfg = config || collectConfig();
-    const base = defaultMeta(cfg);
+    const inherit = meta && meta.inherit_config === false ? false : true;   // v6.2 #0
+    const base = defaultMeta(cfg, inherit);
     const out = Object.assign({}, base, meta);
     out.flags = Object.assign({}, base.flags, meta.flags || {});
     out.jackpot = Object.assign({}, base.jackpot, meta.jackpot || {});
@@ -324,7 +378,11 @@
     const waysLine = cfg.derived.waysCount
       ? `連線型態：${cfg.derived.payTypeLabel}，共 ${cfg.derived.waysCount} 種連線方式。`
       : `連線型態：${cfg.derived.payTypeLabel}。`;
-    kv('連線方式', m.payline_desc ? `${waysLine}\n${m.payline_desc}` : waysLine, { height: 36 });
+    const plMethod = [m.payline_method, m.payline_desc].filter(Boolean).join('\n');
+    kv('連線方式', plMethod ? `${waysLine}\n${plMethod}` : waysLine, { height: 36 });
+    if (m.refill_method) kv('補盤方式', m.refill_method, { height: 30 });
+    const scrollLine = [m.scroll_main && `主盤：${m.scroll_main}`, m.scroll_sub && `副盤：${m.scroll_sub}`].filter(Boolean).join('　');
+    if (scrollLine) kv('滾動方式', scrollLine);
     kv('得分規則', m.score_formula);
 
     // 遊戲概述 / 模式
@@ -455,7 +513,7 @@
     wsX.columns = [{ width: 14 }, { width: 44 }, { width: 16 }, { width: 28 }];
     let XR = 1;
     function xBand(t) { wsX.mergeCells(XR, 1, XR, 4); _cell(wsX, XR, 1, t, { bold: true, bg: C.band, fg: C.bandFg, size: 11 }); XR++; }
-    xBand('中獎線 / 路徑');
+    xBand(cfg.paylines.length ? `中獎線 / 路徑（共 ${cfg.paylines.length} 條）` : '中獎線 / 路徑');
     ['Line_ID', 'Path', 'Direction', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
     XR++;
     const plDir = (cfg.global && cfg.global.payline_direction) || (cfg.global && cfg.global.ways_direction) || 'LTR';
@@ -469,7 +527,7 @@
       });
     } else {
       wsX.mergeCells(XR, 1, XR, 4);
-      _cell(wsX, XR, 1, cfg.derived.payTypeLabel.indexOf('Ways') >= 0 ? '（全路徑模式，無逐線定義）' : '（無中獎線資料）', { fg: C.todoFg });
+      _cell(wsX, XR, 1, cfg.derived.isWaysLike ? '（全路徑模式，無逐線定義）' : '（無中獎線資料）', { fg: C.todoFg });
       XR++;
     }
     XR++;
@@ -495,7 +553,7 @@
     const bc = cfg.betConfig || {};
     const mpc = cfg.multipliers || {};
     const cvc = cfg.coinValues || {};
-    const hasBet  = bc.ante_bet_enabled || (Array.isArray(bc.buy_features) && bc.buy_features.length);
+    const hasBet  = bc.ante_bet_enabled || (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length);
     const hasMul  = mpc.wild_mult_enabled || mpc.progress_enabled || mpc.random_enabled;
     const hasCoin = cvc.enabled && Array.isArray(cvc.denominations) && cvc.denominations.length;
     if (hasBet || hasMul || hasCoin) {
@@ -505,18 +563,18 @@
       const vBand = (t) => { wsV.mergeCells(VR, 1, VR, 5); _cell(wsV, VR, 1, t, { bold: true, bg: C.band, fg: C.bandFg, size: 11 }); VR++; };
       const vHead = (arr) => { arr.forEach((h, i) => _cell(wsV, VR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' })); VR++; };
 
-      // 投注結構
+      // 加押 / 購買
       if (hasBet) {
-        vBand('投注結構（Bet Config）');
+        vBand('加押 / 購買（Bet Config）');
         if (bc.ante_bet_enabled) {
-          vHead(['Ante Bet', '成本倍數', '觸發倍率', '', '說明']);
+          vHead(['Extra Bet', '成本倍數', '觸發倍率', '', '說明']);
           _cell(wsV, VR, 1, '啟用', { h: 'center' });
           _cell(wsV, VR, 2, '×' + (Number(bc.ante_bet_mult) || 0), { h: 'center' });
           _cell(wsV, VR, 3, '×' + (Number(bc.ante_bet_trigger_mult) || 0), { h: 'center' });
           _cell(wsV, VR, 5, bc.ante_bet_desc || '');
           VR++;
         }
-        if (Array.isArray(bc.buy_features) && bc.buy_features.length) {
+        if (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length) {
           vHead(['Buy Feature', '目標模式', '成本×注額', 'RTP目標', '備註']);
           bc.buy_features.forEach(f => {
             _cell(wsV, VR, 1, f.bf_id || '', { h: 'center' });
@@ -619,6 +677,12 @@
     L.push(`- 連線型態：${cfg.derived.payTypeLabel}`);
     if (cfg.derived.waysCount) L.push(`- 連線種數：${cfg.derived.waysCount}`);
     L.push(`- 起始模式：${cfg.derived.startingMode}`);
+    if (m.payline_method) L.push(`- 連線方式：${m.payline_method}`);
+    if (m.refill_method) L.push(`- 補盤方式：${m.refill_method}`);
+    if (m.scroll_main || m.scroll_sub) {
+      const parts = [m.scroll_main && `主盤 ${m.scroll_main}`, m.scroll_sub && `副盤 ${m.scroll_sub}`].filter(Boolean);
+      L.push(`- 滾動方式：${parts.join('；')}`);
+    }
     L.push(`- 得分公式：${m.score_formula}`);
     if (m.competitor_url) L.push(`- 競品參考：${m.competitor_url}`);
     L.push('');
@@ -673,9 +737,40 @@
     // 連線 / 計分規則
     L.push('## 連線 / 計分規則');
     L.push('');
+    if (m.payline_method) { L.push(m.payline_method); L.push(''); }
     if (m.payline_desc) { L.push(m.payline_desc); L.push(''); }
+    if (m.refill_method) L.push(`- 補盤方式：${m.refill_method}`);
+    if (m.scroll_main || m.scroll_sub) {
+      const parts = [m.scroll_main && `主盤 ${m.scroll_main}`, m.scroll_sub && `副盤 ${m.scroll_sub}`].filter(Boolean);
+      L.push(`- 滾動方式：${parts.join('；')}`);
+    }
     L.push(`- 計分方式：${m.score_formula}`);
+    if (!cfg.derived.isWaysLike && Array.isArray(cfg.paylines) && cfg.paylines.length) {
+      L.push(`- 中獎線數：${cfg.paylines.length} 條`);
+    }
     L.push('');
+
+    // v6.3 / Q3:倍數 / 彩金摘要(由符號 mult_values / prize_values 帶入)
+    {
+      const multSyms = (cfg.symbols || []).filter(s => Array.isArray(s.mult_values) && s.mult_values.length);
+      const prizeSyms = (cfg.symbols || []).filter(s => Array.isArray(s.prize_values) && s.prize_values.length);
+      if (multSyms.length || prizeSyms.length) {
+        L.push('## 倍數 / 彩金');
+        L.push('');
+        multSyms.forEach(s => {
+          const parts = s.mult_values.map(v => `×${v.mult}` + (v.weight ? `（權重 ${v.weight}）` : ''));
+          L.push(`- ${s.name || _symId(s)} 倍數：${parts.join('、')}`);
+        });
+        prizeSyms.forEach(s => {
+          const parts = s.prize_values.map(v => {
+            const jp = v.link_jackpot ? `→${v.link_jackpot}` : '';
+            return `${v.value}×${jp}`;
+          });
+          L.push(`- ${s.name || _symId(s)} 彩金 / 面額：${parts.join('、')}`);
+        });
+        L.push('');
+      }
+    }
 
     // 特殊圖示行為
     if (cfg.specialSyms.length) {
@@ -721,13 +816,13 @@
 
     // v5.6:數值機制（投注 / 倍數 / 金幣）— 僅有設定時輸出
     const _bc = cfg.betConfig || {};
-    if (_bc.ante_bet_enabled || (Array.isArray(_bc.buy_features) && _bc.buy_features.length)) {
-      L.push('## 投注結構');
+    if (_bc.ante_bet_enabled || (_bc.buy_feature_enabled && Array.isArray(_bc.buy_features) && _bc.buy_features.length)) {
+      L.push('## 加押 / 購買');
       L.push('');
       if (_bc.ante_bet_enabled) {
-        L.push(`- **Ante Bet**：成本 ×${Number(_bc.ante_bet_mult) || 0} 注額，觸發倍率 ×${Number(_bc.ante_bet_trigger_mult) || 0}${_bc.ante_bet_desc ? '　—　' + _bc.ante_bet_desc : ''}`);
+        L.push(`- **Extra Bet（加押）**：成本 ×${Number(_bc.ante_bet_mult) || 0} 注額，觸發倍率 ×${Number(_bc.ante_bet_trigger_mult) || 0}${_bc.ante_bet_desc ? '　—　' + _bc.ante_bet_desc : ''}`);
       }
-      if (Array.isArray(_bc.buy_features) && _bc.buy_features.length) {
+      if (_bc.buy_feature_enabled && Array.isArray(_bc.buy_features) && _bc.buy_features.length) {
         L.push('');
         L.push('| Buy Feature | 目標模式 | 成本×注額 | RTP目標 | 備註 |');
         L.push('| --- | --- | --- | --- | --- |');
@@ -849,14 +944,22 @@
       <div class="docgen-hint" v-if="hint">{{ hint }}</div>
     </div>
 
-    <!-- 設定檔自動帶入摘要 -->
+    <!-- 設定檔自動帶入摘要 + #0 連動開關 -->
     <div class="docgen-summary glass-panel-flat">
-      <div class="docgen-sum-title">設定檔將自動帶入</div>
+      <div class="docgen-sum-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>設定檔自動帶入{{ meta.inherit_config === false ? '（連動已關閉）' : '' }}</span>
+        <label style="font-size:12px; font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" v-model="meta.inherit_config"> 連動各分頁設定
+        </label>
+      </div>
       <div class="docgen-sum-grid">
         <div><span class="docgen-sum-k">盤面</span><span class="docgen-sum-v">{{ cfg.derived.gridStr || '—' }}</span></div>
         <div><span class="docgen-sum-k">連線</span><span class="docgen-sum-v">{{ cfg.derived.payTypeLabel }}<template v-if="cfg.derived.waysCount">／{{ cfg.derived.waysCount }} 種</template></span></div>
         <div><span class="docgen-sum-k">模式</span><span class="docgen-sum-v">{{ cfg.modes.map(m => m.mode).filter(Boolean).join(' / ') || '—' }}</span></div>
         <div><span class="docgen-sum-k">圖示</span><span class="docgen-sum-v">一般 {{ cfg.normalSyms.length }}・特殊 {{ cfg.specialSyms.length }}</span></div>
+      </div>
+      <div v-if="meta.inherit_config === false" style="font-size:11px; color:var(--text-light); margin-top:6px;">
+        連動已關閉:模式描述／JP 等不再自動帶入,只用你手填的內容;上方基本資訊仍跟隨全域設定。
       </div>
     </div>
 
@@ -880,14 +983,34 @@
       </div>
     </div>
 
-    <!-- 連線 / 計分 -->
+    <!-- 連線 / 計分 / 滾動 -->
     <div class="docgen-sec">
-      <div class="docgen-sec-h">連線 / 計分</div>
-      <div class="field-label">連線方式（白話敘述）</div>
-      <textarea class="input docgen-ta" v-model="meta.payline_desc"
-        placeholder="例：滾輪停止後，從【第一輪】或【第五輪】算起有連續 3 個以上相同圖示即可得分。"></textarea>
+      <div class="docgen-sec-h">連線 / 計分 / 滾動</div>
+      <div class="field-label">連線方式</div>
+      <select class="input" v-model="meta.payline_method">
+        <option v-for="o in PAYLINE_METHODS" :key="o" :value="o">{{ o }}</option>
+      </select>
+      <div class="field-label">補盤方式</div>
+      <select class="input" v-model="meta.refill_method">
+        <option value="">（無 / 不適用）</option>
+        <option v-for="o in REFILL_METHODS" :key="o" :value="o">{{ o }}</option>
+      </select>
+      <div class="field-label">滾動方式 · 主盤</div>
+      <select class="input" v-model="meta.scroll_main">
+        <option v-for="o in SCROLL_METHODS" :key="'sm'+o" :value="o">{{ o }}</option>
+      </select>
+      <div class="field-label">滾動方式 · 副盤</div>
+      <select class="input" v-model="meta.scroll_sub">
+        <option value="">（無副盤 / 同主盤）</option>
+        <option v-for="o in SCROLL_METHODS" :key="'ss'+o" :value="o">{{ o }}</option>
+      </select>
       <div class="field-label">得分公式</div>
-      <input class="input" v-model="meta.score_formula">
+      <select class="input" v-model="meta.score_formula">
+        <option v-for="o in SCORE_FORMULAS" :key="o" :value="o">{{ o }}</option>
+      </select>
+      <div class="field-label">連線方式補充（選填，自由文字）</div>
+      <textarea class="input docgen-ta" v-model="meta.payline_desc"
+        placeholder="補充說明（會附在連線方式之後）"></textarea>
     </div>
 
     <!-- 遊戲概述 / 模式描述 -->
@@ -980,6 +1103,8 @@
 
       function refreshConfig() {
         Object.assign(cfg, SP.DocGen.collectConfig());
+        // #0:連動關閉時,只更新基本資訊(cfg),不把各分頁設定回灌覆蓋手填內容
+        if (meta.inherit_config === false) { setHint('已重讀基本資訊（連動關閉,描述欄維持手填）', 'ok'); return; }
         Object.assign(meta, SP.DocGen.mergeMeta(JSON.parse(JSON.stringify(meta)), cfg));
       }
 
@@ -1046,7 +1171,8 @@
         } finally { busy.value = false; }
       }
 
-      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, refreshConfig };
+      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, refreshConfig,
+        PAYLINE_METHODS, REFILL_METHODS, SCROLL_METHODS, SCORE_FORMULAS };
     },
   };
 

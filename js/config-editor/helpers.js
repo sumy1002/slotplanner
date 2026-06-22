@@ -53,20 +53,21 @@
     // ── 賠付 & 規則 ──
     { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule' },
     { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
+    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule' },   // v6.2 #0:JP 獨立分頁
     // v3.1:09_Puzzle_Rules + 10_Discard_Rules 已合併成單一 'rules' tab
     { id: 'rules',             sheet: '09 + 10',               name: '規則',         icon: '🧩', done: true, group: 'rule' },
     // v3.1:11_Mode_Config 已合併進 'global' tab,不再是獨立分頁
     { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule' },
-    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '投注結構',     icon: '💴', done: true, group: 'base' },
+    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '加押/購買',    icon: '💴', done: true, group: 'base' },
     { id: 'bonus_games',       sheet: '17_Bonus_Games',         name: 'Bonus 小遊戲', icon: '🎡', done: true, group: 'rule' },
-    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight' },
-    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight' },
+    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
   ];
 
   // 依 group 切分(渲染用),保持 TABS 內各 group 內部的原順序
   const TABS_BY_GROUP = TAB_GROUPS.map(g => ({
     ...g,
-    tabs: TABS.filter(t => t.group === g.id),
+    tabs: TABS.filter(t => t.group === g.id && !t.hidden),   // v6.3:hidden 分頁不進導覽
   })).filter(g => g.tabs.length > 0);
 
   // ──────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@
     pay_type:           'LINE',
     ways_direction:     'LTR',
     payline_direction:  'LTR',
+    longest_line_once:  true,   // v6.2 #8:雙向計分時,最長連線是否僅計分一次(預設是)
     megaways:           false,
     cluster_min_size:   5,
     starting_mode:      'NG',
@@ -550,6 +552,8 @@
       spin_count: 0,
       inherit_globals: false,
       on_enter_reset_vars: '',
+      progress_ladder: [],   // v6.3 / Q3:cascade 累積倍數階梯(由 15_Multipliers PROGRESS 移入)
+      progress_reset: true,  // v6.3:進入此模式是否重置階梯
       notes: '',
     };
   }
@@ -564,13 +568,16 @@
   function loadModes() {
     try {
       const raw = localStorage.getItem(LS_MODES_KEY);
-      if (!raw) return DEFAULT_MODES.map(m => ({ ...m }));
+      if (!raw) return DEFAULT_MODES.map(m => ({ ...makeMode(m.mode), ...m }));
       const arr = JSON.parse(raw);
-      if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_MODES.map(m => ({ ...m }));
-      return arr.map(m => ({ ...makeMode(''), ...m }));
+      if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_MODES.map(m => ({ ...makeMode(m.mode), ...m }));
+      return arr.map(m => ({ ...makeMode(''), ...m,
+        progress_ladder: Array.isArray(m.progress_ladder) ? m.progress_ladder.map(Number).filter(n => !isNaN(n) && n > 0) : [],
+        progress_reset: m.progress_reset !== false,
+      }));
     } catch (e) {
       console.warn('[config-editor] loadModes failed:', e);
-      return DEFAULT_MODES.map(m => ({ ...m }));
+      return DEFAULT_MODES.map(m => ({ ...makeMode(m.mode), ...m }));
     }
   }
   function saveModes(modes) {
@@ -813,6 +820,7 @@
       random_enabled: false,
       random_symbol_id: '',     // 哪個符號帶隨機倍數(空=任意特定符號)
       random_values: [],        // Array<{mult, weight}>
+      migrated_to_symbols: false,  // v6.3 / Q3:是否已把資料併入符號/模式(一次性遷移旗標)
     };
   }
   function makeMultValue(mult, weight) {
@@ -868,6 +876,95 @@
       link_jackpot: '',         // 對應 13_Jackpots 的 jp_id(空=純面額)
     };
   }
+
+  // ─── v6.3 / Q3:符號自帶倍數 / 彩金倍數 entry-maker ───
+  //   mult_values  項:{ mult, weight }      —「倍數」×N(× 數字前)
+  //   prize_values 項:{ value, weight, link_jackpot, weight_by_mode } —「彩金倍數」N× / 金幣面額
+  function makeMultValueEntry(mult, weight) {
+    return { mult: Number(mult) || 2, weight: Number(weight) || 100 };
+  }
+  function makePrizeValueEntry(value, weight) {
+    return {
+      value: Number(value) || 1,
+      weight: Number(weight) || 100,
+      link_jackpot: '',
+      weight_by_mode: {},
+    };
+  }
+
+  // ─── v6.3 / Q3:一次性遷移 — 把舊 15_Multipliers / 16_Coin_Values 併入符號 + 模式 ───
+  //   純函式:就地修改傳入的 symbols / modes 副本,回傳 { changed }。
+  //   呼叫端負責:傳入 clone、遷移後設 multipliers.migrated_to_symbols = true 並存回。
+  //   冪等:multipliers.migrated_to_symbols 為 true 時直接跳過。
+  //   只在「目標符號該欄位為空」時才寫入,避免覆蓋使用者新資料。
+  function migrateSymbolMults(symbols, multipliers, coinValues, modes) {
+    const mp = multipliers || {};
+    const cv = coinValues || {};
+    symbols = Array.isArray(symbols) ? symbols : [];
+    modes   = Array.isArray(modes) ? modes : [];
+    if (mp.migrated_to_symbols) return { changed: false };
+    let changed = false;
+
+    const findSym = (sid) => {
+      if (!sid) return null;
+      return symbols.find(s => (s.symbol_id || '') === sid) ||
+             symbols.find(s => s.name === sid) || null;
+    };
+    const isEmptyArr = (a) => !Array.isArray(a) || a.length === 0;
+
+    // WILD → wild 符號 mult_values
+    if (mp.wild_mult_enabled) {
+      const vals = (Array.isArray(mp.wild_mult_values) && mp.wild_mult_values.length)
+        ? mp.wild_mult_values.map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0 }))
+        : [{ mult: Number(mp.wild_mult_fixed) || 2, weight: 100 }];
+      symbols.forEach(s => {
+        if ((s.is_wild || s.type === 'WILD') && isEmptyArr(s.mult_values)) {
+          s.mult_values = vals.map(v => ({ ...v }));
+          changed = true;
+        }
+      });
+    }
+
+    // RANDOM → random_symbol_id 符號 mult_values
+    if (mp.random_enabled && mp.random_symbol_id) {
+      const tgt = findSym(mp.random_symbol_id);
+      if (tgt && isEmptyArr(tgt.mult_values)) {
+        tgt.mult_values = (Array.isArray(mp.random_values) ? mp.random_values : [])
+          .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0 }));
+        changed = true;
+      }
+    }
+
+    // PROGRESS → 各模式 progress_ladder / progress_reset
+    if (mp.progress_enabled) {
+      const ladders = (mp.progress_ladders && typeof mp.progress_ladders === 'object') ? mp.progress_ladders : {};
+      const resetGlobal = mp.progress_reset_on_mode !== false;
+      modes.forEach(md => {
+        const arr = ladders[md.mode];
+        if (Array.isArray(arr) && arr.length && isEmptyArr(md.progress_ladder)) {
+          md.progress_ladder = arr.map(Number).filter(n => !isNaN(n) && n > 0);
+          md.progress_reset = resetGlobal;
+          changed = true;
+        }
+      });
+    }
+
+    // COIN denominations → coin 符號 prize_values
+    if (cv.enabled && Array.isArray(cv.denominations) && cv.denominations.length) {
+      const tgt = findSym(cv.coin_symbol_id || 'COIN') || symbols.find(s => s.type === 'COIN');
+      if (tgt && isEmptyArr(tgt.prize_values)) {
+        tgt.prize_values = cv.denominations.map(d => ({
+          value: Number(d.value) || 0,
+          weight: 100,
+          link_jackpot: d.link_jackpot || '',
+          weight_by_mode: (d.weight_by_mode && typeof d.weight_by_mode === 'object') ? { ...d.weight_by_mode } : {},
+        }));
+        changed = true;
+      }
+    }
+
+    return { changed };
+  }
   function loadCoinValues() {
     try {
       const raw = localStorage.getItem(LS_COIN_VALUES_KEY);
@@ -900,12 +997,13 @@
   const LS_BET_CONFIG_KEY = 'slotplanner.aconfig.betconfig.v1';
   function defaultBetConfig() {
     return {
-      // ── Ante Bet ──
-      ante_bet_enabled:  false,    // 是否啟用 Ante Bet
+      // ── Extra Bet(原 Ante Bet;欄位名保留 ante_bet_* 維持 14_Bet_Config 匯出契約)──
+      ante_bet_enabled:  false,    // 是否啟用 Extra Bet(加押)
       ante_bet_mult:     1.25,     // 成本倍數(預設 ×1.25 注額)
       ante_bet_trigger_mult: 2.0,  // 觸發機率乘數(如 SCAT 觸發率 ×2)
       ante_bet_desc:     '',       // 企劃說明(供文件生成)
-      // ── Buy Feature ──
+      // ── Buy Feature(購買)──
+      buy_feature_enabled: false,  // v6.2 #2:Buy Feature 主開關(先決定啟用,再顯示項目)
       buy_features: [],            // Array<BuyFeatureDef>
     };
   }
@@ -925,12 +1023,15 @@
       if (!raw) return defaultBetConfig();
       const d = JSON.parse(raw);
       const def = defaultBetConfig();
+      const bfs = Array.isArray(d.buy_features)
+        ? d.buy_features.map(bf => ({ ...makeBuyFeature(''), ...bf }))
+        : [];
       return {
         ...def,
         ...d,
-        buy_features: Array.isArray(d.buy_features)
-          ? d.buy_features.map(bf => ({ ...makeBuyFeature(''), ...bf }))
-          : [],
+        // 舊設定沒有此旗標但已有購買項目 → 視為啟用,避免既有資料被藏起來
+        buy_feature_enabled: (d.buy_feature_enabled != null) ? !!d.buy_feature_enabled : bfs.length > 0,
+        buy_features: bfs,
       };
     } catch (e) {
       console.warn('[config-editor] loadBetConfig failed:', e);
@@ -957,7 +1058,13 @@
       mult: 0,             // FIXED:倍數(×注額);PROGRESSIVE:起始彩池 seed(×注額)
       increment_pct: 0,    // v5.2:PROGRESSIVE 注金抽成 %(0–100,文件/數值用)
       must_hit_by: 0,      // v5.2:必開上限(×注額;0=無)
-      trigger_desc: '',    // 觸發說明(自由文字)
+      trigger_desc: '',    // 觸發說明(自由文字;空白時文件改用下列結構化欄位組合)
+      // v6.2 #4:觸發拼圖 — ACCUMULATE 累積 / COLLECT 收集
+      trigger_type:  'COLLECT',
+      accum_pct:     0,    // 累積:押注提撥 %(每注貢獻)
+      accum_mech:    '',   // 累積:或指定機制 / 符號(文字)
+      collect_prob:  0,    // 收集:觸發符號出現機率 %
+      collect_enter: '',   // 收集:或需進入哪個模式(FG/BG)才開始收集
       mode_scope: 'ALL',   // 適用模式(ALL 或模式名,逗號分隔)
       notes: '',
     };
@@ -992,7 +1099,11 @@
     return {
       panel_id: panel_id || 'P1',
       col: 0, row: 0, width: 3, height: 3,
-      scroll: false,
+      scroll: true,           // 保留(=panel_type==='SCROLL');維持 02b_Panels 的 Scroll 欄與 py 契約
+      panel_type: 'SCROLL',   // v6.2 盤面#4/#12:SCROLL 滾動 / COLLECT 蒐集 / TRIGGER 觸發
+      trigger_symbol: '',     // v6.2:TRIGGER 型 — 由哪個符號滾出時激活
+      trigger_reel: 0,        // v6.3 / Q2(c):TRIGGER 指定輪(0=任意輪;1..n=指定)
+      collect_target_jp: '',  // v6.3 / Q2(b):COLLECT 型副盤餵入的 JP(jp_id;限 COLLECT 型 JP)
       symbol_set: '',
       inherit_weight: true,   // 預設沿用主輪保底，避免空盤
       join_payline: false,    // 預設不參與主盤連線（你的決策:可自行選）
@@ -1005,7 +1116,13 @@
       if (!raw) return [];
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return [];
-      return arr.map(p => ({ ...makePanel(p.panel_id), ...p }));
+      return arr.map(p => {
+        const merged = { ...makePanel(p.panel_id), ...p };
+        // v6.2 遷移:舊資料無 panel_type → 依舊的 scroll 布林推導(滾動→SCROLL,否則→COLLECT)
+        if (!p.panel_type) merged.panel_type = (p.scroll === false ? 'COLLECT' : 'SCROLL');
+        merged.scroll = (merged.panel_type === 'SCROLL');   // 同步,維持匯出契約
+        return merged;
+      });
     } catch (e) {
       console.warn('[config-editor] loadPanels failed:', e);
       return [];
@@ -1157,6 +1274,202 @@
       }
     }
     return { valid: true, msg: '', points: parsed.points };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  //  v6.2 / Q4:中獎線自動產生（純函式，無 Vue 依賴，可單測）
+  //
+  //  generatePaylinePoints(opts) → { points, available, capped, reason }
+  //    opts.reelCount  輪數
+  //    opts.rows       number[]，每輪 max_rows（長度 = reelCount）
+  //    opts.method     'general'（一般線，maxStep=2）| 'adjacent'（相鄰≤1，maxStep=1）
+  //    opts.count      要產生幾條（10–50 由 UI 夾擠，這裡只做安全夾擠）
+  //    opts.lineMode   true 時強制「前 3 格不重複」（對齊後端 a_loader 與重疊偵測）
+  //
+  //  排序策略（升序，越前面越「常見/對稱/好看」）：
+  //    tier 0 = 保證集（依序：水平 top→down、V、Λ、對角下 Z、對角上 N）
+  //    tier 1 = 其餘平滑線，依 niceness 分數（總位移 + 單步 + 對稱 + 轉折）
+  //
+  //  決策（已確認）：(a) maxStep=2、水平 top→down、不規則盤面由 UI 端先擋。
+  // ──────────────────────────────────────────────────────────
+  function _clampRow(row, ri, rows) {
+    const hi = rows[ri] || 1;
+    return Math.min(Math.max(row, 1), hi);
+  }
+
+  // 列舉所有「相鄰輪列差 ≤ maxStep」的線（DFS，每輪夾在 1..rows[i]）
+  function _enumerateSmoothLines(reelCount, rows, maxStep) {
+    const out = [];
+    const path = new Array(reelCount);
+    (function dfs(i, prevRow) {
+      if (i === reelCount) { out.push(path.slice()); return; }
+      const hiRow = rows[i] || 1;
+      const lo = i === 0 ? 1 : Math.max(1, prevRow - maxStep);
+      const hi = i === 0 ? hiRow : Math.min(hiRow, prevRow + maxStep);
+      for (let r = lo; r <= hi; r++) {
+        path[i] = { reel: i + 1, row: r };
+        dfs(i + 1, r);
+      }
+    })(0, 0);
+    return out;
+  }
+
+  function _lineToKey(line) {
+    return line.map(p => `${p.reel},${p.row}`).join('-');
+  }
+  function _linePrefix3(line) {
+    return line.slice(0, 3).map(p => `${p.reel},${p.row}`).join('-');
+  }
+
+  // 保證集形狀產生器（與 PAYLINE_PRESETS 同邏輯，但獨立、可夾擠）
+  function _buildGuaranteedLines(reelCount, rows, maxStep) {
+    const n = reelCount;
+    const mid = (n - 1) / 2;
+    const lines = [];
+    // 1) 水平線 row = 1..maxH（top→down）
+    const maxH = rows.reduce((m, h) => Math.max(m, h || 1), 1);
+    for (let k = 1; k <= maxH; k++) {
+      lines.push({
+        name: k === 1 ? '頂列直線' : (k === maxH ? '底列直線' : `第 ${k} 列橫線`),
+        line: Array.from({ length: n }, (_, i) => ({ reel: i + 1, row: _clampRow(k, i, rows) })),
+      });
+    }
+    // 2) V 型（中間最深 / 靠底）
+    lines.push({
+      name: 'V 型',
+      line: Array.from({ length: n }, (_, i) => {
+        const t = mid === 0 ? 0 : Math.abs(i - mid) / mid;   // 0 中心,1 邊緣
+        const row = Math.max(1, Math.round((rows[i] || 1) - t * ((rows[i] || 1) - 1)));
+        return { reel: i + 1, row: _clampRow((rows[i] || 1) - row + 1, i, rows) };
+      }),
+    });
+    // 3) 倒 V 型（中間到頂）
+    lines.push({
+      name: '倒 V 型',
+      line: Array.from({ length: n }, (_, i) => {
+        const t = mid === 0 ? 0 : Math.abs(i - mid) / mid;
+        const row = Math.max(1, Math.round(1 + t * ((rows[i] || 1) - 1)));
+        return { reel: i + 1, row: _clampRow(row, i, rows) };
+      }),
+    });
+    // 4) 對角下行 Z（頂→底）
+    lines.push({
+      name: '對角(下行)',
+      line: Array.from({ length: n }, (_, i) => {
+        const t = n === 1 ? 0 : i / (n - 1);
+        return { reel: i + 1, row: _clampRow(Math.round(1 + t * ((rows[i] || 1) - 1)), i, rows) };
+      }),
+    });
+    // 5) 對角上行 N（底→頂）
+    lines.push({
+      name: '對角(上行)',
+      line: Array.from({ length: n }, (_, i) => {
+        const t = n === 1 ? 0 : i / (n - 1);
+        return { reel: i + 1, row: _clampRow(Math.round((rows[i] || 1) - t * ((rows[i] || 1) - 1)), i, rows) };
+      }),
+    });
+    // 只保留滿足 maxStep 限制者（保證集不可違反當前 maxStep,否則注入非法線）
+    const passed = [];
+    for (const item of lines) {
+      let ok = true;
+      for (let i = 1; i < item.line.length; i++) {
+        if (Math.abs(item.line[i].row - item.line[i - 1].row) > maxStep) { ok = false; break; }
+      }
+      if (ok) passed.push(item);
+    }
+    return passed;
+  }
+
+  // niceness 分數（越低越好）
+  function _lineNiceness(line) {
+    let travel = 0, maxStep = 0, turns = 0, prevSign = 0;
+    for (let i = 1; i < line.length; i++) {
+      const d = line[i].row - line[i - 1].row;
+      const ad = Math.abs(d);
+      travel += ad;
+      if (ad > maxStep) maxStep = ad;
+      const sign = d > 0 ? 1 : (d < 0 ? -1 : 0);
+      if (sign !== 0) {
+        if (prevSign !== 0 && sign !== prevSign) turns++;
+        prevSign = sign;
+      }
+    }
+    // 對稱（回文）加分
+    let sym = 0;
+    const n = line.length;
+    for (let i = 0; i < Math.floor(n / 2); i++) {
+      if (line[i].row !== line[n - 1 - i].row) { sym = 1; break; }
+    }
+    return travel + maxStep * 2 + sym * 6 + turns * 2;
+  }
+
+  // 主產生器
+  function generatePaylinePoints(opts) {
+    opts = opts || {};
+    const reelCount = Math.max(1, Number(opts.reelCount) || 0);
+    const rows = Array.isArray(opts.rows) && opts.rows.length === reelCount
+      ? opts.rows.map(r => Math.max(1, Number(r) || 1))
+      : Array.from({ length: reelCount }, () => 3);
+    const method = opts.method === 'adjacent' ? 'adjacent' : 'general';
+    const maxStep = method === 'adjacent' ? 1 : 2;
+    const lineMode = opts.lineMode !== false;   // 預設依 LINE 規則去前 3 格重複
+    let count = Math.max(1, Math.floor(Number(opts.count) || 0));
+
+    if (reelCount < 1) return { points: [], available: 0, capped: false, reason: 'no-reels' };
+
+    // 1) 候選池（含水平/V/Λ/對角等所有 ≤maxStep 平滑線）
+    const pool = _enumerateSmoothLines(reelCount, rows, maxStep);
+
+    // 2) 保證集排序索引
+    const guaranteed = _buildGuaranteedLines(reelCount, rows, maxStep);
+    const gOrder = new Map();      // key → 排序索引
+    const gName  = new Map();      // key → 形狀名（寫入 notes）
+    guaranteed.forEach((item, idx) => {
+      const k = _lineToKey(item.line);
+      if (!gOrder.has(k)) { gOrder.set(k, idx); gName.set(k, item.name); }
+    });
+
+    // 3) 去重 + 評分
+    const seenKey = new Set();
+    const scored = [];
+    for (const line of pool) {
+      const k = _lineToKey(line);
+      if (seenKey.has(k)) continue;
+      seenKey.add(k);
+      const gIdx = gOrder.has(k) ? gOrder.get(k) : null;
+      scored.push({
+        line, key: k,
+        tier: gIdx != null ? 0 : 1,
+        rank: gIdx != null ? gIdx : _lineNiceness(line),
+        name: gIdx != null ? gName.get(k) : '',
+      });
+    }
+    scored.sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0);   // 決定性 tie-break
+    });
+
+    // 4) 依序採用（LINE 模式強制前 3 格不重複），先算可用上限再夾擠 count
+    const accepted = [];
+    const prefixSeen = new Set();
+    for (const s of scored) {
+      if (lineMode && reelCount >= 3) {
+        const p3 = _linePrefix3(s.line);
+        if (prefixSeen.has(p3)) continue;
+        prefixSeen.add(p3);
+      }
+      accepted.push(s);
+    }
+    const available = accepted.length;
+    const capped = count > available;
+    const take = Math.min(count, available);
+    const out = accepted.slice(0, take).map((s, i) => ({
+      points: s.line.map(p => ({ reel: p.reel, row: p.row })),
+      name: s.name,
+      seq: i + 1,
+    }));
+    return { points: out, available, capped, reason: '' };
   }
 
   // ──────────────────────────────────────────────────────────
@@ -2382,13 +2695,14 @@
     LS_BONUS_GAMES_KEY, defaultBonusGames, makeBonusItem, makeBonusGame, loadBonusGames, saveBonusGames,
     LS_MULTIPLIERS_KEY, defaultMultipliers, makeMultValue, loadMultipliers, saveMultipliers, parseLadder,
     LS_COIN_VALUES_KEY, defaultCoinValues, makeCoinDenom, loadCoinValues, saveCoinValues,
+    makeMultValueEntry, makePrizeValueEntry, migrateSymbolMults,
     LS_BET_CONFIG_KEY, defaultBetConfig, makeBuyFeature, loadBetConfig, saveBetConfig,
     LS_JACKPOTS_KEY, makeJackpot, loadJackpots, saveJackpots,
     LS_SYMBOLSETS_KEY, loadSymbolSets, saveSymbolSets,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
-    savePaylines, parsePathString, validatePayline, LS_CONSTRAINTS_KEY,
+    savePaylines, parsePathString, validatePayline, generatePaylinePoints, LS_CONSTRAINTS_KEY,
     CONSTRAINT_TYPES, makeConstraint, DEFAULT_CONSTRAINTS, loadConstraints,
     saveConstraints, LS_REELW_KEY, loadReelWeights, saveReelWeights,
     LS_GRIDW_KEY, DEFAULT_GRID_SIZES, loadGridWeights, saveGridWeights,

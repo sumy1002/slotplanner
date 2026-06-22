@@ -62,6 +62,68 @@
     return actions.filter(a => a && a.atype).map(_encodeAction).join('; ');
   }
 
+  // v6.3 / Q3:由「符號 mult_values/prize_values + 模式 progress_ladder」反推。
+  //   回傳 { perSymbol, legacy }。legacy 為 best-effort 對應舊 15/16 格式(只能表達單一
+  //   WILD / RANDOM / COIN 來源;完整資料以 15b_Symbol_Mults 為權威)。
+  function _deriveSymbolMults(syms, modes) {
+    const list = Array.isArray(syms) ? syms.filter(s => s && s.enabled !== false) : [];
+    const sidOf = (s) => (s.symbol_id && String(s.symbol_id).trim()) || s.name || ('#' + s.number);
+    const normMults = (a) => (Array.isArray(a) ? a : [])
+      .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0 }))
+      .filter(v => v.mult > 0);
+    const normPrizes = (a) => (Array.isArray(a) ? a : [])
+      .map(v => ({
+        value: Number(v.value) || 0,
+        weight: Number(v.weight) || 0,
+        link_jackpot: (v.link_jackpot != null ? String(v.link_jackpot) : ''),
+        weight_by_mode: (v.weight_by_mode && typeof v.weight_by_mode === 'object') ? v.weight_by_mode : {},
+      }))
+      .filter(v => v.value > 0 || v.link_jackpot);
+
+    const perSymbol = [];
+    for (const s of list) {
+      const mults = normMults(s.mult_values);
+      const prizes = normPrizes(s.prize_values);
+      if (mults.length || prizes.length) {
+        perSymbol.push({ sid: sidOf(s), name: s.name || '', is_wild: !!s.is_wild || s.type === 'WILD', mults, prizes });
+      }
+    }
+
+    // legacy best-effort:取首個 wild / 首個非 wild / 首個帶 prize 的符號
+    const wildSym = perSymbol.find(p => p.is_wild && p.mults.length);
+    const randSym = perSymbol.find(p => !p.is_wild && p.mults.length);
+    const coinSym = perSymbol.find(p => p.prizes.length);
+
+    const ladders = {};
+    let progressReset = true, progressEnabled = false, resetSet = false;
+    for (const m of (Array.isArray(modes) ? modes : [])) {
+      const arr = Array.isArray(m.progress_ladder)
+        ? m.progress_ladder.map(Number).filter(n => !isNaN(n) && n > 0) : [];
+      if (arr.length) {
+        ladders[m.mode] = arr;
+        progressEnabled = true;
+        if (!resetSet) { progressReset = m.progress_reset !== false; resetSet = true; }
+      }
+    }
+
+    return {
+      perSymbol,
+      legacy: {
+        wild_enabled: !!wildSym,
+        wild_values: wildSym ? wildSym.mults : [],
+        random_enabled: !!randSym,
+        random_symbol_id: randSym ? randSym.sid : '',
+        random_values: randSym ? randSym.mults : [],
+        progress_enabled: progressEnabled,
+        progress_reset: progressReset,
+        progress_ladders: ladders,
+        coin_enabled: !!coinSym,
+        coin_symbol_id: coinSym ? coinSym.sid : 'COIN',
+        denoms: coinSym ? coinSym.prizes : [],
+      },
+    };
+  }
+
   // ════════════════════════════════════════════════════════════════════
   //  公開:從 localStorage 直接生 A.xlsx ArrayBuffer
   //  讓 SimPage 等其他 component 可以拿來餵 Pyodide,不必經過實體檔案
@@ -142,6 +204,7 @@
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
       ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
       ['15_Multipliers', '倍數系統(v5.4:Wild/Progress/Random;選用;引擎讀取)'],
+      ['15b_Symbol_Mults', '符號倍數/彩金 權威表(v6.3:Kind=MULT/PRIZE;選用;前端權威)'],
       ['16_Coin_Values', '金幣面額(v5.4:Hold&Win;選用;引擎讀取)'],
       ['17_Bonus_Games', 'Bonus 小遊戲(v6.0-c:輪盤/選獎/收集;選用;引擎讀取)'],
     ]);
@@ -170,15 +233,19 @@
     // 02b_Panels(v4.7:自由副盤;無 panel → 仍寫表頭，引擎讀到空 → panels=[])
     const wsPnl = wb.addWorksheet("02b_Panels");
     wsPnl.addRow(['Panel_ID', 'Col', 'Row', 'Width', 'Height',
-                'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note']);
+                'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note',
+                'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel']);
     for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
       if (!p || !p.panel_id) continue;
+      // v6.2:Scroll 由 panel_type 推導(向後相容:無 panel_type 時用舊 scroll)
+      const ptype = p.panel_type || (p.scroll === false ? 'COLLECT' : 'SCROLL');
       wsPnl.addRow([
         p.panel_id, p.col || 0, p.row || 0, p.width || 3, p.height || 3,
-        !!p.scroll, p.symbol_set || '', !!p.inherit_weight, !!p.join_payline, p.note || '',
+        (ptype === 'SCROLL'), p.symbol_set || '', !!p.inherit_weight, !!p.join_payline, p.note || '',
+        ptype, p.trigger_symbol || '', p.collect_target_jp || '', Number(p.trigger_reel) || 0,
       ]);
     }
-    boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20]);
+    boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12]);
 
     // 03b_Symbol_Sets(v4.7:符號集 D;{set: [sym,...]} 攤平成多列)
     const wsSS = wb.addWorksheet('03b_Symbol_Sets');
@@ -417,14 +484,18 @@
     const wsJ = wb.addWorksheet('13_Jackpots');
     // v5.2:Kind=FIXED/PROGRESSIVE;Multiplier 在 PROGRESSIVE 語義為起始彩池 seed(×注額)
     wsJ.addRow(['JP_ID', 'Name', 'Kind', 'Multiplier', 'Increment_Pct', 'Must_Hit_By',
-                'Trigger_Desc', 'Mode_Scope', 'Notes']);
+                'Trigger_Desc', 'Trigger_Type', 'Accum_Pct', 'Accum_Mech', 'Collect_Prob', 'Collect_Enter',
+                'Mode_Scope', 'Notes']);
     for (const j of (Array.isArray(jackpots) ? jackpots : [])) {
       if (!j || (!j.name && !j.jp_id)) continue;
       wsJ.addRow([j.jp_id || '', j.name || '', j.kind || 'FIXED', Number(j.mult) || 0,
                   Number(j.increment_pct) || 0, Number(j.must_hit_by) || 0,
-                  j.trigger_desc || '', j.mode_scope || 'ALL', j.notes || '']);
+                  j.trigger_desc || '', j.trigger_type || 'COLLECT',
+                  Number(j.accum_pct) || 0, j.accum_mech || '',
+                  Number(j.collect_prob) || 0, j.collect_enter || '',
+                  j.mode_scope || 'ALL', j.notes || '']);
     }
-    boldHdr(wsJ); setCols(wsJ, [10, 16, 13, 12, 13, 12, 30, 14, 24]);
+    boldHdr(wsJ); setCols(wsJ, [10, 16, 13, 12, 13, 12, 26, 12, 11, 22, 12, 22, 14, 22]);
 
     // 14_Bet_Config(v5.3:選用分頁;引擎讀取。無 Buy Feature → 仍寫 Ante Bet 區塊 + 空清單)
     const wsBet = wb.addWorksheet('14_Bet_Config');
@@ -446,8 +517,23 @@
     boldHdr(wsBet); setCols(wsBet, [22, 16, 12, 12, 10, 28]);
 
     // 15_Multipliers(v5.4:三段 — WILD / PROGRESS / RANDOM。引擎讀取;選用分頁)
+    //   v6.3 / Q3:來源改由符號/模式反推;符號無資料時 fallback 舊 multipliers 物件(遷移前相容)。
+    const derivedMults = _deriveSymbolMults(syms, modes);
+    const mpRaw = (typeof multipliers === 'object' && multipliers) ? multipliers : {};
+    const dl = derivedMults.legacy;
+    const useDerived = dl.wild_enabled || dl.random_enabled || dl.progress_enabled || dl.coin_enabled;
+    const mp = useDerived ? {
+      wild_mult_enabled:      dl.wild_enabled,
+      wild_mult_fixed:        Number(mpRaw.wild_mult_fixed) || 0,
+      wild_mult_values:       dl.wild_values,
+      progress_enabled:       dl.progress_enabled,
+      progress_reset_on_mode: dl.progress_reset,
+      progress_ladders:       dl.progress_ladders,
+      random_enabled:         dl.random_enabled,
+      random_symbol_id:       dl.random_symbol_id,
+      random_values:          dl.random_values,
+    } : mpRaw;
     const wsMul = wb.addWorksheet('15_Multipliers');
-    const mp = (typeof multipliers === 'object' && multipliers) ? multipliers : {};
     wsMul.addRow(['Section', 'Key', 'Value', 'Weight', 'Notes']);
     // WILD
     wsMul.addRow(['WILD', 'Enabled',     !!mp.wild_mult_enabled, '', '']);
@@ -471,8 +557,13 @@
     boldHdr(wsMul); setCols(wsMul, [12, 14, 14, 10, 24]);
 
     // 16_Coin_Values(v5.4:Hold&Win 金幣面額。各模式權重展開成欄。引擎讀取;選用分頁)
+    //   v6.3 / Q3:來源改由符號 prize_values 反推;無資料時 fallback 舊 coinValues 物件。
     const wsCoin = wb.addWorksheet('16_Coin_Values');
-    const cv = (typeof coinValues === 'object' && coinValues) ? coinValues : {};
+    const cvRaw = (typeof coinValues === 'object' && coinValues) ? coinValues : {};
+    const cv = dl.coin_enabled
+      ? { enabled: true, coin_symbol_id: dl.coin_symbol_id,
+          denominations: dl.denoms.map(d => ({ label: '', value: d.value, link_jackpot: d.link_jackpot, weight_by_mode: d.weight_by_mode })) }
+      : cvRaw;
     // 頭兩列 KV
     wsCoin.addRow(['Enabled', !!cv.enabled]);
     wsCoin.addRow(['Coin_Symbol_ID', cv.coin_symbol_id || 'COIN']);
@@ -488,6 +579,25 @@
       ]);
     }
     boldHdr(wsCoin); setCols(wsCoin, [16, 12, 14, ...coinModeNames.map(() => 10)]);
+
+    // 15b_Symbol_Mults(v6.3 / Q3:每符號倍數/彩金的「權威」分頁;py 忽略未知分頁,加表安全)
+    //   Kind=MULT → Value=倍數(×N)、Weight=權重;Kind=PRIZE → Value=面額(N×)、Weight=基礎權重、
+    //   Link_JP=連結 JP、W_<mode>=各模式權重。
+    const wsSm = wb.addWorksheet('15b_Symbol_Mults');
+    const smModeNames = modeNames.slice();
+    wsSm.addRow(['Symbol_ID', 'Kind', 'Value', 'Weight', 'Link_JP', ...smModeNames.map(m => 'W_' + m)]);
+    for (const p of derivedMults.perSymbol) {
+      for (const mv of p.mults) {
+        wsSm.addRow([p.sid, 'MULT', Number(mv.mult) || 0, Number(mv.weight) || 0, '', ...smModeNames.map(() => '')]);
+      }
+      for (const pz of p.prizes) {
+        const wbm = pz.weight_by_mode || {};
+        wsSm.addRow([p.sid, 'PRIZE', Number(pz.value) || 0, Number(pz.weight) || 0, pz.link_jackpot || '',
+                     ...smModeNames.map(m => (wbm[m] != null ? Number(wbm[m]) || 0 : ''))]);
+      }
+    }
+    boldHdr(wsSm); setCols(wsSm, [16, 8, 12, 10, 16, ...smModeNames.map(() => 10)]);
+
 
     // 17_Bonus_Games(v6.0-c:每個 game 一段 KV header + 其 items 列。引擎讀取;選用)
     const wsBonus = wb.addWorksheet('17_Bonus_Games');

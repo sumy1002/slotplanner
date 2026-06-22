@@ -25,6 +25,7 @@ from .schemas import (
     SymbolDef, SymbolType,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
     Constraint, ConstraintType,
+    mode_in_scope,
 )
 
 
@@ -436,8 +437,8 @@ class ReelGenerator:
         counts = self.count_symbols(grid)
 
         for c in self._constraints:
-            # mode_scope 過濾：ALL 或與 current mode 一致
-            if c.mode_scope != "ALL" and c.mode_scope != mode:
+            # mode_scope 過濾：ALL / 單模式 / 逗號多模式(v6.2)皆支援
+            if not mode_in_scope(c.mode_scope, mode):
                 continue
 
             if c.ctype == ConstraintType.REEL_RESTRICT:

@@ -494,3 +494,24 @@ class ConfigValidationError(Exception):
 class PuzzleLoopError(RuntimeError):
     """腳本引擎死循環(由 run.py 捕捉並計入 hard_discard)"""
     pass
+
+
+# ============================================================
+# v6.2 硬約束 #2:多模式 mode_scope 比對工具(單一真相)
+# ============================================================
+def mode_in_scope(scope: str, mode: str) -> bool:
+    """判斷 current ``mode`` 是否落在 ``mode_scope`` 內。
+
+    向後相容:
+      - ``scope`` 為 None / 空字串 / ``"ALL"`` → 一律 True(全模式適用)。
+      - 單一模式名(如 ``"NG"``)→ 完全比對(行為與舊版一致)。
+    v6.2 新增:
+      - 逗號分隔的多模式(如 ``"NG,FG1"``)→ 任一相符即 True。
+    """
+    if scope is None:
+        return True
+    s = str(scope).strip()
+    if not s or s == "ALL":
+        return True
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    return mode in parts

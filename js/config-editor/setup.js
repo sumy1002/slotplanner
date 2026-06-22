@@ -42,7 +42,7 @@
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
     loadBins, saveBins, parseBinEdges, LS_PAYLINES_KEY,
     PAYLINE_DIRECTIONS, makePayline, DEFAULT_PAYLINES, loadPaylines,
-    savePaylines, parsePathString, validatePayline, LS_CONSTRAINTS_KEY,
+    savePaylines, parsePathString, validatePayline, generatePaylinePoints, LS_CONSTRAINTS_KEY,
     CONSTRAINT_TYPES, makeConstraint, DEFAULT_CONSTRAINTS, loadConstraints,
     saveConstraints, LS_REELW_KEY, loadReelWeights, saveReelWeights,
     LS_GRIDW_KEY, DEFAULT_GRID_SIZES, loadGridWeights, saveGridWeights,
@@ -1080,11 +1080,13 @@
       }
       function addPanel() {
         const p = makePanel(_nextPanelId());
-        // v4.8:預設擺在「整個視覺盤面」右側(含副盤借欄),留 1 欄間隙
-        p.col = layoutTotalCols.value + 1; p.row = 0;
+        // v4.8 / v6.2 #7:擺在「所有主輪欄 + 既有副盤」的最右側再 +1 欄,避免與任何已存在的盤重疊
+        let rightEdge = layoutTotalCols.value;
+        panels.forEach(ep => { rightEdge = Math.max(rightEdge, (Number(ep.col) || 0) + (Number(ep.width) || 1)); });
+        p.col = rightEdge + 1; p.row = 0;
         panels.push(p);
         activePanelIdx.value = panels.length - 1;
-        emit('status', { type: 'ok', msg: `已新增自由副盤 ${p.panel_id}` });
+        emit('status', { type: 'ok', msg: `已新增自由副盤 ${p.panel_id}（已自動避開既有盤面）` });
       }
       function removePanel(idx) {
         if (idx < 0 || idx >= panels.length) return;
@@ -1101,7 +1103,7 @@
         }
         emit('status', { type: 'ok', msg: `已移除自由副盤 ${pid}` });
       }
-      function selectPanel(idx) { activePanelIdx.value = idx; }
+      function selectPanel(idx) { activePanelIdx.value = idx; selectedReelIdxs.value = []; }
       function renamePanel(idx, newId) {
         if (idx < 0 || idx >= panels.length) return;
         const clean = String(newId || '').trim();
@@ -1177,15 +1179,13 @@
         const rows = layout.map(r => r.max_rows);
         return new Set(rows).size > 1;
       });
-      // 渲染用分頁群組:等高盤過濾掉 grid_size_weights
+      // v6.2 格數#1:格數權重分頁「常駐顯示」,非 Megaways 時改由 tabNotApplicable 反灰+提示(不再隱藏)
       const visibleTabGroups = computed(() =>
-        TABS_BY_GROUP.map(grp => ({
-          ...grp,
-          tabs: grp.tabs.filter(t => t.id !== 'grid_size_weights' || isVariableHeightBoard.value),
-        })).filter(grp => grp.tabs.length > 0)
+        TABS_BY_GROUP.map(grp => ({ ...grp, tabs: grp.tabs.slice() }))
+          .filter(grp => grp.tabs.length > 0)
       );
-      // 若目前停在格數權重頁、但盤面變回等高 → 自動切回 Reel 權重,避免停在隱藏頁
-      watch(isVariableHeightBoard, (v) => {
+      // 若目前停在格數權重頁、但離開 Megaways → 自動切回 Reel 權重,避免停在不適用頁
+      watch(() => g.megaways, (v) => {
         if (!v && active.value === 'grid_size_weights') active.value = 'reel_weights';
       });
 
@@ -1302,16 +1302,34 @@
           }
         }
       }
-      function swapReels(fromIdx, toIdx) {
-        if (fromIdx === toIdx) return;
-        if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return;
+      function _swapReelsCore(fromIdx, toIdx) {
+        if (fromIdx === toIdx) return false;
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return false;
         const a = layout[fromIdx], b = layout[toIdx];
         const ridA = a.reel_id, ridB = b.reel_id;
         const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight', 'subreel_kind', 'subreel_symbol_set'];
         for (const k of attrs) { const t = a[k]; a[k] = b[k]; b[k] = t; }
-        _swapReelWeightKeys(ridA, ridB);
+        _swapReelWeightKeys(ridA, ridB);   // 權重 key 跟著換(三段定址)
+        return true;
+      }
+      function swapReels(fromIdx, toIdx) {
+        const a = layout[fromIdx], b = layout[toIdx];
+        if (!a || !b) return;
+        const ridA = a.reel_id, ridB = b.reel_id;
+        if (_swapReelsCore(fromIdx, toIdx)) {
+          activeReelIdx.value = toIdx;
+          emit('status', { type: 'ok', msg: `已互換 R${ridA} ↔ R${ridB}(含列高/副輪/權重)` });
+        }
+      }
+      // v6.2 #6:移動插入(其餘讓位)— 以連續相鄰交換把該輪從 from 冒泡到 to,
+      //   重用 _swapReelsCore 的權重 key 重映,自然產生「讓位」效果
+      function moveReelInsert(fromIdx, toIdx) {
+        if (fromIdx === toIdx) return;
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= layout.length || toIdx >= layout.length) return;
+        const step = fromIdx < toIdx ? 1 : -1;
+        for (let i = fromIdx; i !== toIdx; i += step) _swapReelsCore(i, i + step);
         activeReelIdx.value = toIdx;
-        emit('status', { type: 'ok', msg: `已互換 R${ridA} ↔ R${ridB}(含列高/副輪/權重)` });
+        emit('status', { type: 'ok', msg: `已調整盤面順序(R${fromIdx + 1} → 第 ${toIdx + 1} 位,其餘讓位)` });
       }
       function onReelDragStart(idx, ev) {
         _dragReelIdx.value = idx;
@@ -1324,7 +1342,7 @@
       function onReelDragLeave(idx) { if (_dragOverIdx.value === idx) _dragOverIdx.value = -1; }
       function onReelDrop(idx) {
         const from = _dragReelIdx.value;
-        if (from >= 0 && from !== idx) swapReels(from, idx);
+        if (from >= 0 && from !== idx) moveReelInsert(from, idx);   // #6:與預覽一致改移動讓位
         _dragReelIdx.value = -1;
         _dragOverIdx.value = -1;
       }
@@ -1370,71 +1388,52 @@
       //  一鍵替換整個 layout — 90% 玩家點進去都是要這幾個常見盤
       // ──────────────────────────────────────────────────────────
       const LAYOUT_PRESETS = [
-        { key: 'std-5x3',  icon: '⬛', label: '5×3 標準',
-          note: '經典 5 reel 3 row,大部分線上 slot 起手式',
-          gen: () => Array.from({length: 5}, (_, i) => ({
-            reel_id: i+1, y_offset: 0, max_rows: 3,
+        { key: '3x1',  icon: '▬', label: '3×1',
+          note: '3 reel 單列,經典三轉盤',
+          gen: () => Array.from({length: 3}, (_, i) => ({
+            reel_id: i+1, y_offset: 0, max_rows: 1,
             has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
           })) },
-        { key: 'std-5x4',  icon: '⬜', label: '5×4 大盤',
-          note: '5 reel 4 row,空間更大,常見於 96% RTP 機台',
-          gen: () => Array.from({length: 5}, (_, i) => ({
-            reel_id: i+1, y_offset: 0, max_rows: 4,
-            has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
-          })) },
-        { key: 'std-6x4',  icon: '▦', label: '6×4 高盤',
-          note: '6 reel 4 row,適合 Cluster Pays 或多 Ways 設計',
-          gen: () => Array.from({length: 6}, (_, i) => ({
-            reel_id: i+1, y_offset: 0, max_rows: 4,
-            has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
-          })) },
-        { key: 'std-3x3',  icon: '◼', label: '3×3 小盤',
-          note: '3 reel 3 row,適合復古老虎機風格',
+        { key: '3x3',  icon: '◼', label: '3×3',
+          note: '3 reel 3 row,復古老虎機風格',
           gen: () => Array.from({length: 3}, (_, i) => ({
             reel_id: i+1, y_offset: 0, max_rows: 3,
             has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
           })) },
-        { key: 'diamond',  icon: '◆', label: 'Diamond 鑽石',
-          note: '5 reel 不規則高度(3-4-5-4-3),中間最高、兩側收斂',
-          gen: () => [
-            { reel_id: 1, y_offset:  1, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 2, y_offset:  0, max_rows: 4, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 3, y_offset: -1, max_rows: 5, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 4, y_offset:  0, max_rows: 4, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 5, y_offset:  1, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-          ] },
-        { key: 'megaways', icon: '⥯', label: 'Megaways 2-3-4-5-4-3-2',
-          note: '6 reel 變動列高(2/3/4/5/4/3/2),Megaways 經典開法',
-          gen: () => [2,3,4,5,4,3,2].map((rows, i) => ({
-            reel_id: i+1, y_offset: 0, max_rows: rows,
+        { key: '4x4',  icon: '▦', label: '4×4',
+          note: '4 reel 4 row',
+          gen: () => Array.from({length: 4}, (_, i) => ({
+            reel_id: i+1, y_offset: 0, max_rows: 4,
             has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
           })) },
-        { key: 'hold-win', icon: '🔒', label: 'Hold & Win 5×3 + 副 R',
-          note: '5×3 主盤 + 第 3 reel 含底部副 reel(1 列),Bonus 機制常用',
-          gen: () => [
-            { reel_id: 1, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 2, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 3, y_offset: 0, max_rows: 3, has_subreel: true,  subreel_position: 'BOTTOM', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
-            { reel_id: 4, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-            { reel_id: 5, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false },
-          ] },
-        { key: 'dual-panel', icon: '▥', label: '雙盤面 5×3 ×2',
-          note: 'Cashman Bingo 式;每個 reel 帶一張同尺寸、無滾動的第二盤(下方)',
+        { key: '5x3',  icon: '⬛', label: '5×3',
+          note: '經典 5 reel 3 row,最常見起手式',
           gen: () => Array.from({length: 5}, (_, i) => ({
             reel_id: i+1, y_offset: 0, max_rows: 3,
-            has_subreel: true, subreel_position: 'BOTTOM', subreel_rows: 3,
-            subreel_inherit_weight: true, subreel_kind: 'DUAL_PANEL',
+            has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
           })) },
-        { key: 'side-vertical', icon: '↕', label: '主盤 5×3 + 右側直副盤',
-          note: '主盤 5×3,最右一欄為與主盤無關的獨立直向副盤(3 列)',
+        { key: '5x4',  icon: '⬜', label: '5×4',
+          note: '5 reel 4 row,空間更大',
+          gen: () => Array.from({length: 5}, (_, i) => ({
+            reel_id: i+1, y_offset: 0, max_rows: 4,
+            has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
+          })) },
+        { key: '6x4',  icon: '▩', label: '6×4',
+          note: '6 reel 4 row,Cluster / 多 Ways 常用',
+          gen: () => Array.from({length: 6}, (_, i) => ({
+            reel_id: i+1, y_offset: 0, max_rows: 4,
+            has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
+          })) },
+        { key: 'megaways6', icon: '⥯', label: '6輪 Megaways + 副輪',
+          note: '6 reel 變動列高(2/4/4/4/4/2)+ 上方橫向副輪;會一併切到 Megaways 模式',
+          megaways: true,
           gen: () => [
-            ...Array.from({length: 5}, (_, i) => ({
-              reel_id: i+1, y_offset: 0, max_rows: 3,
-              has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false,
-            })),
-            { reel_id: 6, y_offset: 0, max_rows: 3, has_subreel: true,
-              subreel_position: 'RIGHT', subreel_rows: 3, subreel_inherit_weight: false,
-              subreel_kind: 'SIDE_VERTICAL' },
+            { reel_id: 1, y_offset: 0, max_rows: 2, has_subreel: false, subreel_position: '',    subreel_rows: 0, subreel_inherit_weight: false },
+            { reel_id: 2, y_offset: 0, max_rows: 4, has_subreel: true,  subreel_position: 'TOP', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
+            { reel_id: 3, y_offset: 0, max_rows: 4, has_subreel: true,  subreel_position: 'TOP', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
+            { reel_id: 4, y_offset: 0, max_rows: 4, has_subreel: true,  subreel_position: 'TOP', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
+            { reel_id: 5, y_offset: 0, max_rows: 4, has_subreel: true,  subreel_position: 'TOP', subreel_rows: 1, subreel_inherit_weight: true, subreel_kind: 'STACK' },
+            { reel_id: 6, y_offset: 0, max_rows: 2, has_subreel: false, subreel_position: '',    subreel_rows: 0, subreel_inherit_weight: false },
           ] },
       ];
 
@@ -1467,6 +1466,9 @@
         layout.splice(0, layout.length, ...rows);
         activeReelIdx.value = 0;
         layoutPresetMenuOpen.value = false;
+        // #1:版型自帶 megaways 旗標時,一併切換全域賠付模型(格數權重分頁也會跟著啟用)
+        if (preset.megaways) { g.pay_type = 'WAYS'; g.megaways = true; }
+        else { g.megaways = false; }
         emit('status', { type: 'ok', msg: `已套用盤面範本「${preset.label}」` });
         syncGameSpec('preset');   // 連動層:盤面輪數 → registry → 符號頁 reel_limit
       }
@@ -2451,6 +2453,27 @@
         bonusGames.games.push(makeBonusGame(`BG${i}`, type || 'WHEEL'));
       }
       function removeBonusGame(idx) { bonusGames.games.splice(idx, 1); }
+      // v6.2 Bonus #3:適用模式改 chip 多選(mode_scope = 'ALL' 或逗號分隔)
+      function toggleBonusMode(g, modeName) {
+        if (modeName === 'ALL') { g.mode_scope = 'ALL'; return; }
+        let cur = (g.mode_scope === 'ALL' || !g.mode_scope)
+          ? [] : g.mode_scope.split(',').map(x => x.trim()).filter(Boolean);
+        if (cur.includes(modeName)) cur = cur.filter(x => x !== modeName);
+        else cur.push(modeName);
+        g.mode_scope = cur.length ? cur.join(',') : 'ALL';
+      }
+      function bonusHasMode(g, modeName) {
+        if (modeName === 'ALL') return g.mode_scope === 'ALL' || !g.mode_scope;
+        if (g.mode_scope === 'ALL' || !g.mode_scope) return false;
+        return g.mode_scope.split(',').map(x => x.trim()).includes(modeName);
+      }
+      // v6.2 Bonus #2:JP 連結防重複 — 下拉只列「未被同關卡其他項目佔用」的 JP(保留本項目目前選的)
+      function bonusJpOptions(g, it) {
+        const usedByOthers = new Set(
+          (g.items || []).filter(x => x !== it && x.link_jackpot).map(x => x.link_jackpot)
+        );
+        return jackpots.filter(j => !usedByOthers.has(j.jp_id) || j.jp_id === it.link_jackpot);
+      }
       function addBonusItem(g) { g.items.push(makeBonusItem('', g.type === 'COLLECTION' ? 0 : 10, 100)); }
       function removeBonusItem(g, idx) { g.items.splice(idx, 1); }
       function bonusItemPct(g, idx) {
@@ -2598,11 +2621,44 @@
 
       // ── v5.1:JP 定義(13_Jackpots;文件生成自動帶入)──
       const jackpots = reactive(loadJackpots());
+
+      // v6.2 #1:JP 快選命名(由小到大 5 階)+ 各階預設倍數
+      const JP_PRESETS = ['MINI', 'MINOR', 'MAJOR', 'MAXI', 'GRAND'];
+      const JP_PRESET_MULT = { MINI: 10, MINOR: 50, MAJOR: 500, MAXI: 2000, GRAND: 10000 };
+
+      // v6.2 #2:全域類型 — 'FIXED' / 'PROGRESSIVE' 套用到全部;'CUSTOM' 各自設定
+      //   初值由現有 JP 推導:全同類 → 該類;混合或空 → CUSTOM
+      function deriveJpType() {
+        if (!jackpots.length) return 'CUSTOM';
+        const kinds = new Set(jackpots.map(j => (j.kind === 'PROGRESSIVE' ? 'PROGRESSIVE' : 'FIXED')));
+        return kinds.size === 1 ? [...kinds][0] : 'CUSTOM';
+      }
+      const jpGlobalType = ref(deriveJpType());
+      function setJpGlobalType(t) {
+        jpGlobalType.value = t;
+        if (t === 'FIXED' || t === 'PROGRESSIVE') {
+          jackpots.forEach(j => { j.kind = t; });   // 一次套用到全部
+        }
+      }
+
       function addJackpot() {
         const taken = new Set(jackpots.map(j => j.jp_id));
         let i = 1;
         while (taken.has(`JP${i}`)) i++;
-        jackpots.push(makeJackpot(`JP${i}`));
+        const j = makeJackpot(`JP${i}`);
+        if (jpGlobalType.value !== 'CUSTOM') j.kind = jpGlobalType.value;
+        jackpots.push(j);
+      }
+      // v6.2 #1:快選新增命名 JP
+      function addJackpotPreset(name) {
+        const taken = new Set(jackpots.map(j => j.jp_id));
+        let id = name, k = 2;
+        while (taken.has(id)) id = name + (k++);
+        const j = makeJackpot(id);
+        j.name = name;
+        j.mult = JP_PRESET_MULT[name] || 0;
+        j.kind = (jpGlobalType.value !== 'CUSTOM') ? jpGlobalType.value : 'FIXED';
+        jackpots.push(j);
       }
       function removeJackpot(idx) { jackpots.splice(idx, 1); }
       function toggleJackpotMode(j, modeName) {
@@ -3061,6 +3117,118 @@
       }
 
       // ──────────────────────────────────────────────────────────
+      //  v6.2 / Q4:中獎線自動產生(批次)
+      //   方式:general(一般線,maxStep=2)/ adjacent(相鄰≤1)
+      //   寫入:replace 取代全部 / append 去重追加
+      //   決策:不規則盤面先擋(僅等高盤面);線數 10–50
+      // ──────────────────────────────────────────────────────────
+      const paylineGenOpen   = ref(false);
+      const paylineGenMethod = ref('general');   // 'general' | 'adjacent'
+      const paylineGenCount  = ref(20);
+      const paylineGenMode   = ref('replace');   // 'replace' | 'append'
+
+      function togglePaylineGen(ev) {
+        if (ev) ev.stopPropagation();
+        paylineGenOpen.value = !paylineGenOpen.value;
+        if (paylineGenOpen.value) paylineAddMenuOpen.value = false;
+      }
+
+      // 等高盤面?(各輪 max_rows 相同)— 不規則盤面先擋
+      const paylineBoardUniform = computed(() => {
+        if (layout.length === 0) return false;
+        const h0 = layout[0].max_rows;
+        return layout.every(r => r.max_rows === h0);
+      });
+
+      // 此盤面 + 當前方式 的可用上限(LINE 前 3 格唯一規則下)
+      const paylineGenAvailable = computed(() => {
+        if (!paylineBoardUniform.value || layout.length === 0) return 0;
+        const rows = layout.map(r => r.max_rows);
+        const res = generatePaylinePoints({
+          reelCount: layout.length, rows,
+          method: paylineGenMethod.value, count: 9999,
+          lineMode: paylineLineMode.value,
+        });
+        return res.available;
+      });
+
+      function _clampGenCount() {
+        let n = Math.round(Number(paylineGenCount.value) || 0);
+        if (n < 10) n = 10;
+        if (n > 50) n = 50;
+        paylineGenCount.value = n;
+        return n;
+      }
+
+      function runPaylineGen() {
+        if (layout.length === 0) {
+          emit('status', { type: 'wait', msg: '請先在 02_Layout 設定盤面結構' });
+          return;
+        }
+        if (!paylineBoardUniform.value) {
+          emit('status', { type: 'err', msg: '自動產生目前僅支援等高盤面(各輪列數相同)' });
+          return;
+        }
+        const count = _clampGenCount();
+        const rows = layout.map(r => r.max_rows);
+        const res = generatePaylinePoints({
+          reelCount: layout.length, rows,
+          method: paylineGenMethod.value, count,
+          lineMode: paylineLineMode.value,
+        });
+        if (!res.points || res.points.length === 0) {
+          emit('status', { type: 'err', msg: '無法產生任何中獎線' });
+          return;
+        }
+        const dir = curScanDir.value || 'LTR';
+        const methodLabel = paylineGenMethod.value === 'adjacent' ? '相鄰≤1' : '一般';
+        const built = res.points.map((l, i) => ({
+          line_id: 0,
+          path: _pointsToPathString(_sortPointsByReel(l.points)),
+          direction: dir,
+          notes: l.name || `${methodLabel} #${i + 1}`,
+        }));
+
+        if (paylineGenMode.value === 'replace') {
+          if (paylines.length > 0 &&
+              !confirm(`將以 ${built.length} 條自動產生的中獎線「取代」現有 ${paylines.length} 條,確定?`)) return;
+          built.forEach((b, i) => { b.line_id = i + 1; });
+          paylines.splice(0, paylines.length, ...built);
+          selectedPaylineIdx.value = 0;
+          paylineGenOpen.value = false;
+          const note = res.capped ? `(已達此盤面上限 ${res.available} 條)` : '';
+          emit('status', { type: 'ok', msg: `已產生 ${built.length} 條中獎線;方式:${methodLabel}${note}` });
+        } else {
+          // append:以 path 去重、續號
+          const existing = new Set(paylines.map(p => p.path));
+          let nextId = _newPaylineNextId();
+          let added = 0;
+          for (const b of built) {
+            if (existing.has(b.path)) continue;
+            b.line_id = nextId++;
+            paylines.push(b);
+            existing.add(b.path);
+            added++;
+          }
+          selectedPaylineIdx.value = paylines.length - 1;
+          paylineGenOpen.value = false;
+          emit('status', { type: 'ok', msg: `已追加 ${added} 條(去重後);方式:${methodLabel}` });
+        }
+      }
+
+      // v6.2 / Q4:清空全部中獎線(與「取代/追加」湊成完整批次操作)
+      function clearAllPaylines() {
+        if (paylines.length === 0) {
+          emit('status', { type: 'wait', msg: '目前沒有中獎線' });
+          return;
+        }
+        if (!confirm(`確定清空全部 ${paylines.length} 條中獎線?此動作無法復原。`)) return;
+        paylines.splice(0, paylines.length);
+        selectedPaylineIdx.value = 0;
+        emit('status', { type: 'ok', msg: '已清空全部中獎線' });
+      }
+
+      // ──────────────────────────────────────────────────────────
       //  v3.2:總覽模式(所有中獎線疊加顯示,不同色)
       // ──────────────────────────────────────────────────────────
       const paylineOverviewMode = ref(false);
@@ -3149,6 +3317,20 @@
         return dup;
       });
 
+      // v6.2 硬約束#2:套用模式多選(mode_scope='ALL' 或逗號分隔;py 端 mode_in_scope 已支援)
+      function toggleConstraintMode(c, s) {
+        if (s === 'ALL') { c.mode_scope = 'ALL'; return; }
+        let cur = (c.mode_scope === 'ALL' || !c.mode_scope)
+          ? [] : c.mode_scope.split(',').map(x => x.trim()).filter(Boolean);
+        if (cur.includes(s)) cur = cur.filter(x => x !== s);
+        else cur.push(s);
+        c.mode_scope = cur.length ? cur.join(',') : 'ALL';
+      }
+      function constraintHasMode(c, s) {
+        if (s === 'ALL') return c.mode_scope === 'ALL' || !c.mode_scope;
+        if (c.mode_scope === 'ALL' || !c.mode_scope) return false;
+        return c.mode_scope.split(',').map(x => x.trim()).includes(s);
+      }
       function addConstraint() {
         const taken = new Set(constraints.map(c => c.constraint_id));
         let i = constraints.length + 1;
@@ -3322,8 +3504,69 @@
       // 需要在 04 顯示副輪權重列的 reel(獨立權重者)
       const independentSubReels = computed(() =>
         layout.filter(r => r.has_subreel && !r.subreel_inherit_weight));
+      // v6.3 / Q2(a):只有「會滾動圖示」的副盤(SCROLL/TRIGGER)需要權重;COLLECT 蒐集型不滾動,排除。
+      const scrollingPanels = computed(() =>
+        panels.filter(p => (p.panel_type || 'SCROLL') !== 'COLLECT'));
       const hasAuxWeightRows = computed(() =>
-        independentSubReels.value.length > 0 || panels.length > 0);
+        independentSubReels.value.length > 0 || scrollingPanels.value.length > 0);
+
+      // ── v6.3 / Q2(b):蒐集副盤 ↔ COLLECT 型 JP 雙向連動 ──
+      //   panel.collect_target_jp 指向某 COLLECT 型 JP;下拉只列 COLLECT 型 JP。
+      const collectJpOptions = computed(() =>
+        jackpots.filter(j => (j.trigger_type || 'COLLECT') === 'COLLECT'));
+      // 反查:此 JP 被哪些 COLLECT 副盤餵入(JP 端顯示)
+      function panelsFeedingJp(jpId) {
+        if (!jpId) return [];
+        return panels.filter(p => (p.panel_type || 'SCROLL') === 'COLLECT' && p.collect_target_jp === jpId);
+      }
+      // 驗證(不擋):panel 選的 JP 不存在 / 非 COLLECT 型
+      function panelCollectJpWarn(p) {
+        if (!p || (p.panel_type || 'SCROLL') !== 'COLLECT' || !p.collect_target_jp) return '';
+        const jp = jackpots.find(j => j.jp_id === p.collect_target_jp);
+        if (!jp) return `⚠ 連結的 JP「${p.collect_target_jp}」已不存在`;
+        if ((jp.trigger_type || 'COLLECT') !== 'COLLECT') return `⚠ 「${jp.jp_id}」非 COLLECT(收集)型 JP`;
+        return '';
+      }
+
+      // ── v6.3 / Q2(c):TRIGGER 副盤 → 自動產生規則(直接寫入 rules)──
+      //   trigger=ON_SYMBOL_LANDED;condition=symbol_count.<符號> >= 1(引擎合法,全盤出現);
+      //   action=EMIT_EVENT 廣播 activate_<panel_id>,指定輪資訊記於 payload + 描述。
+      //   (引擎無逐輪符號 condition 變數、亦無「啟用 panel」動作型,故以事件承載,契約不破。)
+      function genTriggerRule(p) {
+        if (!p || (p.panel_type || 'SCROLL') !== 'TRIGGER') {
+          emit('status', { type: 'err', msg: '此副盤非「觸發」型' });
+          return;
+        }
+        const trg = (p.trigger_symbol || '').trim();
+        if (!trg) { emit('status', { type: 'err', msg: '請先填觸發符號' }); return; }
+        const reelN = Number(p.trigger_reel) || 0;
+        const reelLabel = reelN >= 1 ? ('R' + reelN) : '任意輪';
+        const ev = 'activate_' + p.panel_id;
+        // 同一副盤已產生過就提示(以事件名判定),不重複
+        const dup = rules.find(r => Array.isArray(r.actions) &&
+          r.actions.some(a => a.atype === 'EMIT_EVENT' && a.params && a.params.name === ev));
+        if (dup) {
+          emit('status', { type: 'wait', msg: `已存在觸發 ${p.panel_id} 的規則(${dup.rule_id});未重複產生` });
+          return;
+        }
+        const rid = _nextRuleId();
+        const rule = {
+          ...makeRule(rid),
+          trigger: 'ON_SYMBOL_LANDED',
+          condition: `symbol_count.${trg} >= 1`,
+          actions: [{ atype: 'EMIT_EVENT', params: {
+            name: ev,
+            payload: `{panel:${p.panel_id}, symbol:${trg}, reel:${reelN >= 1 ? reelN : 'any'}}`,
+          } }],
+          emits: [ev],
+          mode_scope: 'ALL',
+          priority: 100,
+          description: `觸發副盤 ${p.panel_id}:當「${trg}」落於${reelLabel}時啟用` +
+                       `(引擎以全盤出現判定,指定輪資訊記於事件 payload)`,
+        };
+        rules.push(rule);
+        emit('status', { type: 'ok', msg: `已產生規則 ${rid}(觸發 ${p.panel_id});可到「腳本規則」分頁微調` });
+      }
       function auxRowTotal(kind, mode, id) {
         const e = auxW(mode);
         const table = kind === 'sub' ? e.sub_weights : e.panel_weights;
@@ -6466,7 +6709,7 @@
         'Bonus 小遊戲': 'bonus_games',       // v6.0-c:17_Bonus_Games
         '倍數系統':   'multipliers',        // v5.4:15_Multipliers
         '金幣面額':   'coin_values',        // v5.4:16_Coin_Values
-        'JP 定義':    'global',           // v5.1:JP 區塊掛在 01_Global
+        'JP 定義':    'jackpots',         // v6.2 #0:JP 已獨立分頁
         '範本':       null,            // 不歸屬任何 tab
       };
       function markTabDirty(label) {
@@ -6642,9 +6885,15 @@
             if (!bonusGames.games.some(x => x.bonus_id === g.wheel_upgrade_to))
               add('error', 'bonus_games', `Bonus ${id} 升級目標「${g.wheel_upgrade_to}」不存在`);
           }
+          const seenJp = new Set();
           for (const it of g.items) {
             if (it.link_jackpot && !jackpots.find(j => j.jp_id === it.link_jackpot))
               add('error', 'bonus_games', `Bonus ${id} 項目連結的 JP「${it.link_jackpot}」不存在`);
+            if (it.link_jackpot) {
+              if (seenJp.has(it.link_jackpot))
+                add('warn', 'bonus_games', `Bonus ${id} 重複連結同一個 JP「${it.link_jackpot}」`);
+              seenJp.add(it.link_jackpot);
+            }
           }
         }
 
@@ -6717,28 +6966,28 @@
           }
         }
 
-        // ─── 01_Global · JP 定義(v5.2)───
+        // ─── 13_Jackpots · JP 定義(v6.2:獨立分頁)───
         const jpIdSeen = new Set();
         for (const j of jackpots) {
           const jid = (j.jp_id || '').trim();
           if (!jid && !(j.name || '').trim()) continue;   // 全空列不檢查
           if (jid) {
-            if (jpIdSeen.has(jid)) add('error', 'global', `JP_ID 重複:${jid}`);
+            if (jpIdSeen.has(jid)) add('error', 'jackpots', `JP_ID 重複:${jid}`);
             jpIdSeen.add(jid);
           } else {
-            add('warn', 'global', `JP「${j.name}」缺 JP_ID,匯出後外部程式難以引用`);
+            add('warn', 'jackpots', `JP「${j.name}」缺 JP_ID,匯出後外部程式難以引用`);
           }
-          if (!(Number(j.mult) > 0)) add('warn', 'global', `JP ${j.name || jid} 的${j.kind === 'PROGRESSIVE' ? '起始彩池' : '倍數'}為 0`);
+          if (!(Number(j.mult) > 0)) add('warn', 'jackpots', `JP ${j.name || jid} 的${j.kind === 'PROGRESSIVE' ? '起始彩池' : '倍數'}為 0`);
           if (j.kind === 'PROGRESSIVE') {
             const inc = Number(j.increment_pct) || 0;
-            if (inc <= 0) add('warn', 'global', `累積 JP ${j.name || jid} 抽成 % 為 0,彩池不會成長`);
-            if (inc > 100) add('error', 'global', `累積 JP ${j.name || jid} 抽成 % 超過 100`);
+            if (inc <= 0) add('warn', 'jackpots', `累積 JP ${j.name || jid} 抽成 % 為 0,彩池不會成長`);
+            if (inc > 100) add('error', 'jackpots', `累積 JP ${j.name || jid} 抽成 % 超過 100`);
             const mhb = Number(j.must_hit_by) || 0;
-            if (mhb > 0 && mhb < Number(j.mult)) add('error', 'global', `累積 JP ${j.name || jid} 必開上限(${mhb}x)小於起始彩池(${j.mult}x)`);
+            if (mhb > 0 && mhb < Number(j.mult)) add('error', 'jackpots', `累積 JP ${j.name || jid} 必開上限(${mhb}x)小於起始彩池(${j.mult}x)`);
           }
           if (j.mode_scope && j.mode_scope !== 'ALL') {
             for (const mn of j.mode_scope.split(',').map(x => x.trim()).filter(Boolean)) {
-              if (!validModeSet.has(mn)) add('error', 'global', `JP ${j.name || jid} 的適用模式「${mn}」不在模式清單`);
+              if (!validModeSet.has(mn)) add('error', 'jackpots', `JP ${j.name || jid} 的適用模式「${mn}」不在模式清單`);
             }
           }
         }
@@ -7137,11 +7386,17 @@
 
         if (id === 'global') {
           // v3.1:global 同時涵蓋全域 + 模式定義(原 11_Mode_Config 已合併進來)
-          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· JP 定義(目前 ${jackpots.length} 個)\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
+          // v6.2:JP 已獨立成 jackpots 分頁,不再隨 global 重設
+          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
           Object.assign(g, DEFAULT_GLOBAL);
           modes.splice(0, modes.length, ...DEFAULT_MODES.map(m => ({ ...m })));
-          jackpots.splice(0, jackpots.length);   // v5.1:JP 隨 01_Global 一併重設
-          emit('status', { type: 'ok', msg: '已重設全域設定 + 模式定義 + JP 為預設值' });
+          emit('status', { type: 'ok', msg: '已重設全域設定 + 模式定義為預設值' });
+        } else if (id === 'jackpots') {
+          // v6.2 #0:JP 分頁重設 — 清空所有 JP(預設 0 個)
+          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${jackpots.length} 個 JP 定義\n\n回到 0 個 JP,此動作不可復原。`)) return;
+          jackpots.splice(0, jackpots.length);
+          jpGlobalType.value = 'CUSTOM';
+          emit('status', { type: 'ok', msg: '已清空 JP 定義' });
         } else if (id === 'layout') {
           if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${layout.length} 個 Reel(含副 Reel 設定)\n\n回到預設 5 Reel × 3 列,此動作不可復原。`)) return;
           layout.splice(0, layout.length, ...DEFAULT_LAYOUT.map(r => ({ ...r })));
@@ -7216,6 +7471,22 @@
         refreshBaselineInfo();
         // v5.0-c:矩陣拖曳框選收尾
         window.addEventListener('pointerup', _onMatrixPointerUp);
+        // v6.2 規則#11:消費符號頁帶來的「新增相關約束」意圖
+        try {
+          const intent = window.SlotPlanner && window.SlotPlanner.pendingConfigIntent;
+          if (intent && intent.tab === 'constraints' && intent.addConstraintFor) {
+            window.SlotPlanner.pendingConfigIntent = null;   // 用掉,避免重複
+            active.value = 'constraints';
+            const taken = new Set(constraints.map(c => c.constraint_id));
+            let i = constraints.length + 1;
+            while (taken.has(`C${String(i).padStart(3, '0')}`)) i++;
+            const newId = `C${String(i).padStart(3, '0')}`;
+            const c = makeConstraint(newId);
+            c.symbol_id = String(intent.addConstraintFor);
+            constraints.push(c);
+            emit('status', { type: 'ok', msg: `已新增約束 ${newId}(符號 ${c.symbol_id}),請設定限制內容` });
+          }
+        } catch (e) { /* 意圖消費失敗不影響正常載入 */ }
       });
       onUnmounted(() => {
         window.removeEventListener('pointerup', _onMatrixPointerUp);
@@ -7239,11 +7510,11 @@
       //    引擎 pay_type enum 只有 LINE/WAYS/SCATTER/CLUSTER;
       //    MEGAWAYS = pay_type='WAYS' + UI-only megaways 旗標(a_loader 忽略 megaways)
       const PAY_MODELS = [
-        { id: 'LINE',     label: 'LINE 中獎線',  desc: '固定中獎線計分' },
-        { id: 'WAYS',     label: 'WAYS 全路徑',  desc: '相鄰輪相同符號即計分(243 ways 等)' },
-        { id: 'MEGAWAYS', label: 'MEGAWAYS',     desc: '全路徑 + 每輪列數可變(可變高度盤面)' },
-        { id: 'SCATTER',  label: 'SCATTER 任意', desc: '任意位置散佈計分' },
-        { id: 'CLUSTER',  label: 'CLUSTER 群集', desc: '同符相鄰成群計分' },
+        { id: 'LINE',     label: 'Line',     desc: '固定中獎線計分' },
+        { id: 'WAYS',     label: 'WAYS',     desc: '相鄰輪相同符號即計分(243 ways 等)' },
+        { id: 'MEGAWAYS', label: 'MEGAWAYS', desc: '全路徑 + 每輪列數可變(可變高度盤面)' },
+        { id: 'SCATTER',  label: 'Grid',     desc: '任意位置散佈計分(Scatter / Grid)' },
+        { id: 'CLUSTER',  label: 'Cluster',  desc: '同符相鄰成群計分' },
       ];
       const activePayModel = computed(() =>
         (g.pay_type === 'WAYS' && g.megaways) ? 'MEGAWAYS' : g.pay_type
@@ -7270,16 +7541,20 @@
         g.ways_direction = d;
         g.payline_direction = d;
       }
+      // #3:計分方向按鈕白話標籤(L→R / L←R / 雙向)
+      function scanDirLabel(d) {
+        return d === 'LTR' ? 'L→R' : (d === 'RTL' ? 'L←R' : (d === 'BOTH' ? '雙向' : d));
+      }
 
       // ── 分頁適用性(條件式反灰;grid_size_weights / paylines)──
       function tabNotApplicable(id) {
-        if (id === 'grid_size_weights') return !isVariableHeightBoard.value;
+        if (id === 'grid_size_weights') return !g.megaways;   // v6.2 格數#1:僅 Megaways 適用
         if (id === 'paylines')          return g.pay_type !== 'LINE';
         return false;
       }
       function tabNAReason(id) {
         if (id === 'grid_size_weights')
-          return '目前盤面為等高(各輪 max_rows 相同),格數權重不會被引擎使用;改用 Megaways / 不等高盤面後才需設定。';
+          return '格數權重僅在 Megaways 模式使用(每輪列數可變)。請於上方賠付模型選擇 MEGAWAYS 後再設定。';
         if (id === 'paylines')
           return `目前賠付模型為 ${activePayModel.value},不使用固定中獎線。改回 LINE 才需要設定中獎線。`;
         return '';
@@ -7336,6 +7611,7 @@
       }
       function onReelChipClick(idx, ev) {
         if (idx < 0 || idx >= layout.length) return;
+        activePanelIdx.value = -1;   // #9/#10:選主輪即離開副盤編輯(取代「編主輪」按鈕),主輪/副盤互斥
         if (ev && (ev.ctrlKey || ev.metaKey)) {
           const arr = selectedReelIdxs.value.slice();
           const at = arr.indexOf(idx);
@@ -7406,7 +7682,7 @@
         _previewPointerUp = () => {
           if (previewDragFrom.value >= 0 && previewDragOver.value >= 0 &&
               previewDragFrom.value !== previewDragOver.value) {
-            swapReels(previewDragFrom.value, previewDragOver.value);
+            moveReelInsert(previewDragFrom.value, previewDragOver.value);   // #6:移動讓位(非交換)
           }
           previewDragFrom.value = -1;
           previewDragOver.value = -1;
@@ -7427,7 +7703,7 @@
       return {
         // ── v4.1 補回(賠付模型 / 計分方向 / 分頁適用性)──
         PAY_MODELS, activePayModel, selectPayModel,
-        scanDirApplicable, curScanDir, setScanDir,
+        scanDirApplicable, curScanDir, setScanDir, scanDirLabel,
         tabNotApplicable, tabNAReason,
         gridHeatColor,
         // ── v4.1 補回(矩陣 quickbar)──
@@ -7459,7 +7735,8 @@
         addPanel, removePanel, selectPanel, renamePanel,
         symbolSets, symbolSetNames, addSymbolSet, removeSymbolSet, toggleSymbolInSet,
         // v4.8 04 副盤權重(副輪 .sub + Panel)
-        auxW, independentSubReels, hasAuxWeightRows,
+        auxW, independentSubReels, hasAuxWeightRows, scrollingPanels,
+        collectJpOptions, panelsFeedingJp, panelCollectJpWarn, genTriggerRule,
         auxRowTotal, auxFillRow, auxNormalizeRow, auxFillFromSet, panelWeightSourceLabel,
         // v4.8:移除冗餘底線匯出(_dragReelIdx/_dragOverIdx 已以別名匯出,底線名觸發 Vue 保留前綴警告)
         onReelDragStart, onReelDragOver, onReelDragLeave, onReelDrop, onReelDragEnd,
@@ -7477,10 +7754,13 @@
         paylineOverlapIdxs, activePaylineStatus,
         PAYLINE_PRESETS, addPaylineFromPreset,
         paylineAddMenuOpen, togglePaylineAddMenu,
+        paylineGenOpen, togglePaylineGen, paylineGenMethod, paylineGenCount,
+        paylineGenMode, paylineBoardUniform, paylineGenAvailable, runPaylineGen,
+        clearAllPaylines,
         paylineOverviewMode, paylineColor, paylineOverviewLines,
         paylineMiniSvg,
         constraints, constraintsDebugJson, constraintDuplicateIds, CONSTRAINT_TYPES,
-        addConstraint, removeConstraint,
+        addConstraint, removeConstraint, toggleConstraintMode, constraintHasMode,
         reelWeights, reelWeightsDebugJson,
         reelW, reelSymbolIdsStr, setReelSymbolIdsStr,
         reelMaxWeight, reelHeatColor, reelTotalForRow,
@@ -7579,7 +7859,8 @@
         reelCellDiff, gridCellDiff, cellDiffLabel,
         // v3.4 / B6:範本載入 diff preview
         modeExpandedKey, isModeExpanded, toggleModeExpanded,
-        jackpots, addJackpot, removeJackpot, toggleJackpotMode, jackpotHasMode,
+        jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
+        JP_PRESETS, jpGlobalType, setJpGlobalType,
         betConfig, addBuyFeature, removeBuyFeature,
         multipliers, addWildMultValue, removeWildMultValue, addRandomMultValue, removeRandomMultValue,
         progressLadderStr, commitProgressLadder, wildMultPct, randomMultPct, wildMultExpected, randomMultExpected,
@@ -7589,6 +7870,7 @@
         stripGenLen, stripGenStacked,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
         bonusGames, addBonusGame, removeBonusGame, addBonusItem, removeBonusItem,
+        toggleBonusMode, bonusHasMode, bonusJpOptions,
         bonusItemPct, bonusExpected, BONUS_TYPE_LABEL,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
         confirmTemplateDiffLoad,
