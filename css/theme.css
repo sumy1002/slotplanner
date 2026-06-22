@@ -135,6 +135,11 @@
 
   /* ── v7.0:取消鏡面光帶 ── */
   --specular: transparent;
+
+  /* ── v7.1 RWD / 行動介面（非色彩 token,亮暗共用）── */
+  --touch-min:    44px;   /* 觸控最小尺寸 */
+  --mobile-nav-h: 56px;   /* 底部導覽高度(不含 safe-area)*/
+  --z-nav:        100;    /* 底部導覽層級 */
 }
 
 * { box-sizing: border-box; }
@@ -172,7 +177,9 @@ body::before { content: none; display: none; }
    ============================================================ */
 .app {
   position: relative; z-index: 1;
-  height: 100vh; padding: 16px;
+  height: 100vh;
+  height: 100dvh;   /* v7.1:手機瀏覽器網址列不再吃掉高度 */
+  padding: 16px;
   display: flex;
 }
 
@@ -984,3 +991,61 @@ code {
   box-shadow: none;
   border: 0.5px solid var(--accent-brd);
 }
+
+/* ============================================================
+   v7.1 RWD — 行動版底部導覽 .mnav + topbar 行動主題鈕
+   元件外觀沿用既有 token(守則 #75:單一改動源、暗色自動跟隨)。
+   無玻璃(守則 #76):實色面 + 0.5px 髮絲頂邊 + 柔和單層投影。
+   主色軟填 active(守則 #77)。預設 display:none;
+   顯示切換在 theme_additions.css 的 @media (≤767) 內。
+   ============================================================ */
+.mnav { display: none; }
+.topbar-theme-m { display: none; }
+
+.mnav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: var(--z-nav);
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  background: var(--glass-2);
+  border-top: 0.5px solid var(--glass-edge);
+  box-shadow: 0 -2px 12px rgba(20,28,46,0.08);
+}
+.mnav-btn {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+  min-height: var(--touch-min);
+  border: 0.5px solid transparent;
+  background: transparent;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  color: var(--nav-inactive);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.mnav-btn:active { background: var(--glass-3); }
+.mnav-btn.active {
+  background: var(--accent);
+  color: var(--accent-hex);
+  border-color: var(--accent-brd);
+  font-weight: 700;
+}
+.mnav-ico { font-size: 19px; line-height: 1; }
+.mnav-lab { font-size: 10px; font-weight: 600; line-height: 1; }
+
+.topbar-theme-m {
+  width: 34px; height: 34px;
+  align-items: center; justify-content: center;
+  border: 0.5px solid var(--glass-edge);
+  background: var(--glass-3);
+  border-radius: var(--r-md);
+  font-size: 15px; color: var(--text-light);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--t-fast);
+}
+.topbar-theme-m:active { background: var(--glass-4); }

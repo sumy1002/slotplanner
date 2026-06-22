@@ -63,6 +63,11 @@
 
       <header v-if="page !== 1" class="topbar">
         <div class="title">{{ titles[page] }}</div>
+        <div class="topbar-actions">
+          <!-- v7.1:行動版主題切換(桌面/平板由 CSS 隱藏,側欄底仍有原鈕)-->
+          <button class="topbar-theme-m" @click="cycleTheme"
+                  :title="'外觀:' + themeLabel" aria-label="切換外觀">{{ themeIcon }}</button>
+        </div>
       </header>
 
       <!-- ── 整個 content 區接收拖曳（只有 page 0 時生效） ── -->
@@ -195,6 +200,22 @@
     </div>
 
   </div><!-- card-shell -->
+
+  <!-- ============ 行動版底部導覽（v7.1;桌面/平板由 CSS 隱藏）============ -->
+  <nav class="mnav" aria-label="主導覽">
+    <button class="mnav-btn" :class="{active: page===0}" @click="goPage(0)">
+      <span class="mnav-ico">🗂️</span><span class="mnav-lab">數據</span>
+    </button>
+    <button class="mnav-btn" :class="{active: page===3}" @click="goPage(3)">
+      <span class="mnav-ico">⚙️</span><span class="mnav-lab">設定檔</span>
+    </button>
+    <button class="mnav-btn" :class="{active: page===4}" @click="goPage(4)">
+      <span class="mnav-ico">📄</span><span class="mnav-lab">批次</span>
+    </button>
+    <button class="mnav-btn" :class="{active: page===5}" @click="goPage(5)">
+      <span class="mnav-ico">📊</span><span class="mnav-lab">比對</span>
+    </button>
+  </nav>
 
 </div><!-- #app -->
 
