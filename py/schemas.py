@@ -92,6 +92,25 @@ class DiscardType(Enum):
     SOFT = "SOFT"   # 體感,計入棄牌率
 
 
+class MultStackMode(Enum):
+    """v6.4 / 缺漏#1:同一次得分涉及多個倍數時的疊加方式。
+    MUL = 相乘(例:×3 與 ×5 → ×15,如 Mahjong Ways 2 的 WILD)。
+    ADD = 相加(例:×3 與 ×5 → ×8,如 Buffalo King / Gates 的 FG 倍數)。
+    對 RTP 影響巨大,故需結構化而非僅文字敘述。"""
+    MUL = "MUL"
+    ADD = "ADD"
+
+
+class ResetScope(Enum):
+    """v6.4 / 缺漏#2:進度/累積倍數的「重置範圍」,取代原本單一布林。
+    CASCADE = 每次連線中斷即重置(per-cascade,如 MW2 的倍數梯)。
+    SPIN    = 每一局重置(per-spin,如 Buffalo 的 FG 序列)。
+    FEATURE = 整個 feature/FG 全程不重置(per-feature,如 Gates 的總倍數計數器)。"""
+    CASCADE = "CASCADE"
+    SPIN    = "SPIN"
+    FEATURE = "FEATURE"
+
+
 # ============================================================
 # 全域設定 (對應 01_Global)
 # ============================================================
@@ -108,6 +127,25 @@ class GlobalConfig:
     max_chain_per_rule: int = 50
     big_win_thresholds: list[float] = field(default_factory=lambda: [100.0, 500.0])
     dead_spin_buckets: list[int] = field(default_factory=lambda: [2, 3, 4, 5])
+    # v6.4 / 缺漏#5:無傳統彩池時設 False,文件/匯出跳過 JACKPOT 段(不再強塞四級樣板)。
+    has_jackpot: bool = True
+    # v6.4 / 缺漏#9+#10:合規數值披露(目標/實測)。None = 未填,由數值組重算後回填。
+    disclosure: Optional["ComplianceDisclosure"] = None
+
+
+# ============================================================
+# 合規數值披露 (v6.4 / 缺漏#9+#10)
+#   RTP / 波動度 / 命中率 / 最大贏分 — 監理/上架常需揭露。
+#   max_win 採字串以容許區間與多來源備註(例:"5,000x" 或 "1,708x–25,000x")。
+# ============================================================
+@dataclass
+class ComplianceDisclosure:
+    rtp: float = 0.0                  # 理論 RTP %(0 = 待填)
+    rtp_ante: float = 0.0             # 加押(Ante)模式 RTP %(0 = 不適用)
+    volatility: str = ""              # 波動度(LOW/MEDIUM/HIGH/VERY_HIGH 或自由文字)
+    hit_rate: float = 0.0             # 命中率 %(0 = 待填)
+    max_win: str = ""                 # 最大贏分(字串,可含區間;例 "5,000x")
+    max_win_note: str = ""            # 最大贏分備註(多來源說法不一時標註)
 
 
 # ============================================================
@@ -204,6 +242,8 @@ class SymbolDef:
     is_wild: bool = False
     is_scatter: bool = False
     notes: str = ""
+    # v6.4 / 缺漏#1:此符號攜帶的倍數疊加方式;None = 繼承 Multipliers.stack_mode。
+    mult_stack_mode: Optional[MultStackMode] = None
 
     @property
     def is_mega(self) -> bool:
@@ -255,6 +295,11 @@ class Multipliers:
     random_enabled:         bool = False
     random_symbol_id:       str = ""
     random_values:          list = None
+    # v6.4 / 缺漏#1:多倍數疊加方式(系統層預設;符號 / 模式層可覆寫)。
+    stack_mode:             MultStackMode = MultStackMode.MUL
+    # v6.4 / 缺漏#2:進度倍數重置範圍(系統層預設)。supersedes progress_reset_on_mode 之語意;
+    #   舊布林保留以維持向後相容(True≈CASCADE、False≈FEATURE 之粗略對應)。
+    reset_scope:            ResetScope = ResetScope.CASCADE
     def __post_init__(self):
         if self.wild_mult_values is None: self.wild_mult_values = []
         if self.progress_ladders is None: self.progress_ladders = {}
@@ -431,6 +476,21 @@ class ModeConfig:
     inherit_globals: bool = False
     on_enter_reset_vars: list[str] = field(default_factory=list)
     notes: str = ""
+    # v6.4 / 缺漏#2:此模式的進度倍數重置範圍;None = 繼承 Multipliers.reset_scope。
+    reset_scope: Optional[ResetScope] = None
+    # v6.4 / 缺漏#4:scatter-pay 觸發給付(觸發即付,非連線賠付)。
+    #   例:Buffalo 4/5/6 SCATTER → 5x/20x/100x;Gates 4/5/6 → 3x/5x/100x。
+    trigger_pays: list["TriggerPay"] = field(default_factory=list)
+
+
+# ============================================================
+# 觸發給付 (scatter-pay,v6.4 / 缺漏#4)
+# ============================================================
+@dataclass
+class TriggerPay:
+    scatter_count: int            # 觸發所需 scatter 數
+    pay: float = 0.0              # 注額倍數(觸發即付)
+    grants_spins: int = 0         # 該觸發給予的免費局數(0 = 不適用 / 沿用模式 spin_count)
 
 
 # ============================================================

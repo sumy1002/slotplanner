@@ -63,6 +63,26 @@
   //  純函式：從原始資料推導出 spec（可單獨測試，無副作用）
   // ════════════════════════════════════════════════════════════
 
+  // v6.4 / 缺漏#6:連線種數(ways) — 納入頂部橫向副盤(TOP_HORIZONTAL)貢獻。
+  //   過去只把主輪 max_rows 相乘,逼得 Buffalo King 之類「主盤+頂部橫向副盤」
+  //   只能把副盤列數灌進主輪 max_rows。此函式讓掛在某主輪上、kind 為
+  //   TOP_HORIZONTAL 的副盤,其 subreel_rows 計入「該輪有效列數」再相乘:
+  //     effRows[i] = max_rows[i] + (TOP_HORIZONTAL ? subreel_rows : 0)
+  //   其餘 kind(STACK 等)不貢獻 ways(同輪內堆疊不增加路徑位置)。
+  //   無有效列數時回 0(等同舊行為:無盤面資料)。
+  function computeWaysCount(layout) {
+    const rows = Array.isArray(layout) ? layout : [];
+    const eff = rows.map((r) => {
+      if (!r) return 0;
+      let h = Number(r.max_rows) || 0;
+      if (r.has_subreel && String(r.subreel_kind || '').toUpperCase() === 'TOP_HORIZONTAL') {
+        h += Number(r.subreel_rows) || 0;
+      }
+      return h;
+    }).filter((n) => n > 0);
+    return eff.length ? eff.reduce((a, n) => a * n, 1) : 0;
+  }
+
   // 統一副盤清單：附掛副盤(attached) + 自由副盤(panel)
   function deriveSubReels(layout, panels) {
     const out = [];
@@ -135,10 +155,12 @@
     const payType  = String((g && g.pay_type) || 'LINE').toUpperCase();
     const isMega   = !!(g && g.megaways);
     const scoreDir = deriveScoreDir(g);
+    const waysCount = computeWaysCount(layout);   // v6.4 / 缺漏#6:含 TOP_HORIZONTAL 副盤
 
     return {
       reelCount,
       maxRows,
+      waysCount,                                 // v6.4:連線種數(含橫向副盤貢獻)
       payModel,                                  // LINE | WAYS | MEGAWAYS | SCATTER | CLUSTER
       payType,                                   // 原始 pay_type（不含 megaways 合成）
       isMegaways: isMega,
@@ -160,6 +182,7 @@
     if (!a || !b) return false;
     if (a.reelCount !== b.reelCount) return false;
     if (a.maxRows !== b.maxRows) return false;
+    if (a.waysCount !== b.waysCount) return false;
     if (a.payModel !== b.payModel) return false;
     if (a.payType !== b.payType) return false;
     if (a.isMegaways !== b.isMegaways) return false;
@@ -217,6 +240,7 @@
 
       const prev = {
         reelCount: this.state.reelCount, maxRows: this.state.maxRows,
+        waysCount: this.state.waysCount,
         payModel: this.state.payModel, payType: this.state.payType,
         isMegaways: this.state.isMegaways, scoreDir: this.state.scoreDir,
         subReels: this.state.subReels,
@@ -245,6 +269,7 @@
     // ── 讀取捷徑 ──
     get reelCount()    { return this.state.reelCount; }
     get maxRows()      { return this.state.maxRows; }
+    get waysCount()    { return this.state.waysCount; }
     get payModel()     { return this.state.payModel; }
     get isMegaways()   { return this.state.isMegaways; }
     get scoreDir()     { return this.state.scoreDir; }
@@ -267,5 +292,5 @@
 
   // ── Export ──
   SP.GameSpec = GameSpec;
-  SP.gameSpecHelpers = { computeSpec, deriveSubReels, derivePayModel, deriveScoreDir, PAY_MODELS, SCORE_DIRS };
+  SP.gameSpecHelpers = { computeSpec, computeWaysCount, deriveSubReels, derivePayModel, deriveScoreDir, PAY_MODELS, SCORE_DIRS };
 })();
