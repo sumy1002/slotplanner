@@ -1177,6 +1177,127 @@
         syncGameSpec('classifyMain');               // 連動層:輪數 → registry → 符號頁 reel_limit
         emit('status', { type: 'ok', msg: `已重建主盤:${next} 個 Reel（R1…R${next}）` });
       }
+
+      // ── v7.x:畫格編輯畫布(自成座標;「套用到盤面」時才轉成 layout[]+panels[]) ──
+      const CV_COLS = 18, CV_ROWS = 14;
+      const layoutEditMode = ref('structure');   // 'structure' | 'paint'
+      const cvMode = ref('group');               // 'paint' | 'group'
+      const cvScratch = ref([]);                 // "col,row"
+      const cvMain = ref([]);
+      const cvSel = ref([]);
+      const cvPanels = ref([]);                  // {panel_id,col,row,width,height,cells,panel_type,join_payline}
+      const cvSelReelCol = ref(null);
+      const cvSelPanel = ref(-1);
+      const cvMenu = reactive({ show: false, x: 0, y: 0 });
+      let _cvDown = false, _cvErase = false;
+      function _cvPanelLive() { return cvPanels.value.map(p => panelCellSet(p)); }
+      const cvGrid = computed(() => {
+        const live = _cvPanelLive();
+        const mainSet = new Set(cvMain.value);
+        const scratchSet = new Set(cvScratch.value);
+        const selSet = new Set(cvSel.value);
+        const out = [];
+        for (let r = 0; r < CV_ROWS; r++) for (let c = 0; c < CV_COLS; c++) {
+          const k = c + ',' + r;
+          let cls = '', pIdx = -1;
+          for (let i = 0; i < live.length; i++) if (live[i].has(k)) { pIdx = i; break; }
+          if (pIdx >= 0) cls = (cvPanels.value[pIdx].panel_type === 'STAGE') ? 'stage' : 'sub';
+          else if (mainSet.has(k)) cls = 'main';
+          else if (scratchSet.has(k)) cls = 'scratch';
+          out.push({ key: k, col: c, row: r, cls, sel: selSet.has(k) });
+        }
+        return out;
+      });
+      const cvReels = computed(() => {
+        const byCol = new Map();
+        for (const k of cvMain.value) { const [c, r] = k.split(',').map(Number); if (!byCol.has(c)) byCol.set(c, []); byCol.get(c).push(r); }
+        return [...byCol.keys()].sort((a, b) => a - b).map((c, i) => { const rows = byCol.get(c).sort((a, b) => a - b); return { col: c, reel_id: i + 1, rows: rows[rows.length - 1] - rows[0] + 1, top: rows[0] }; });
+      });
+      const cvPanelList = computed(() => cvPanels.value.map((p, i) => ({ i, panel_id: p.panel_id, w: p.width, h: p.height, n: panelCellSet(p).size, masked: !!(Array.isArray(p.cells) && p.cells.length), type: p.panel_type })));
+      function _cvNextPid() { let n = 1; const used = new Set(cvPanels.value.map(p => p.panel_id)); while (used.has('P' + n)) n++; return 'P' + n; }
+      function _cvRemoveFromPanels(keys) {
+        const kill = new Set(keys);
+        for (let i = cvPanels.value.length - 1; i >= 0; i--) {
+          const p = cvPanels.value[i]; const liveRel = [];
+          for (let r = 0; r < p.height; r++) for (let c = 0; c < p.width; c++) {
+            const abs = (p.col + c) + ',' + (p.row + r);
+            const inMask = !Array.isArray(p.cells) || !p.cells.length || p.cells.includes(c + ',' + r);
+            if (inMask && !kill.has(abs)) liveRel.push(c + ',' + r);
+          }
+          if (!liveRel.length) { cvPanels.value.splice(i, 1); continue; }
+          p.cells = normalizeMask(liveRel, p.width, p.height);
+        }
+      }
+      function _cvApplyAt(col, row) {
+        const k = col + ',' + row;
+        if (cvMode.value === 'paint') {
+          if (cvMain.value.includes(k) || _cvPanelLive().some(s => s.has(k))) return;  // 不覆蓋已分類
+          if (_cvErase) { const i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); }
+          else if (!cvScratch.value.includes(k)) cvScratch.value.push(k);
+        } else {
+          if (!cvSel.value.includes(k)) cvSel.value.push(k);
+        }
+      }
+      function cvCellDown(cell) {
+        _cvDown = true; cvMenu.show = false;
+        if (cvMode.value === 'paint') { _cvErase = cvScratch.value.includes(cell.key); _cvApplyAt(cell.col, cell.row); }
+        else { const i = cvSel.value.indexOf(cell.key); if (i >= 0) cvSel.value.splice(i, 1); else cvSel.value.push(cell.key); }
+      }
+      function cvCellEnter(cell) { if (_cvDown) _cvApplyAt(cell.col, cell.row); }
+      function cvUp() { _cvDown = false; }
+      function cvCtx(ev) { if (cvMode.value === 'group' && cvSel.value.length) { cvMenu.x = ev.offsetX; cvMenu.y = ev.offsetY; cvMenu.show = true; } }
+      function cvSetMode(m) { cvMode.value = m; cvSel.value = []; cvMenu.show = false; }
+      function cvClear() { cvMain.value = []; cvScratch.value = []; cvSel.value = []; cvPanels.value = []; cvSelReelCol.value = null; cvSelPanel.value = -1; emit('status', { type: 'ok', msg: '已清空畫布' }); }
+      function cvClassify(act) {
+        const keys = cvSel.value.slice();
+        if (act === 'clear') {
+          keys.forEach(k => { let i = cvMain.value.indexOf(k); if (i >= 0) cvMain.value.splice(i, 1); i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); });
+          _cvRemoveFromPanels(keys); cvSel.value = []; cvMenu.show = false; emit('status', { type: 'ok', msg: '已清除選取格的分類' }); return;
+        }
+        if (act === 'main') {
+          const res = cellsToReels(keys);
+          if (!res.ok) { emit('status', { type: 'warn', msg: res.error }); return; }
+          cvMain.value = keys.slice();
+          keys.forEach(k => { const i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); });
+          _cvRemoveFromPanels(keys);
+          cvSelReelCol.value = keys.map(k => +k.split(',')[0]).sort((a, b) => a - b)[0];
+          cvSelPanel.value = -1; cvSel.value = []; cvMenu.show = false;
+          emit('status', { type: 'ok', msg: `已設為主輪:${res.reels.length} 個 Reel` }); return;
+        }
+        const geom = cellsToPanelGeom(keys);
+        if (!geom) { emit('status', { type: 'warn', msg: '沒有選取任何格子' }); return; }
+        keys.forEach(k => { let i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); i = cvMain.value.indexOf(k); if (i >= 0) cvMain.value.splice(i, 1); });
+        _cvRemoveFromPanels(keys);
+        cvPanels.value.push({ panel_id: _cvNextPid(), ...geom, panel_type: act === 'stage' ? 'STAGE' : 'SCROLL', join_payline: false });
+        cvSelPanel.value = cvPanels.value.length - 1; cvSelReelCol.value = null; cvSel.value = []; cvMenu.show = false;
+        emit('status', { type: 'ok', msg: `已新增副盤（${geom.cells ? '自訂形狀' : geom.width + '×' + geom.height}）${act === 'stage' ? ' · 演出區' : ''}` });
+      }
+      function cvLoadFromBoard() {
+        let minTop = 0;
+        layout.forEach(r => { if ((r.y_offset || 0) < minTop) minTop = r.y_offset || 0; });
+        panels.forEach(p => { if ((p.row || 0) < minTop) minTop = p.row || 0; });
+        const main = [];
+        layout.forEach((r, idx) => { for (let i = 0; i < (r.max_rows || 1); i++) main.push(idx + ',' + ((r.y_offset || 0) + i - minTop)); });
+        cvMain.value = main;
+        cvPanels.value = panels.map(p => ({ panel_id: p.panel_id, col: p.col || 0, row: (p.row || 0) - minTop, width: p.width || 1, height: p.height || 1, cells: Array.isArray(p.cells) ? p.cells.slice() : null, panel_type: p.panel_type || 'SCROLL', join_payline: !!p.join_payline }));
+        cvScratch.value = []; cvSel.value = []; cvSelReelCol.value = 0; cvSelPanel.value = -1;
+        emit('status', { type: 'ok', msg: '已從目前盤面載入畫布' });
+      }
+      function cvCommit() {
+        if (!cvMain.value.length) { emit('status', { type: 'warn', msg: '畫布尚未設定主輪,無法套用' }); return; }
+        const res = cellsToReels(cvMain.value);
+        if (!res.ok) { emit('status', { type: 'warn', msg: res.error }); return; }
+        const aCol = Math.min(...cvMain.value.map(k => +k.split(',')[0]));
+        const aRow = Math.min(...cvMain.value.map(k => +k.split(',')[1]));
+        const rows = res.reels.map(r => ({ ...makeReel(r.reel_id), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows }));
+        layout.splice(0, layout.length, ...rows);
+        const newPanels = cvPanels.value.map(p => ({ ...makePanel(p.panel_id), col: p.col - aCol, row: p.row - aRow, width: p.width, height: p.height, cells: Array.isArray(p.cells) ? p.cells.slice() : null, panel_type: p.panel_type, scroll: p.panel_type === 'SCROLL', join_payline: !!p.join_payline }));
+        panels.splice(0, panels.length, ...newPanels);
+        activeReelIdx.value = 0; activePanelIdx.value = -1;
+        layoutEditMode.value = 'structure';
+        syncGameSpec('cvCommit');
+        emit('status', { type: 'ok', msg: `已套用畫布到盤面:${res.reels.length} 個 Reel · ${newPanels.length} 塊副盤` });
+      }
       function renamePanel(idx, newId) {
         if (idx < 0 || idx >= panels.length) return;
         const clean = String(newId || '').trim();
@@ -7809,6 +7930,9 @@
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
         selectedCells, toggleCellSelection, clearCellSelection,
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
+        CV_COLS, CV_ROWS, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel,
+        cvGrid, cvReels, cvPanelList,
+        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,
         handleSaveAsTemplate: _handleSaveAsTemplate,

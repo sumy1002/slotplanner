@@ -946,10 +946,14 @@
             </div>
             <div class="cfg-layout-preset-hint">套用時會替換整個 layout(會跳確認框)</div>
           </div>
+          <div class="cfg-layout-editmode-bar">
+            <button class="cfg-chip" :class="{ active: layoutEditMode==='structure' }" @click="layoutEditMode='structure'">結構檢視</button>
+            <button class="cfg-chip" :class="{ active: layoutEditMode==='paint' }" @click="layoutEditMode='paint'">畫格編輯</button>
+          </div>
         </div>
 
         <!-- ── 新版三欄式：索引側欄 + 詳情大區（欄位 + 嵌入預覽） ── -->
-        <div class="cfg-layout-v2-body">
+        <div class="cfg-layout-v2-body" v-show="layoutEditMode==='structure'">
 
           <!-- 左欄：Reel 索引 chip 列 -->
           <div class="cfg-layout-v2-index">
@@ -1416,6 +1420,54 @@
           </div><!-- /cfg-layout-v2-preview -->
 
         </div><!-- /cfg-layout-v2-body -->
+
+        <!-- v7.x:畫格編輯畫布(自成座標;套用時轉成 layout[]+panels[]) -->
+        <div class="cfg-cv-body" v-show="layoutEditMode==='paint'">
+          <div class="cfg-cv-toolbar">
+            <button class="cfg-chip" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')">✏️ 畫格</button>
+            <button class="cfg-chip" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')">▣ 框選</button>
+            <span class="cfg-cv-sep"></span>
+            <button class="cfg-matrix-btn" @click="cvLoadFromBoard()">從盤面載入</button>
+            <button class="cfg-matrix-btn" @click="cvClear()">清空</button>
+            <button class="btn-primary cfg-cv-commit" @click="cvCommit()">套用到盤面</button>
+          </div>
+          <div class="cfg-cv-main">
+            <div class="cfg-cv-gridwrap" @contextmenu.prevent="cvCtx($event)" @pointerup="cvUp()" @pointerleave="cvUp()">
+              <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + CV_COLS + ', 24px)' }">
+                <div v-for="cell in cvGrid" :key="cell.key"
+                     class="cfg-cv-cell"
+                     :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.sel ? 'cfg-cv-cell-sel' : '' ]"
+                     @pointerdown.prevent="cvCellDown(cell, $event)"
+                     @pointerenter="cvCellEnter(cell)"></div>
+              </div>
+              <div v-if="cvMenu.show" class="cfg-cv-menu" :style="{ left: cvMenu.x + 'px', top: cvMenu.y + 'px' }">
+                <button class="cfg-cv-mi" @click="cvClassify('main')">設為主輪</button>
+                <button class="cfg-cv-mi" @click="cvClassify('sub')">設為副輪</button>
+                <button class="cfg-cv-mi" @click="cvClassify('stage')">設為演出區 (STAGE)</button>
+                <button class="cfg-cv-mi" @click="cvClassify('clear')">清除分類</button>
+              </div>
+            </div>
+            <div class="cfg-cv-side">
+              <div class="cfg-cv-side-t">輪清單（自動推導）</div>
+              <div class="cfg-cv-list">
+                <span v-if="!cvReels.length" class="cfg-hint">尚未設定主輪</span>
+                <span v-for="rr in cvReels" :key="'cvr'+rr.col" class="cfg-cv-pill" :class="{ active: rr.col===cvSelReelCol }">R{{ rr.reel_id }} · {{ rr.rows }}列</span>
+              </div>
+              <div class="cfg-cv-side-t" style="margin-top:10px;">自由副盤</div>
+              <div class="cfg-cv-list">
+                <span v-if="!cvPanelList.length" class="cfg-hint">尚未設定副盤</span>
+                <span v-for="p in cvPanelList" :key="'cvp'+p.i" class="cfg-cv-pill sub" :class="{ active: p.i===cvSelPanel }">{{ p.panel_id }} · {{ p.w }}×{{ p.h }}{{ p.masked ? ' · '+p.n+'格' : '' }}</span>
+              </div>
+              <div class="cfg-cv-legend">
+                <span><i class="cfg-cv-sw main"></i>主輪</span>
+                <span><i class="cfg-cv-sw sub"></i>副輪</span>
+                <span><i class="cfg-cv-sw stage"></i>演出</span>
+                <span><i class="cfg-cv-sw scratch"></i>未分類</span>
+              </div>
+              <div class="cfg-hint" style="margin-top:8px;">畫格：塗出盤面形狀（只動未分類層）。框選：圈起來按右鍵設主輪／副輪／演出區。「套用到盤面」會重建 layout＋panels（重錨定回主盤 col0），未套用前不影響現有盤面。</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══════ 03_Symbols 符號清單(整合自 SymbolPage)═══════ -->
