@@ -10520,3 +10520,68 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* 暗色:prize-row 邊框與既有 sym-edit-section 一致(glass-brd 已隨主題切換) */
 :root[data-theme="dark"] .sym-prize-row { background: rgba(255,255,255,0.02); }
+
+/* ════════════════════════════════════════════════
+   設定檔編輯器 — 行動版逐層下鑽（v7.1 / 接續 RWD）
+   桌面/平板：左清單 + 右表單 兩欄並存（不變）。
+   行動 ≤767：cfg-body 改直向,一次只顯示一個全寬畫面：
+     · 預設（cfgTabRailCollapsed=false）= 全寬分頁清單
+     · 點分頁 → cfgTabRailCollapsed=true = 全寬表單 + 頂端返回列
+   壞掉的「«收合分頁列」鈕（.cfg-tabrail-toggle 從無 CSS）一律隱藏,
+   行動版改用下鑽/返回取代。
+   ════════════════════════════════════════════════ */
+
+/* 失效的內層收合鈕:全尺寸隱藏(行動用下鑽,桌面 220px 夠寬不需收) */
+.cfg-tabrail-toggle { display: none; }
+
+/* 返回列:桌面/平板不顯示 */
+.cfg-mobile-back {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--glass-2);
+  border-bottom: 0.5px solid var(--glass-edge);
+  color: var(--accent-hex);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cfg-mobile-back-ico { font-size: 18px; line-height: 1; }
+.cfg-mobile-back-cur {
+  margin-left: auto;
+  max-width: 50%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+@media (max-width: 767px) {
+  /* 主體改直向:一次填滿一個全寬畫面 */
+  .cfg-body { flex-direction: column; }
+
+  /* 分頁清單全寬（清單視圖）*/
+  .cfg-tabs {
+    width: 100%;
+    flex: 1;
+    border-right: none;
+    border-bottom: 1px solid var(--glass-edge);
+  }
+  .cfg-tabs .cfg-tab { padding: 13px 12px; min-height: var(--touch-min); }
+
+  /* 預設=清單視圖:藏表單 / 返回列 / 重設 FAB */
+  .cfg-mobile-back,
+  .cfg-content,
+  .cfg-content-reset-fab { display: none; }
+
+  /* 詳細視圖:cfgTabRailCollapsed=true → 藏清單,顯示返回列 + 全寬表單 */
+  .cfg-tabs-collapsed { display: none; }
+  .cfg-tabs-collapsed ~ .cfg-mobile-back { display: flex; }
+  .cfg-tabs-collapsed ~ .cfg-content { display: block; flex: 1; min-height: 0; }
+  .cfg-tabs-collapsed ~ .cfg-content-reset-fab { display: flex; }
+}

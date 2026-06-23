@@ -4877,6 +4877,11 @@
       const presetDrawerOpen = ref(false);
       const presetSearch = ref('');
 
+      // v7.1:設定檔編輯器內層分頁列收合狀態。
+      //   行動版（≤767）= 逐層下鑽旗標:false=分頁清單,true=分頁詳細表單。
+      //   桌面/平板無對應 CSS,設值無副作用。僅記憶體狀態、不寫入 localStorage。
+      const cfgTabRailCollapsed = ref(false);
+
       // 按搜尋詞過濾 + 仍按原本 group 結構回傳
       const filteredPresetGroups = computed(() => {
         const q = (presetSearch.value || '').trim().toLowerCase();
@@ -7880,6 +7885,7 @@
         // v3.4 / B5:active tab issues
         activeTabIssues,
         presetDrawerOpen, presetSearch, filteredPresetGroups, insertPreset,
+        cfgTabRailCollapsed,
         latestSimStats, getRuleSimBadge, refreshLatestSimStats,
         TRIGGER_TYPES, TRIGGER_CATALOG, TRIGGER_BY_TYPE,
         OP_TYPES, OP_IS_LIST, VAR_CATEGORIES, VAR_CATEGORY_MAP,

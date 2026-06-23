@@ -349,7 +349,7 @@
         <div v-for="t in grp.tabs" :key="t.id"
              class="cfg-tab"
              :class="{ active: active === t.id, 'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
-             @click="active = t.id"
+             @click="active = t.id; cfgTabRailCollapsed = true"
              :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + ' · ' + t.sheet)">
           <span class="cfg-tab-icon">{{ t.icon }}</span>
           <div class="cfg-tab-text">
@@ -375,7 +375,7 @@
         </div>
         <div class="cfg-tab"
              :class="{ active: active === 'docgen' }"
-             @click="active = 'docgen'"
+             @click="active = 'docgen'; cfgTabRailCollapsed = true"
              :title="'文件生成 · Excel / MD'">
           <span class="cfg-tab-icon">📋</span>
           <div class="cfg-tab-text">
@@ -395,6 +395,14 @@
       <span class="cfg-content-reset-icon">↺</span>
       <span class="cfg-content-reset-text">重設此頁</span>
     </button>
+
+    <!-- 行動版下鑽返回列(桌面/平板由 CSS 隱藏;只在 ≤767 詳細視圖顯示)-->
+    <div class="cfg-mobile-back" @click="cfgTabRailCollapsed = false">
+      <span class="cfg-mobile-back-ico">‹</span>
+      <span class="cfg-mobile-back-txt">分頁列</span>
+      <span class="cfg-mobile-back-cur">{{ (activeTab && activeTab.name) || '' }}</span>
+    </div>
+
     <div class="cfg-content" :class="{ 'cfg-content-fullpane': activeTab.kind === 'fullpane' }">
 
       <!-- v3.4 / B5:當前 tab 的 issues sticky banner(只有有 issue 才顯示)-->
