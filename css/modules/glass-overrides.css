@@ -605,9 +605,13 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-layout-v2-body {
   display: flex;
   gap: 12px;
-  flex: 1;
+  flex: none;
+  height: 520px;            /* v7.x:固定工作區高度 → 預覽/編輯卡片同尺寸、不隨模式變高 */
   min-height: 0;
 }
+/* v7.x:詳情/索引改為內容高度的精簡卡片(不被拉成稀疏長條);預覽欄撐滿此高度 */
+.cfg-layout-v2-detail { align-self: flex-start; max-height: 520px; }
+.cfg-layout-v2-index { align-self: flex-start; max-height: 520px; }
 .cfg-layout-v2-index {
   flex: 0 0 132px;
   display: flex;
@@ -748,7 +752,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-layout-preview-h { white-space: nowrap; }
 .cfg-layout-preview-modes { margin-left: auto; }
 /* 預覽盤面 SVG(覆寫:依輪數的 inline max-width + 此處限高/置中,避免格子被撐到超大) */
-.cfg-layout-v2-preview .cfg-layout-svg { max-height: 300px; margin: 0 auto; }
+.cfg-layout-v2-preview .cfg-layout-svg { max-height: 380px; margin: 0 auto; }
 /* 分段切換(預覽/編輯、繪製/選取):一顆膠囊內兩段,比兩顆按鈕直覺 */
 .cfg-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 0.5px solid var(--glass-edge); border-radius: 999px; background: var(--glass-3); }
 .cfg-seg-btn { border: none; background: transparent; color: var(--text-muted); font-size: 12px; line-height: 1; padding: 5px 12px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background var(--t-fast), color var(--t-fast); }

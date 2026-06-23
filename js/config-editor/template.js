@@ -1357,7 +1357,7 @@
             </div>
             <div class="cfg-layout-svg-wrap" v-show="layoutEditMode==='structure'">
               <svg :viewBox="layoutViewBox" class="cfg-layout-svg"
-                   :style="{ maxWidth: Math.min(Math.max(layout.length, 1) * 60 + 24, 560) + 'px' }"
+                   :style="{ maxWidth: Math.min(Math.max(layout.length, 1) * 72 + 24, 620) + 'px' }"
                    preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
                 <text v-for="(lb, i) in layoutLabels" :key="'lb'+i"
                       :x="lb.x" :y="-6"
