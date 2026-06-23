@@ -1179,23 +1179,26 @@
       }
 
       // ── v7.x:畫格編輯畫布(自成座標;「套用到盤面」時才轉成 layout[]+panels[]) ──
-      const CV_COLS = 18, CV_ROWS = 14;
-      const layoutEditMode = ref('structure');   // 'structure' | 'paint'
-      const cvMode = ref('group');               // 'paint' | 'group'
-      const cvScratch = ref([]);                 // "col,row"
+      const CV_COLS = 10, CV_ROWS = 10;          // 預設較小;不夠用再縮放/未來可加擴張
+      const layoutEditMode = ref('structure');   // 'structure'(預覽) | 'paint'(畫格編輯)
+      const cvMode = ref('paint');               // 'paint'(畫格) | 'group'(框選)
+      const cvCellSize = ref(28);                // 縮放:每格 px(16–48)
+      const cvScratch = ref([]);                 // "col,row" 未分類塗畫層
       const cvMain = ref([]);
       const cvSel = ref([]);
       const cvPanels = ref([]);                  // {panel_id,col,row,width,height,cells,panel_type,join_payline}
       const cvSelReelCol = ref(null);
       const cvSelPanel = ref(-1);
       const cvMenu = reactive({ show: false, x: 0, y: 0 });
-      let _cvDown = false, _cvErase = false;
+      const cvRubber = ref(null);                // 拖拉預覽框 {c0,r0,c1,r1}
+      let _cvDown = false, _cvStart = null, _cvCur = null;
       function _cvPanelLive() { return cvPanels.value.map(p => panelCellSet(p)); }
       const cvGrid = computed(() => {
         const live = _cvPanelLive();
         const mainSet = new Set(cvMain.value);
         const scratchSet = new Set(cvScratch.value);
         const selSet = new Set(cvSel.value);
+        const rb = cvRubber.value;
         const out = [];
         for (let r = 0; r < CV_ROWS; r++) for (let c = 0; c < CV_COLS; c++) {
           const k = c + ',' + r;
@@ -1204,7 +1207,8 @@
           if (pIdx >= 0) cls = (cvPanels.value[pIdx].panel_type === 'STAGE') ? 'stage' : 'sub';
           else if (mainSet.has(k)) cls = 'main';
           else if (scratchSet.has(k)) cls = 'scratch';
-          out.push({ key: k, col: c, row: r, cls, sel: selSet.has(k) });
+          const rubber = !!(rb && c >= rb.c0 && c <= rb.c1 && r >= rb.r0 && r <= rb.r1);
+          out.push({ key: k, col: c, row: r, cls, sel: selSet.has(k), rubber });
         }
         return out;
       });
@@ -1228,24 +1232,49 @@
           p.cells = normalizeMask(liveRel, p.width, p.height);
         }
       }
-      function _cvApplyAt(col, row) {
-        const k = col + ',' + row;
+      function _cvRect(a, b) { return { c0: Math.min(a.col, b.col), r0: Math.min(a.row, b.row), c1: Math.max(a.col, b.col), r1: Math.max(a.row, b.row) }; }
+      function _cvCellsInRect(rc) { const out = []; for (let r = rc.r0; r <= rc.r1; r++) for (let c = rc.c0; c <= rc.c1; c++) out.push(c + ',' + r); return out; }
+      function _cvIsOccupied(k) { return cvMain.value.includes(k) || _cvPanelLive().some(s => s.has(k)); }
+      function _cvExists(k) { return cvScratch.value.includes(k) || _cvIsOccupied(k); }
+      function cvCellDown(cell, ev) {
+        if (ev && ev.button !== 0) return;       // 只左鍵作畫/選取;右鍵 → 功能表單
+        cvMenu.show = false;
+        _cvDown = true; _cvStart = { col: cell.col, row: cell.row }; _cvCur = _cvStart;
+        cvRubber.value = _cvRect(_cvStart, _cvCur);
+      }
+      function cvCellEnter(cell) {
+        if (!_cvDown) return;
+        _cvCur = { col: cell.col, row: cell.row };
+        cvRubber.value = _cvRect(_cvStart, _cvCur);
+      }
+      function cvUp() {
+        if (!_cvDown) return;
+        _cvDown = false;
+        const rc = cvRubber.value; cvRubber.value = null;
+        if (!rc || !_cvStart) { _cvStart = _cvCur = null; return; }
+        const single = (rc.c0 === rc.c1 && rc.r0 === rc.r1);
+        const keys = _cvCellsInRect(rc);
         if (cvMode.value === 'paint') {
-          if (cvMain.value.includes(k) || _cvPanelLive().some(s => s.has(k))) return;  // 不覆蓋已分類
-          if (_cvErase) { const i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); }
-          else if (!cvScratch.value.includes(k)) cvScratch.value.push(k);
+          // 畫格:點一格=切換;拖拉=填滿矩形(只加未分類空格,不覆蓋已分類)
+          if (single) {
+            const k = keys[0];
+            if (!_cvIsOccupied(k)) { const i = cvScratch.value.indexOf(k); if (i >= 0) cvScratch.value.splice(i, 1); else cvScratch.value.push(k); }
+          } else {
+            keys.forEach(k => { if (!_cvIsOccupied(k) && !cvScratch.value.includes(k)) cvScratch.value.push(k); });
+          }
         } else {
-          if (!cvSel.value.includes(k)) cvSel.value.push(k);
+          // 框選:只選「已存在」的格,點擊不新增
+          if (single) {
+            const k = keys[0];
+            if (_cvExists(k)) { const i = cvSel.value.indexOf(k); if (i >= 0) cvSel.value.splice(i, 1); else cvSel.value.push(k); }
+          } else {
+            keys.forEach(k => { if (_cvExists(k) && !cvSel.value.includes(k)) cvSel.value.push(k); });
+          }
         }
+        _cvStart = _cvCur = null;
       }
-      function cvCellDown(cell) {
-        _cvDown = true; cvMenu.show = false;
-        if (cvMode.value === 'paint') { _cvErase = cvScratch.value.includes(cell.key); _cvApplyAt(cell.col, cell.row); }
-        else { const i = cvSel.value.indexOf(cell.key); if (i >= 0) cvSel.value.splice(i, 1); else cvSel.value.push(cell.key); }
-      }
-      function cvCellEnter(cell) { if (_cvDown) _cvApplyAt(cell.col, cell.row); }
-      function cvUp() { _cvDown = false; }
       function cvCtx(ev) { if (cvMode.value === 'group' && cvSel.value.length) { cvMenu.x = ev.offsetX; cvMenu.y = ev.offsetY; cvMenu.show = true; } }
+      function cvZoom(d) { cvCellSize.value = Math.max(16, Math.min(48, cvCellSize.value + d)); }
       function cvSetMode(m) { cvMode.value = m; cvSel.value = []; cvMenu.show = false; }
       function cvClear() { cvMain.value = []; cvScratch.value = []; cvSel.value = []; cvPanels.value = []; cvSelReelCol.value = null; cvSelPanel.value = -1; emit('status', { type: 'ok', msg: '已清空畫布' }); }
       function cvClassify(act) {
@@ -7930,9 +7959,9 @@
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
         selectedCells, toggleCellSelection, clearCellSelection,
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
-        CV_COLS, CV_ROWS, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel,
+        CV_COLS, CV_ROWS, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel, cvCellSize,
         cvGrid, cvReels, cvPanelList,
-        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit,
+        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit, cvZoom,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,
         handleSaveAsTemplate: _handleSaveAsTemplate,
