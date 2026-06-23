@@ -1179,10 +1179,10 @@
       }
 
       // ── v7.x:畫格編輯畫布(自成座標;「套用到盤面」時才轉成 layout[]+panels[]) ──
-      const CV_COLS = 10, CV_ROWS = 10;          // 預設較小;不夠用再縮放/未來可加擴張
-      const layoutEditMode = ref('structure');   // 'structure'(預覽) | 'paint'(畫格編輯)
-      const cvMode = ref('paint');               // 'paint'(畫格) | 'group'(框選)
-      const cvCellSize = ref(28);                // 縮放:每格 px(16–48)
+      const cvDim = ref(8);                       // 畫布格數(正方形;預設 8×8)。縮小=更多格、放大=更少格
+      const layoutEditMode = ref('structure');   // 'structure'(預覽) | 'paint'(編輯/畫格)
+      const cvMode = ref('paint');               // 'paint'(繪製) | 'group'(選取)
+      const cvCellSize = computed(() => Math.max(14, Math.min(40, Math.floor(300 / cvDim.value))));  // 依格數自動縮放每格 px
       const cvScratch = ref([]);                 // "col,row" 未分類塗畫層
       const cvMain = ref([]);
       const cvSel = ref([]);
@@ -1200,7 +1200,8 @@
         const selSet = new Set(cvSel.value);
         const rb = cvRubber.value;
         const out = [];
-        for (let r = 0; r < CV_ROWS; r++) for (let c = 0; c < CV_COLS; c++) {
+        const D = cvDim.value;
+        for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) {
           const k = c + ',' + r;
           let cls = '', pIdx = -1;
           for (let i = 0; i < live.length; i++) if (live[i].has(k)) { pIdx = i; break; }
@@ -1274,7 +1275,7 @@
         _cvStart = _cvCur = null;
       }
       function cvCtx(ev) { if (cvMode.value === 'group' && cvSel.value.length) { cvMenu.x = ev.offsetX; cvMenu.y = ev.offsetY; cvMenu.show = true; } }
-      function cvZoom(d) { cvCellSize.value = Math.max(16, Math.min(48, cvCellSize.value + d)); }
+      function cvZoom(d) { cvDim.value = Math.max(4, Math.min(24, cvDim.value + d)); }
       function cvSetMode(m) { cvMode.value = m; cvSel.value = []; cvMenu.show = false; }
       function cvClear() { cvMain.value = []; cvScratch.value = []; cvSel.value = []; cvPanels.value = []; cvSelReelCol.value = null; cvSelPanel.value = -1; emit('status', { type: 'ok', msg: '已清空畫布' }); }
       function cvClassify(act) {
@@ -7959,7 +7960,7 @@
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
         selectedCells, toggleCellSelection, clearCellSelection,
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
-        CV_COLS, CV_ROWS, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel, cvCellSize,
+        cvDim, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel, cvCellSize,
         cvGrid, cvReels, cvPanelList,
         cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit, cvZoom,
         // ── template 用非底線名稱的別名(對應既有底線實作)──

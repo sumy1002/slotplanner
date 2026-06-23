@@ -743,7 +743,15 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* ============================================================
    v7.x:畫格編輯(整合進「📐 盤面預覽」面板的「畫格」模式)
    ============================================================ */
-.cfg-layout-preview-modes { margin-left: auto; display: inline-flex; gap: 6px; }
+/* 預覽標題列(覆寫:置中對齊、靠左排列,避免 toggle 與標題/資訊重疊) */
+.cfg-layout-v2-preview-title { align-items: center; justify-content: flex-start; }
+.cfg-layout-preview-h { white-space: nowrap; }
+.cfg-layout-preview-modes { margin-left: auto; }
+/* 分段切換(預覽/編輯、繪製/選取):一顆膠囊內兩段,比兩顆按鈕直覺 */
+.cfg-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 0.5px solid var(--glass-edge); border-radius: 999px; background: var(--glass-3); }
+.cfg-seg-btn { border: none; background: transparent; color: var(--text-muted); font-size: 12px; line-height: 1; padding: 5px 12px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background var(--t-fast), color var(--t-fast); }
+.cfg-seg-btn.active { background: var(--accent); color: var(--accent-hex); font-weight: 600; }
+.cfg-cv-spacer { flex: 1; }
 .cfg-cv { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 2px; }
 .cfg-cv-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cfg-cv-sep { width: 1px; height: 20px; background: var(--glass-edge); margin: 0 2px; }

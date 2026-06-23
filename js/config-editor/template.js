@@ -1345,14 +1345,14 @@
           <!-- 右欄：盤面 SVG 預覽（與選中 Reel highlight） -->
           <div class="cfg-layout-v2-preview">
             <div class="cfg-layout-v2-preview-title">
-              <span>📐 盤面預覽</span>
-              <span class="cfg-layout-split-preview-info">
+              <span class="cfg-layout-preview-h">📐 盤面預覽</span>
+              <span class="cfg-layout-split-preview-info" v-show="layoutEditMode==='structure'">
                 {{ layout.length }} 個 Reel · 主格 {{ layout.reduce((s,r)=>s+r.max_rows,0) }} ·
                 副 {{ layout.reduce((s,r)=>s+(r.has_subreel?r.subreel_rows:0),0) }}
               </span>
-              <span class="cfg-layout-preview-modes">
-                <button class="cfg-chip" :class="{ active: layoutEditMode==='structure' }" @click="layoutEditMode='structure'">預覽</button>
-                <button class="cfg-chip" :class="{ active: layoutEditMode==='paint' }" @click="layoutEditMode='paint'">畫格</button>
+              <span class="cfg-seg cfg-layout-preview-modes">
+                <button class="cfg-seg-btn" :class="{ active: layoutEditMode==='structure' }" @click="layoutEditMode='structure'">預覽</button>
+                <button class="cfg-seg-btn" :class="{ active: layoutEditMode==='paint' }" @click="layoutEditMode='paint'">編輯</button>
               </span>
             </div>
             <div class="cfg-layout-svg-wrap" v-show="layoutEditMode==='structure'">
@@ -1421,21 +1421,23 @@
             <!-- v7.x:畫格編輯(整合進預覽面板;切到「畫格」顯示) -->
             <div class="cfg-cv" v-show="layoutEditMode==='paint'">
               <div class="cfg-cv-toolbar">
-                <button class="cfg-chip" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')">✏️ 畫格</button>
-                <button class="cfg-chip" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')">▣ 框選</button>
-                <span class="cfg-cv-sep"></span>
-                <span class="cfg-cv-zoom">
-                  <button class="cfg-stepper-btn" @click="cvZoom(-4)" :disabled="cvCellSize<=16">−</button>
-                  <span class="cfg-cv-zoom-val">{{ cvCellSize }}px</span>
-                  <button class="cfg-stepper-btn" @click="cvZoom(4)" :disabled="cvCellSize>=48">+</button>
+                <span class="cfg-seg">
+                  <button class="cfg-seg-btn" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')" title="繪製：點一格＝畫/取消，按住拖拉＝填滿矩形">✏️ 繪製</button>
+                  <button class="cfg-seg-btn" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')" title="選取：只圈已畫好的格，右鍵叫出分類選單">⬚ 選取</button>
                 </span>
                 <span class="cfg-cv-sep"></span>
-                <button class="cfg-matrix-btn" @click="cvLoadFromBoard()">從盤面載入</button>
+                <span class="cfg-cv-zoom">
+                  <button class="cfg-stepper-btn" @click="cvZoom(1)" :disabled="cvDim>=24" title="縮小：多給一排格子">−</button>
+                  <span class="cfg-cv-zoom-val">{{ cvDim }}×{{ cvDim }}</span>
+                  <button class="cfg-stepper-btn" @click="cvZoom(-1)" :disabled="cvDim<=4" title="放大：少一排、格子變大">+</button>
+                </span>
+                <span class="cfg-cv-spacer"></span>
+                <button class="cfg-matrix-btn" @click="cvLoadFromBoard()" title="把目前盤面帶進畫布編輯">從盤面載入</button>
                 <button class="cfg-matrix-btn" @click="cvClear()">清空</button>
                 <button class="btn-primary cfg-cv-commit" @click="cvCommit()">套用到盤面</button>
               </div>
               <div class="cfg-cv-gridwrap" @contextmenu.prevent="cvCtx($event)" @pointerup="cvUp()" @pointerleave="cvUp()">
-                <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + CV_COLS + ', ' + cvCellSize + 'px)' }">
+                <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvDim + ', ' + cvCellSize + 'px)' }">
                   <div v-for="cell in cvGrid" :key="cell.key"
                        class="cfg-cv-cell"
                        :style="{ width: cvCellSize + 'px', height: cvCellSize + 'px' }"
@@ -1468,7 +1470,7 @@
                 <span><i class="cfg-cv-sw stage"></i>演出</span>
                 <span><i class="cfg-cv-sw scratch"></i>未分類</span>
               </div>
-              <div class="cfg-hint" style="margin-top:6px;">畫格：點一格＝畫/取消，按住拖拉＝填滿矩形。框選：左鍵只選已畫好的格（不新增）、右鍵叫出功能表單做分類。「套用到盤面」才會重建 layout＋panels（重錨定回主盤 col0），未套用前不動現有盤面。</div>
+              <div class="cfg-hint" style="margin-top:6px;">繪製：點一格＝畫/取消，按住拖拉＝填滿矩形。選取：左鍵只選已畫好的格（不新增）、右鍵叫出選單做分類。「套用到盤面」才會重建 layout＋panels（重錨定回主盤 col0），未套用前不動現有盤面。</div>
             </div>
           </div><!-- /cfg-layout-v2-preview -->
 
