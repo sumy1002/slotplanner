@@ -1099,6 +1099,7 @@
     return {
       panel_id: panel_id || 'P1',
       col: 0, row: 0, width: 3, height: 3,
+      cells: null,            // v7.x:活格遮罩 ["dx,dy",…](相對外框);null = 整塊矩形(向後相容)
       scroll: true,           // 保留(=panel_type==='SCROLL');維持 02b_Panels 的 Scroll 欄與 py 契約
       panel_type: 'SCROLL',   // v6.2 盤面#4/#12:SCROLL 滾動 / COLLECT 蒐集 / TRIGGER 觸發
       trigger_symbol: '',     // v6.2:TRIGGER 型 — 由哪個符號滾出時激活
@@ -1121,6 +1122,7 @@
         // v6.2 遷移:舊資料無 panel_type → 依舊的 scroll 布林推導(滾動→SCROLL,否則→COLLECT)
         if (!p.panel_type) merged.panel_type = (p.scroll === false ? 'COLLECT' : 'SCROLL');
         merged.scroll = (merged.panel_type === 'SCROLL');   // 同步,維持匯出契約
+        merged.cells = Array.isArray(merged.cells) ? normalizeMask(merged.cells, merged.width, merged.height) : null;
         return merged;
       });
     } catch (e) {
@@ -1132,6 +1134,42 @@
     try { localStorage.setItem(LS_PANELS_KEY, JSON.stringify(panels)); return true; }
     catch (e) { console.warn('[config-editor] savePanels failed:', e); return false; }
   }
+
+  // ── v7.x:panel 形狀遮罩(外框 + 活格遮罩)。cells=null → 整塊矩形 ──
+  const PANEL_TYPES = ['SCROLL', 'COLLECT', 'TRIGGER', 'STAGE'];   // +STAGE = 演出/負空間
+  function isStagePanel(p) { return !!(p && p.panel_type === 'STAGE'); }
+  function _panelCellKey(c, r) { return c + ',' + r; }
+  function panelCellSet(p) {
+    const out = new Set();
+    if (!p) return out;
+    const col = p.col | 0, row = p.row | 0;
+    const w = Math.max(1, p.width | 0), h = Math.max(1, p.height | 0);
+    const mask = Array.isArray(p.cells) && p.cells.length ? p.cells : null;
+    if (!mask) { for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) out.add(_panelCellKey(col + dx, row + dy)); return out; }
+    for (const s of mask) {
+      const m = /^(-?\d+),(-?\d+)$/.exec(String(s).trim()); if (!m) continue;
+      const dx = +m[1], dy = +m[2];
+      if (dx < 0 || dy < 0 || dx >= w || dy >= h) continue;
+      out.add(_panelCellKey(col + dx, row + dy));
+    }
+    return out;
+  }
+  function normalizeMask(cells, width, height) {
+    const w = Math.max(1, width | 0), h = Math.max(1, height | 0);
+    if (!Array.isArray(cells)) return null;
+    const seen = new Set();
+    for (const s of cells) {
+      const m = /^(-?\d+),(-?\d+)$/.exec(String(s).trim()); if (!m) continue;
+      const dx = +m[1], dy = +m[2];
+      if (dx < 0 || dy < 0 || dx >= w || dy >= h) continue;
+      seen.add(dx + ',' + dy);
+    }
+    if (seen.size === 0 || seen.size === w * h) return null;   // 空或滿格 → 收斂成 null(整塊矩形)
+    return [...seen].sort((a, b) => { const [ax, ay] = a.split(',').map(Number), [bx, by] = b.split(',').map(Number); return ay - by || ax - bx; });
+  }
+  function maskToStr(cells) { return Array.isArray(cells) && cells.length ? cells.join(';') : ''; }
+  function maskStrToCells(str) { const s = String(str || '').trim(); if (!s) return null; const a = s.split(/[;\s]+/).filter(Boolean); return a.length ? a : null; }
+
   function loadSymbolSets() {
     try {
       const raw = localStorage.getItem(LS_SYMBOLSETS_KEY);
@@ -2689,6 +2727,7 @@
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
     LS_PANELS_KEY, makePanel, loadPanels, savePanels,
+    PANEL_TYPES, isStagePanel, panelCellSet, normalizeMask, maskToStr, maskStrToCells,
     makePayRow, migratePayRows,
     LS_REEL_STRIPS_KEY, defaultReelStrips, loadReelStrips, saveReelStrips,
     parseStripStr, stripToStr, stripToWeights, weightsToStrip,

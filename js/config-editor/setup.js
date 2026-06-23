@@ -30,7 +30,7 @@
     makeMode, DEFAULT_MODES, loadModes, saveModes,
     LS_LAYOUT_KEY, makeReel, DEFAULT_LAYOUT, loadLayout,
     SUBREEL_KINDS, SUBREEL_KIND_MAP,
-    makePanel, loadPanels, savePanels, loadSymbolSets, saveSymbolSets,
+    makePanel, loadPanels, savePanels, normalizeMask, panelCellSet, loadSymbolSets, saveSymbolSets,
     makeJackpot, loadJackpots, saveJackpots,
     LS_MULTIPLIERS_KEY, defaultMultipliers, makeMultValue, loadMultipliers, saveMultipliers, parseLadder,
     makePayRow, migratePayRows,
@@ -1104,6 +1104,79 @@
         emit('status', { type: 'ok', msg: `已移除自由副盤 ${pid}` });
       }
       function selectPanel(idx) { activePanelIdx.value = idx; selectedReelIdxs.value = []; }
+
+      // ── v7.x:畫格分類 — 把框選的格子集合轉成副盤(任意遮罩)或主輪(逐欄分解) ──
+      function _cellsBBox(keys) {
+        let minC = Infinity, minR = Infinity, maxC = -Infinity, maxR = -Infinity;
+        for (const k of keys) {
+          const m = /^(-?\d+),(-?\d+)$/.exec(String(k).trim()); if (!m) continue;
+          const c = +m[1], r = +m[2];
+          if (c < minC) minC = c; if (r < minR) minR = r; if (c > maxC) maxC = c; if (r > maxR) maxR = r;
+        }
+        if (minC === Infinity) return null;
+        return { col: minC, row: minR, width: maxC - minC + 1, height: maxR - minR + 1 };
+      }
+      function cellsToPanelGeom(keys) {
+        const bbox = _cellsBBox(keys); if (!bbox) return null;
+        const rel = [];
+        for (const k of keys) {
+          const m = /^(-?\d+),(-?\d+)$/.exec(String(k).trim()); if (!m) continue;
+          rel.push((+m[1] - bbox.col) + ',' + (+m[2] - bbox.row));
+        }
+        return { ...bbox, cells: normalizeMask(rel, bbox.width, bbox.height) };  // 矩形→null、非矩形→保留遮罩
+      }
+      function classifySelectionAsSub(opts) {
+        opts = opts || {};
+        const geom = cellsToPanelGeom(selectedCells.value);
+        if (!geom) { emit('status', { type: 'err', msg: '沒有選取任何格子' }); return; }
+        const p = { ...makePanel(_nextPanelId()), ...geom };
+        if (opts.stage) p.panel_type = 'STAGE';            // 演出/負空間(不抽樣/不連線)
+        p.scroll = (p.panel_type === 'SCROLL');
+        panels.push(p);
+        activePanelIdx.value = panels.length - 1;
+        selectedReelIdxs.value = [];
+        clearCellSelection();
+        syncGameSpec('classifySub');
+        emit('status', { type: 'ok', msg: `已新增副盤 ${p.panel_id}（${geom.cells ? '自訂形狀 ' + panelCellSet(p).size + ' 格' : geom.width + '×' + geom.height}）` });
+      }
+      function cellsToReels(keys) {
+        const byCol = new Map(); let gMin = Infinity;
+        for (const k of keys) {
+          const m = /^(-?\d+),(-?\d+)$/.exec(String(k).trim()); if (!m) continue;
+          const c = +m[1], r = +m[2];
+          if (!byCol.has(c)) byCol.set(c, []);
+          byCol.get(c).push(r); if (r < gMin) gMin = r;
+        }
+        const cols = [...byCol.keys()].sort((a, b) => a - b);
+        if (cols.length === 0) return { ok: false, error: '沒有選取任何格子' };
+        for (let i = 1; i < cols.length; i++)
+          if (cols[i] !== cols[i - 1] + 1)
+            return { ok: false, error: `主輪欄位之間有空欄(欄 ${cols[i - 1]} 與 ${cols[i]} 不相鄰);主輪各欄必須相連` };
+        const reels = [];
+        for (let i = 0; i < cols.length; i++) {
+          const rows = byCol.get(cols[i]).slice().sort((a, b) => a - b);
+          const run = rows[rows.length - 1] - rows[0] + 1;
+          if (run !== rows.length)
+            return { ok: false, error: `欄 ${cols[i]} 中間有洞;主輪一欄必須是連續的格(有洞請改用副盤遮罩)` };
+          reels.push({ reel_id: i + 1, y_offset: rows[0] - gMin, max_rows: rows.length });
+        }
+        return { ok: true, reels };
+      }
+      function classifySelectionAsMain() {
+        const res = cellsToReels(selectedCells.value);
+        if (!res.ok) { emit('status', { type: 'warn', msg: res.error }); return; }
+        const next = res.reels.length;
+        if (layout.length > 0 && !confirm(
+          `把框選的格子設為主輪會「重建」整個主盤:\n\n  目前:${layout.length} 個 Reel\n  重建後:${next} 個 Reel\n\n` +
+          `04/05/08 權重以 Reel 編號保留;缺的補 0、多的空著(同套用範本)。\n\n確定嗎?`)) return;
+        const rows = res.reels.map(r => ({ ...makeReel(r.reel_id), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows }));
+        layout.splice(0, layout.length, ...rows);   // 同 applyLayoutPreset:splice 保 reactivity
+        activeReelIdx.value = 0;
+        selectedReelIdxs.value = [];
+        clearCellSelection();
+        syncGameSpec('classifyMain');               // 連動層:輪數 → registry → 符號頁 reel_limit
+        emit('status', { type: 'ok', msg: `已重建主盤:${next} 個 Reel（R1…R${next}）` });
+      }
       function renamePanel(idx, newId) {
         if (idx < 0 || idx >= panels.length) return;
         const clean = String(newId || '').trim();
@@ -1142,14 +1215,19 @@
         const minTop = layoutMetrics.value.minTop;   // lazy 取值,宣告順序無虞
         const out = [];
         panels.forEach((p, pi) => {
-          for (let r = 0; r < (p.height || 0); r++) {
-            for (let c = 0; c < (p.width || 0); c++) {
+          const w = p.width || 0, h = p.height || 0;
+          const mask = Array.isArray(p.cells) && p.cells.length ? new Set(p.cells) : null;
+          const isStage = (p.panel_type === 'STAGE');
+          for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+              if (mask && !mask.has(c + ',' + r)) continue;   // v7.x:遮罩外的格不畫 → 環形/挖空正確
               out.push({
                 x: (p.col + c) * LAYOUT_STEP,
                 y: (p.row + r - minTop) * LAYOUT_STEP,
                 panel_idx: pi,
                 panel_id: p.panel_id,
                 join: !!p.join_payline,
+                stage: isStage,
               });
             }
           }
@@ -7604,6 +7682,13 @@
 
       // ── layout:Reel chip 多選 / 群組批次編輯(Batch C)──
       const selectedReelIdxs = ref([]);                       // 0-based reel index 多選
+      const selectedCells = ref([]);                          // v7.x:畫格框選的絕對格座標 "col,row"
+      function toggleCellSelection(col, row) {
+        const k = col + ',' + row;
+        const i = selectedCells.value.indexOf(k);
+        if (i >= 0) selectedCells.value.splice(i, 1); else selectedCells.value.push(k);
+      }
+      function clearCellSelection() { selectedCells.value = []; }
       const groupActive = computed(() => selectedReelIdxs.value.length >= 2);
       const groupRowsValue = ref(3);
       const groupOffsetValue = ref(0);
@@ -7722,6 +7807,8 @@
         clearReelSelection, selectReelById, onReelChipClick,
         groupSetRows, groupAdjustRows, groupSetOffset, groupAdjustOffset, groupToggleSubreel,
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
+        selectedCells, toggleCellSelection, clearCellSelection,
+        cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,
         handleSaveAsTemplate: _handleSaveAsTemplate,

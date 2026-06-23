@@ -193,8 +193,8 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 :root[data-theme="dark"] .cfg-constraints-v2-card,
 :root[data-theme="dark"] .cfg-matrix-col-menu,
 :root[data-theme="dark"] .cfg-matrix-sel-bar,
-:root[data-theme="dark"] .cfg-stepper,
 :root[data-theme="dark"] .cfg-stepper-val,
+:root[data-theme="dark"] .cfg-stepper-btn,
 :root[data-theme="dark"] .cfg-inspector-pinned-chip {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.12);
@@ -286,24 +286,65 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
    11. 共用元件補強:cfg-stepper(被通用元件規格化)
    ============================================================ */
 .cfg-stepper {
-  background: var(--glass-3);
-  border: 0.5px solid var(--glass-edge);
-  border-radius: var(--r-sm);
-  box-shadow: var(--inset-glass);
-  transition: background var(--t-fast);
-}
-.cfg-stepper:hover {
-  background: var(--glass-4);
-}
-.cfg-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: transparent;
   border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.cfg-stepper:hover {
+  background: transparent;
+}
+.cfg-stepper-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: 50%;
   color: var(--text);
-  transition: color var(--t-fast), transform 120ms var(--ease-ios);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast), transform 120ms var(--ease-ios);
   -webkit-tap-highlight-color: transparent;
 }
 .cfg-stepper-btn:not(:disabled):hover {
   color: var(--accent-hex);
+  border-color: var(--accent-brd);
+  background: var(--accent);
+}
+.cfg-stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cfg-stepper-val {
+  flex: 0 0 auto;
+  min-width: 44px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  background: var(--glass-3);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* v7.x:STAGE(演出/負空間)副盤格 — 虛線、淡化,表示不抽樣/不連線 */
+.cfg-layout-cell-panel-stage {
+  fill: var(--glass-3);
+  stroke: var(--glass-edge);
+  stroke-dasharray: 3 2;
+  opacity: 0.7;
 }
 
 /* ============================================================

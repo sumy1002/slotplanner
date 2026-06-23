@@ -941,7 +941,6 @@
                       class="cfg-layout-preset-chip"
                       :title="p.note"
                       @click="applyLayoutPreset(p.key)">
-                <span class="cfg-layout-preset-chip-icon">{{ p.icon }}</span>
                 <span class="cfg-layout-preset-chip-label">{{ p.label }}</span>
               </button>
             </div>
@@ -1383,6 +1382,7 @@
                         'cfg-layout-cell-interactive',
                         'cfg-layout-cell-panel',
                         pc.join ? 'cfg-layout-cell-panel-join' : '',
+                        pc.stage ? 'cfg-layout-cell-panel-stage' : '',
                         pc.panel_idx === activePanelIdx ? 'cfg-layout-cell-active' : ''
                       ]"
                       @click="selectPanel(pc.panel_idx)"
