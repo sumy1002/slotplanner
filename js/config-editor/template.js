@@ -919,7 +919,7 @@
       </div>
 
       <!-- ═══════ 02_Layout 盤面結構 ═══════ -->
-      <div v-else-if="active === 'layout'" class="cfg-form cfg-layout-v2" style="display:flex;flex-direction:column;height:100%;">
+      <div v-else-if="active === 'layout'" class="cfg-form cfg-layout-v2" style="display:flex;flex-direction:column;">
         <div class="cfg-form-header" style="flex-shrink:0;">
           <div class="cfg-form-title">🎰 02_Layout · 盤面結構</div>
           <div class="cfg-form-sub">
@@ -1357,6 +1357,7 @@
             </div>
             <div class="cfg-layout-svg-wrap" v-show="layoutEditMode==='structure'">
               <svg :viewBox="layoutViewBox" class="cfg-layout-svg"
+                   :style="{ maxWidth: Math.min(Math.max(layout.length, 1) * 60 + 24, 560) + 'px' }"
                    preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
                 <text v-for="(lb, i) in layoutLabels" :key="'lb'+i"
                       :x="lb.x" :y="-6"
