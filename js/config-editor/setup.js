@@ -1237,6 +1237,7 @@
         const subSet = new Set(cvSub.value);
         const stageSet = new Set(cvStage.value);
         const editMap = cvEditedSet.value;
+        const badSet = cvMainInvalid.value;
         const rb = cvRubber.value;
         const out = [];
         const COLS = cvCols.value, ROWS = cvRows.value;
@@ -1247,7 +1248,7 @@
           else if (subSet.has(k)) cls = 'sub';
           else if (stageSet.has(k)) cls = 'stage';
           const rubber = !!(rb && c >= rb.c0 && c <= rb.c1 && r >= rb.r0 && r <= rb.r1);
-          out.push({ key: k, col: c, row: r, cls, rubber, editKind: editMap.get(k) || '' });
+          out.push({ key: k, col: c, row: r, cls, rubber, editKind: editMap.get(k) || '', invalid: badSet.has(k) });
         }
         return out;
       });
@@ -1255,6 +1256,28 @@
         const byCol = new Map();
         for (const k of cvMain.value) { const [c, r] = k.split(',').map(Number); if (!byCol.has(c)) byCol.set(c, []); byCol.get(c).push(r); }
         return [...byCol.keys()].sort((a, b) => a - b).map((c, i) => { const rows = byCol.get(c).sort((a, b) => a - b); return { col: c, reel_id: i + 1, rows: rows[rows.length - 1] - rows[0] + 1, top: rows[0] }; });
+      });
+      // v7.x P4:主輪「斷欄 / 單欄有洞」的問題格集合(套用前即時標記;cellsToReels 會擋,這裡只負責視覺與停用套用)
+      const cvMainInvalid = computed(() => {
+        const bad = new Set();
+        if (!cvMain.value.length) return bad;
+        const byCol = new Map();
+        for (const k of cvMain.value) { const c = +k.split(',')[0], r = +k.split(',')[1]; if (!byCol.has(c)) byCol.set(c, []); byCol.get(c).push(r); }
+        const cols = [...byCol.keys()].sort((a, b) => a - b);
+        // 單欄有洞:該欄所有格標記
+        for (const c of cols) {
+          const rows = byCol.get(c).slice().sort((a, b) => a - b);
+          const run = rows[rows.length - 1] - rows[0] + 1;
+          if (run !== rows.length) rows.forEach(r => bad.add(c + ',' + r));
+        }
+        // 斷欄:缺號欄的「兩側相鄰欄」標記(提示這裡斷開了)
+        for (let i = 1; i < cols.length; i++) {
+          if (cols[i] !== cols[i - 1] + 1) {
+            byCol.get(cols[i - 1]).forEach(r => bad.add(cols[i - 1] + ',' + r));
+            byCol.get(cols[i]).forEach(r => bad.add(cols[i] + ',' + r));
+          }
+        }
+        return bad;
       });
       // v7.x:把一組格依「上下左右相連」分成多個連通區塊(每塊 → 一塊面板)
       function _cvComponents(cells) {
@@ -1312,15 +1335,9 @@
           // 橡皮擦:清掉任何分類
           keys.forEach(k => _cvClearCell(k));
         } else {
-          // 分類筆刷 main/sub/stage:點一格=切換;拖拉=整片塗成該分類(覆蓋其他分類)
+          // v7.x P2:點一格或拖拉皆「塗成該分類」(已是該類=no-op;清除一律走橡皮擦,避免主輪被點出洞)
           const target = m === 'sub' ? cvSub.value : m === 'stage' ? cvStage.value : cvMain.value;
-          if (single) {
-            const k = keys[0];
-            if (_cvHas(target, k)) _cvDel(target, k);
-            else { _cvClearCell(k); _cvAdd(target, k); }
-          } else {
-            keys.forEach(k => { _cvClearCell(k); _cvAdd(target, k); });
-          }
+          keys.forEach(k => { if (!_cvHas(target, k)) { _cvClearCell(k); _cvAdd(target, k); } });
         }
         _cvStart = _cvCur = null;
       }
@@ -1405,6 +1422,21 @@
         if (!cvMain.value.length) { emit('status', { type: 'warn', msg: '畫布尚未設定主輪,無法套用' }); return; }
         const res = cellsToReels(cvMain.value);
         if (!res.ok) { emit('status', { type: 'warn', msg: res.error }); return; }
+        // v7.x P5:套用前偵測「相鄰不同副盤被併成一塊」→ 先讓使用者確認(合併後參數以重疊最多者為準)
+        const _prevByType = { SCROLL: [], STAGE: [] };
+        panels.forEach(p => { const t = p.panel_type === 'STAGE' ? 'STAGE' : 'SCROLL'; _prevByType[t].push(panelCellSet(p)); });
+        const _aCol0 = Math.min(...cvMain.value.map(k => +k.split(',')[0]));
+        const _aRow0 = Math.min(...cvMain.value.map(k => +k.split(',')[1]));
+        let _mergeHit = false;
+        [['SCROLL', cvSub.value], ['STAGE', cvStage.value]].forEach((pair) => {
+          _cvComponents(pair[1]).forEach((comp) => {
+            const nset = new Set(comp.map(k => (+k.split(',')[0] - _aCol0) + ',' + (+k.split(',')[1] - _aRow0)));
+            let overlapN = 0;
+            _prevByType[pair[0]].forEach((set) => { let hit = false; set.forEach(k => { if (nset.has(k)) hit = true; }); if (hit) overlapN++; });
+            if (overlapN >= 2) _mergeHit = true;
+          });
+        });
+        if (_mergeHit && !confirm('偵測到相鄰的不同副盤會被合併為同一塊;合併後部分參數(如「參與連線」join_payline)將以重疊最多者為準。\n\n確定套用嗎?')) return;
         const aCol = Math.min(...cvMain.value.map(k => +k.split(',')[0]));
         const aRow = Math.min(...cvMain.value.map(k => +k.split(',')[1]));
         // v7.x:合併,不砍掉重建 — 以 reel_id 保留既有 Reel 的權重/副盤參數,只覆蓋幾何(y_offset/max_rows)
@@ -8086,9 +8118,9 @@
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
         selectedCells, toggleCellSelection, clearCellSelection,
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
-        cvDim, cvMode, cvMenu, cvSelReelCol, cvSelPanel, cvCellSize, cvCols, cvRows, cvCell, cvDirty,
-        cvGrid, cvReels, cvPanelList,
-        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard, cvZoom, cvSetDim,
+        cvMode, cvCols, cvRows, cvCell, cvDirty, cvMainInvalid,
+        cvGrid,
+        cvCellDown, cvCellEnter, cvUp, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard,
         cvStageRef, cvPanStart, cvPanMove, cvPanEnd, cvStageUp, cvResetView,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,

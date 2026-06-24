@@ -952,7 +952,7 @@
         <div class="cfg-layout-v2-body">
 
           <!-- 左欄：Reel 索引 chip 列 -->
-          <div class="cfg-layout-v2-index" :class="{ 'cfg-is-cvdirty': cvDirty }">
+          <div class="cfg-layout-v2-index">
             <div class="cfg-layout-v2-index-scroll">
               <div v-for="(r, idx) in layout" :key="r.reel_id" class="cfg-layout-reel-chip-wrap">
               <button
@@ -964,14 +964,14 @@
                   'drag-over': dragOverIdx === idx && dragReelIdx !== idx,
                   'dragging': dragReelIdx === idx
                 }"
-                draggable="true"
+                :draggable="!cvDirty"
                 @dragstart="onReelDragStart(idx, $event)"
                 @dragover.prevent="onReelDragOver(idx)"
                 @dragleave="onReelDragLeave(idx)"
                 @drop.prevent="onReelDrop(idx)"
                 @dragend="onReelDragEnd()"
                 @click="onReelChipClick(idx, $event)"
-                :title="'R' + r.reel_id + (r.has_subreel ? ' (含副 Reel)' : '') + ' · 點擊選取 · Ctrl/Shift 多選做群組編輯 · 可拖曳互換'"
+                :title="'R' + r.reel_id + (r.has_subreel ? ' (含副 Reel)' : '') + ' · 點擊選取 · Ctrl/Shift 多選做群組編輯' + (cvDirty ? ' · (畫布有未套用編輯,暫停拖曳換序)' : ' · 可拖曳互換')"
               >
                 <span class="cfg-layout-reel-chip-grip" title="拖曳互換">⋮⋮</span>
                 <span class="cfg-layout-reel-chip-id">R{{ r.reel_id }}</span>
@@ -990,7 +990,7 @@
               </div>
             </div>
             <div class="cfg-layout-v2-index-footer">
-              <button class="cfg-layout-v2-add-btn" @click="addReel" title="新增 Reel">
+              <button class="cfg-layout-v2-add-btn" @click="addReel" :disabled="cvDirty" :title="cvDirty ? '畫布有未套用編輯時鎖定;套用或捨棄後可新增' : '新增 Reel'">
                 <span>＋</span>
               </button>
             </div>
@@ -1143,7 +1143,7 @@
           </div>
 
           <!-- 中欄：選中 Reel 的詳情欄位 -->
-          <div class="cfg-layout-v2-detail" :class="{ 'cfg-is-cvdirty': cvDirty }" v-if="activeReel && activePanelIdx < 0">
+          <div class="cfg-layout-v2-detail" v-if="activeReel && activePanelIdx < 0">
             <!-- 詳情 header -->
             <div class="cfg-layout-v2-detail-header">
               <div class="cfg-layout-v2-detail-title">
@@ -1154,15 +1154,16 @@
                 <!-- 副 Reel 切換 -->
                 <button class="cfg-reel-subreel-toggle"
                         :class="{ active: activeReel.has_subreel }"
+                        :disabled="cvDirty"
                         @click="activeReel.has_subreel = !activeReel.has_subreel; if(activeReel.has_subreel){ if(!activeReel.subreel_kind) activeReel.subreel_kind='STACK'; if(!activeReel.subreel_position){ activeReel.subreel_position='BOTTOM'; } if(!activeReel.subreel_rows) activeReel.subreel_rows=1; }"
-                        :title="activeReel.has_subreel ? '移除副盤' : '附加副盤/副輪'">
+                        :title="cvDirty ? '畫布有未套用編輯時鎖定;套用或捨棄後可改' : (activeReel.has_subreel ? '移除副盤' : '附加副盤/副輪')">
                   <span class="cfg-reel-subreel-icon">{{ activeReel.has_subreel ? '✓' : '+' }}</span>
                   <span>副盤</span>
                 </button>
                 <button class="cfg-mode-delete-btn"
                         @click="removeReel(activeReelIdx)"
-                        :disabled="layout.length <= 1"
-                        :title="layout.length <= 1 ? '至少需要保留一個 Reel' : '刪除此 Reel'">✕</button>
+                        :disabled="layout.length <= 1 || cvDirty"
+                        :title="cvDirty ? '畫布有未套用編輯時鎖定;套用或捨棄後可刪' : (layout.length <= 1 ? '至少需要保留一個 Reel' : '刪除此 Reel')">✕</button>
               </div>
             </div>
 
@@ -1196,7 +1197,7 @@
                   </div>
                 </div>
 
-                <div class="cfg-layout-v2-field-group">
+                <div class="cfg-layout-v2-field-group" :class="{ 'cfg-is-cvdirty': cvDirty }" :title="cvDirty ? '畫布有未套用編輯時,幾何(偏移/列數)鎖定,避免與草稿衝突;套用或捨棄後解鎖' : ''">
                   <div class="cfg-layout-v2-section-label">主 Reel 參數</div>
                   <div class="cfg-mode-grid">
                     <div class="cfg-field cfg-field-compact">
@@ -1383,7 +1384,7 @@
                   <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
                     <div v-for="cell in cvGrid" :key="cell.key"
                          class="cfg-cv-cell"
-                         :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.rubber ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '' ]"
+                         :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.rubber ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '' ]"
                          @pointerdown.prevent="cvCellDown(cell, $event)"
                          @pointerenter="cvCellEnter(cell)"></div>
                   </div>
@@ -1391,17 +1392,17 @@
               </div>
               <!-- 底部動作列:狀態(已同步/尚未套用) + 置中視圖 + 捨棄/清空/套用 -->
               <div class="cfg-cv-actions">
-                <span class="cfg-cv-state" :class="{ dirty: cvDirty }">
-                  <template v-if="cvDirty">● 尚未套用的變更</template>
+                <span class="cfg-cv-state" :class="{ dirty: cvDirty, invalid: cvMainInvalid.size > 0 }">
+                  <template v-if="cvMainInvalid.size > 0">⚠ 主輪有斷欄或破洞,無法套用</template>
+                  <template v-else-if="cvDirty">● 尚未套用的變更</template>
                   <template v-else>✓ 已與盤面同步</template>
                 </span>
                 <span class="cfg-cv-railhint" v-if="!cvDirty && cvMode==='pan'">＊預設為移動工具,選一支筆刷開始編輯</span>
                 <span class="cfg-cv-fx"></span>
                 <button class="cfg-cv-act" @click="cvResetView()" title="把畫布捲回盤面中央(中鍵拖曳可平移)">⊕ 置中視圖</button>
-                <span class="cfg-cv-zoom-cap">{{ cvCols }}×{{ cvRows }}</span>
                 <button class="cfg-cv-act" @click="cvDiscard()" :disabled="!cvDirty" title="捨棄畫布上未套用的編輯,還原成目前盤面">↺ 捨棄</button>
                 <button class="cfg-cv-act" @click="cvClear()" title="清空畫布(尚未套用)">🗑 清空</button>
-                <button class="cfg-cv-act cfg-cv-apply" @click="cvCommit()" :disabled="!cvDirty" title="套用到盤面（重建 layout＋panels；以 Reel 編號/幾何重疊保留既有參數）">✓ 套用到盤面</button>
+                <button class="cfg-cv-act cfg-cv-apply" @click="cvCommit()" :disabled="!cvDirty || cvMainInvalid.size > 0" title="套用到盤面（重建 layout＋panels；以 Reel 編號/幾何重疊保留既有參數）">✓ 套用到盤面</button>
               </div>
             </div>
           </div><!-- /cfg-layout-v2-preview -->

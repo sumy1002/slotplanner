@@ -755,13 +755,9 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* 預覽盤面 SVG(覆寫:依輪數的 inline max-width + 此處限高/置中,避免格子被撐到超大) */
 .cfg-layout-v2-preview .cfg-layout-svg { max-height: 380px; margin: 0 auto; }
 /* 分段切換(預覽/編輯、繪製/選取):一顆膠囊內兩段,比兩顆按鈕直覺 */
-.cfg-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 0.5px solid var(--glass-edge); border-radius: 999px; background: var(--glass-3); }
-.cfg-seg-btn { border: none; background: transparent; color: var(--text-muted); font-size: 12px; line-height: 1; padding: 5px 12px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background var(--t-fast), color var(--t-fast); }
-.cfg-seg-btn.active { background: var(--accent); color: var(--accent-hex); font-weight: 600; }
 .cfg-cv { display: flex; flex-direction: column; padding: 2px; flex: 1; min-height: 0; }
 .cfg-cv-work { display: flex; flex: 1; gap: 12px; min-height: 0; }
 .cfg-cv-rail { flex: 0 0 62px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; background: var(--glass-3); border: 0.5px solid var(--glass-edge); border-radius: var(--r-md); }
-.cfg-cv-rail.is-disabled { opacity: 0.45; }
 .cfg-cv-brush { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-family: inherit; cursor: pointer; }
 .cfg-cv-brush:hover:not(:disabled) { background: var(--glass-4); }
 .cfg-cv-brush.active { background: var(--accent); border-color: var(--accent-brd); }
@@ -772,17 +768,8 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-tool-ic { font-size: 16px; line-height: 1; }
 .cfg-cv-tool-lb { font-size: 11px; line-height: 1; }
 .cfg-cv-rail-div { width: 100%; height: 1px; background: var(--glass-edge); margin: 2px 0; }
-.cfg-cv-rail-sp { flex: 1; }
 .cfg-cv-actions { display: flex; align-items: center; gap: 8px; padding: 8px 2px 2px; }
-.cfg-cv-actions.is-disabled { opacity: 0.5; }
 .cfg-cv-fx { flex: 1; }
-.cfg-cv-zoom { display: flex; align-items: center; gap: 8px; }
-.cfg-cv-zbtn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 15px; line-height: 1; font-family: inherit; cursor: pointer; }
-.cfg-cv-zbtn:hover:not(:disabled) { background: var(--glass-4); }
-.cfg-cv-zbtn:disabled { cursor: default; opacity: 0.5; }
-.cfg-cv-zoom-h { width: 120px; cursor: pointer; accent-color: var(--accent-hex); }
-.cfg-cv-zoom-h:disabled { cursor: default; }
-.cfg-cv-zoom-cap { font-size: 11px; color: var(--text-muted); line-height: 1; font-variant-numeric: tabular-nums; min-width: 34px; }
 .cfg-cv-act { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 13px; line-height: 1; font-family: inherit; cursor: pointer; white-space: nowrap; }
 .cfg-cv-act:hover:not(:disabled) { background: var(--glass-4); }
 .cfg-cv-act:disabled { cursor: default; }
@@ -793,7 +780,6 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-stage { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; overflow: auto; padding: 6px; border: 1px solid var(--glass-edge); border-radius: var(--r-md); background: var(--glass-1); }
 .cfg-cv-grid { display: grid; gap: 4px; flex: none; width: max-content; height: max-content; margin: auto; }
 .cfg-cv-cell { position: relative; border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
-.cfg-cv-cell-scratch { background: var(--glass-4); border-color: var(--glass-edge); }
 .cfg-cv-cell-main { background: var(--accent); border: 1px solid var(--accent-hex); }
 .cfg-cv-cell-sub { background: #1d9e75; border: 1px solid #0f6e56; }
 .cfg-cv-cell-stage { background: var(--glass-3); border: 1px dashed var(--text-muted); opacity: 0.65; }
@@ -811,23 +797,24 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   content: "✕"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: #9ca3af; font-size: 12px; line-height: 1; font-weight: 700; pointer-events: none;
 }
+/* v7.x P4:主輪斷欄/破洞的問題格 — 紅色虛線框 + 角標,提示「此處無法成輪、套用會被擋」 */
+.cfg-cv-cell-invalid {
+  border: 1.5px dashed #dc2626 !important;
+  box-shadow: inset 0 0 0 1px rgba(220,38,38,0.35);
+}
+.cfg-cv-cell-invalid::before {
+  content: "!"; position: absolute; top: 1px; left: 3px;
+  color: #dc2626; font-size: 10px; font-weight: 800; line-height: 1; pointer-events: none;
+}
 /* v7.x:畫布狀態列(已同步/尚未套用) */
 .cfg-cv-state { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cfg-cv-state.dirty { color: #b45309; font-weight: 600; }
+.cfg-cv-state.invalid { color: #dc2626; font-weight: 700; }
 .cfg-cv-railhint { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 /* v7.x:畫布有未套用編輯時,鎖住左側「幾何」編輯面(避免和畫布草稿打架);套用/捨棄後解鎖 */
 .cfg-is-cvdirty { opacity: 0.5; pointer-events: none; filter: grayscale(0.15); transition: opacity var(--t-fast); }
-.cfg-cv-menu { position: absolute; z-index: 20; background: var(--glass-2); border: 0.5px solid var(--glass-edge); border-radius: var(--r-md); padding: 4px; min-width: 150px; box-shadow: var(--shadow-md); }
-.cfg-cv-mi { display: block; width: 100%; text-align: left; padding: 7px 10px; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: var(--text); font-size: 13px; font-family: inherit; }
-.cfg-cv-mi:hover { background: var(--glass-3); }
-.cfg-cv-lists { display: flex; flex-wrap: wrap; gap: 16px; }
-.cfg-cv-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.cfg-cv-side-t { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
-.cfg-cv-pill { font-size: 12px; padding: 4px 9px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-3); color: var(--text); }
-.cfg-cv-pill.active { border-color: var(--accent-hex); background: var(--accent); color: var(--accent-hex); }
 .cfg-cv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text); }
 .cfg-cv-sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
 .cfg-cv-sw.main { background: var(--accent); border: 1px solid var(--accent-hex); }
 .cfg-cv-sw.sub { background: #1d9e75; border: 1px solid #0f6e56; }
 .cfg-cv-sw.stage { background: var(--glass-3); border: 1px dashed var(--text-muted); opacity: 0.65; }
-.cfg-cv-sw.scratch { background: var(--glass-4); }
