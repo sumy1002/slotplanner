@@ -952,7 +952,7 @@
         <div class="cfg-layout-v2-body">
 
           <!-- 左欄：Reel 索引 chip 列 -->
-          <div class="cfg-layout-v2-index">
+          <div class="cfg-layout-v2-index" :class="{ 'cfg-is-cvdirty': cvDirty }">
             <div class="cfg-layout-v2-index-scroll">
               <div v-for="(r, idx) in layout" :key="r.reel_id" class="cfg-layout-reel-chip-wrap">
               <button
@@ -1015,7 +1015,7 @@
           </div>
 
           <!-- v4.7:選中 Panel 的詳情欄位（與主輪詳情並列，二擇一）-->
-          <div class="cfg-layout-v2-detail cfg-panel-detail" v-if="activePanel && activePanelIdx >= 0">
+          <div class="cfg-layout-v2-detail cfg-panel-detail" :class="{ 'cfg-is-cvdirty': cvDirty }" v-if="activePanel && activePanelIdx >= 0">
             <div class="cfg-layout-v2-detail-header">
               <span class="cfg-panel-detail-title">🧩 自由副盤 {{ activePanel.panel_id }}</span>
             </div>
@@ -1143,7 +1143,7 @@
           </div>
 
           <!-- 中欄：選中 Reel 的詳情欄位 -->
-          <div class="cfg-layout-v2-detail" v-if="activeReel && activePanelIdx < 0">
+          <div class="cfg-layout-v2-detail" :class="{ 'cfg-is-cvdirty': cvDirty }" v-if="activeReel && activePanelIdx < 0">
             <!-- 詳情 header -->
             <div class="cfg-layout-v2-detail-header">
               <div class="cfg-layout-v2-detail-title">
@@ -1345,12 +1345,8 @@
           <!-- 右欄：盤面 SVG 預覽（與選中 Reel highlight） -->
           <div class="cfg-layout-v2-preview">
             <div class="cfg-layout-v2-preview-title">
-              <span class="cfg-layout-preview-h">📐 盤面預覽</span>
-              <span class="cfg-seg cfg-layout-preview-modes">
-                <button class="cfg-seg-btn" :class="{ active: layoutEditMode==='structure' }" @click="layoutEditMode='structure'">預覽</button>
-                <button class="cfg-seg-btn" :class="{ active: layoutEditMode==='paint' }" @click="layoutEditMode='paint'">編輯</button>
-              </span>
-              <span class="cfg-layout-split-preview-info" v-show="layoutEditMode==='structure'">
+              <span class="cfg-layout-preview-h">📐 盤面畫布</span>
+              <span class="cfg-layout-split-preview-info">
                 {{ layout.length }} 個 Reel · 主格 {{ layout.reduce((s,r)=>s+r.max_rows,0) }} ·
                 副 {{ layout.reduce((s,r)=>s+(r.has_subreel?r.subreel_rows:0),0) }}
               </span>
@@ -1358,46 +1354,54 @@
                 <span><i class="cfg-cv-sw main"></i>主輪</span>
                 <span><i class="cfg-cv-sw sub"></i>副輪</span>
                 <span><i class="cfg-cv-sw stage"></i>演出</span>
-                <span><i class="cfg-cv-sw scratch"></i>未分類</span>
               </span>
             </div>
-            <!-- v7.x:統一網格 — 預覽=唯讀鏡像、編輯=同一個網格 + 左側工具 -->
+            <!-- v7.x:統一網格 — 預覽/編輯排版不變,固定直式工具列(預覽時整排反灰停用),盤面置中 -->
             <div class="cfg-cv">
               <div class="cfg-cv-work">
-                <div class="cfg-cv-rail" v-show="layoutEditMode==='paint'">
-                  <div class="cfg-cv-tools">
-                    <button class="cfg-cv-tool" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')" title="繪製：點一格＝畫/取消，按住拖拉＝填滿矩形"><span class="cfg-cv-tool-ic">✏️</span><span>繪製</span></button>
-                    <button class="cfg-cv-tool" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')" title="選取：只圈已畫好的格，右鍵叫出選單分類"><span class="cfg-cv-tool-ic">⬚</span><span>選取</span></button>
-                  </div>
-                  <div class="cfg-cv-zoom">
-                    <button class="cfg-cv-zoom-btn" @click="cvZoom(-1)" :disabled="cvDim<=4" title="放大：少一排、格子變大">−</button>
-                    <input class="cfg-cv-zoom-range" type="range" min="4" max="24" :value="cvDim" @input="cvSetDim($event.target.value)" title="拖拉調整盤面格數" />
-                    <button class="cfg-cv-zoom-btn" @click="cvZoom(1)" :disabled="cvDim>=24" title="縮小：多給一排格子">+</button>
-                  </div>
-                  <div class="cfg-cv-zoom-cap">{{ cvDim }} × {{ cvDim }}</div>
+                <div class="cfg-cv-rail">
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='main' }" @click="cvSetMode('main')" title="主輪筆：直接畫上主輪格(各欄須連續、不可有洞)">
+                    <span class="cfg-cv-sw main" aria-hidden="true"></span><span class="cfg-cv-tool-lb">主輪</span>
+                  </button>
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='sub' }" @click="cvSetMode('sub')" title="副輪筆：畫上副輪格(套用時相連的格自動成一塊副盤)">
+                    <span class="cfg-cv-sw sub" aria-hidden="true"></span><span class="cfg-cv-tool-lb">副輪</span>
+                  </button>
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='stage' }" @click="cvSetMode('stage')" title="演出筆：畫上演出區 (STAGE) 格">
+                    <span class="cfg-cv-sw stage" aria-hidden="true"></span><span class="cfg-cv-tool-lb">演出</span>
+                  </button>
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='erase' }" @click="cvSetMode('erase')" title="橡皮擦：清掉格子的分類">
+                    <span class="cfg-cv-tool-ic" aria-hidden="true">🧽</span><span class="cfg-cv-tool-lb">擦除</span>
+                  </button>
+                  <div class="cfg-cv-rail-div"></div>
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='pan' }" @click="cvSetMode('pan')" title="移動：拖曳平移畫布(也可直接用中鍵拖曳或捲動)">
+                    <svg class="cfg-cv-tool-ic" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" style="fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round"><path d="M8 1.6v12.8M1.6 8h12.8M8 1.6 6 3.8M8 1.6l2 2.2M8 14.4l-2-2.2M8 14.4l2-2.2M1.6 8l2.2-2M1.6 8l2.2 2M14.4 8l-2.2-2M14.4 8l-2.2 2"/></svg><span class="cfg-cv-tool-lb">移動</span>
+                  </button>
                 </div>
-                <div class="cfg-cv-stage" :class="{ 'is-locked': layoutEditMode!=='paint' }"
-                     @contextmenu.prevent="cvCtx($event)" @pointerup="cvUp()" @pointerleave="cvUp()">
-                  <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvDim + ', 1fr)', gridTemplateRows: 'repeat(' + cvDim + ', 1fr)' }">
+                <div class="cfg-cv-stage" :class="{ 'is-pan': cvMode==='pan' }" ref="cvStageRef"
+                     @contextmenu.prevent @pointerdown="cvPanStart" @pointermove="cvPanMove" @pointerup="cvStageUp()" @pointerleave="cvStageUp()"
+                     title="中鍵拖曳可平移畫布(也可直接捲動)">
+                  <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
                     <div v-for="cell in cvGrid" :key="cell.key"
                          class="cfg-cv-cell"
-                         :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.sel ? 'cfg-cv-cell-sel' : '', cell.rubber ? 'cfg-cv-cell-rubber' : '' ]"
+                         :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.rubber ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '' ]"
                          @pointerdown.prevent="cvCellDown(cell, $event)"
                          @pointerenter="cvCellEnter(cell)"></div>
                   </div>
-                  <div v-if="cvMenu.show" class="cfg-cv-menu" :style="{ left: cvMenu.x + 'px', top: cvMenu.y + 'px' }">
-                    <button class="cfg-cv-mi" @click="cvClassify('main')">設為主輪</button>
-                    <button class="cfg-cv-mi" @click="cvClassify('sub')">設為副輪</button>
-                    <button class="cfg-cv-mi" @click="cvClassify('stage')">設為演出區 (STAGE)</button>
-                    <button class="cfg-cv-mi" @click="cvClassify('clear')">清除分類</button>
-                  </div>
                 </div>
               </div>
-              <div class="cfg-cv-foot" v-show="layoutEditMode==='paint'">
-                <span class="cfg-hint cfg-cv-hint">繪製：點/拖拉作畫。選取：左鍵圈已畫好的格、右鍵分類。「套用到盤面」後才會重建盤面。</span>
-                <span class="cfg-cv-foot-spacer"></span>
-                <button class="cfg-cv-tool cfg-cv-foot-btn" @click="cvClear()">清空</button>
-                <button class="btn-primary cfg-cv-foot-btn" @click="cvCommit()">套用到盤面</button>
+              <!-- 底部動作列:狀態(已同步/尚未套用) + 置中視圖 + 捨棄/清空/套用 -->
+              <div class="cfg-cv-actions">
+                <span class="cfg-cv-state" :class="{ dirty: cvDirty }">
+                  <template v-if="cvDirty">● 尚未套用的變更</template>
+                  <template v-else>✓ 已與盤面同步</template>
+                </span>
+                <span class="cfg-cv-railhint" v-if="!cvDirty && cvMode==='pan'">＊預設為移動工具,選一支筆刷開始編輯</span>
+                <span class="cfg-cv-fx"></span>
+                <button class="cfg-cv-act" @click="cvResetView()" title="把畫布捲回盤面中央(中鍵拖曳可平移)">⊕ 置中視圖</button>
+                <span class="cfg-cv-zoom-cap">{{ cvCols }}×{{ cvRows }}</span>
+                <button class="cfg-cv-act" @click="cvDiscard()" :disabled="!cvDirty" title="捨棄畫布上未套用的編輯,還原成目前盤面">↺ 捨棄</button>
+                <button class="cfg-cv-act" @click="cvClear()" title="清空畫布(尚未套用)">🗑 清空</button>
+                <button class="cfg-cv-act cfg-cv-apply" @click="cvCommit()" :disabled="!cvDirty" title="套用到盤面（重建 layout＋panels；以 Reel 編號/幾何重疊保留既有參數）">✓ 套用到盤面</button>
               </div>
             </div>
           </div><!-- /cfg-layout-v2-preview -->

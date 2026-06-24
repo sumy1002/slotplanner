@@ -750,7 +750,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* 預覽標題列(覆寫:置中對齊、靠左排列,避免 toggle 與標題/資訊重疊) */
 .cfg-layout-v2-preview-title { align-items: center; justify-content: flex-start; }
 .cfg-layout-preview-h { white-space: nowrap; }
-.cfg-layout-preview-modes { margin-left: 8px; }
+.cfg-layout-split-preview-info { margin-left: 8px; }
 .cfg-cv-legend-top { margin-left: auto; gap: 14px; }
 /* 預覽盤面 SVG(覆寫:依輪數的 inline max-width + 此處限高/置中,避免格子被撐到超大) */
 .cfg-layout-v2-preview .cfg-layout-svg { max-height: 380px; margin: 0 auto; }
@@ -758,34 +758,65 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 0.5px solid var(--glass-edge); border-radius: 999px; background: var(--glass-3); }
 .cfg-seg-btn { border: none; background: transparent; color: var(--text-muted); font-size: 12px; line-height: 1; padding: 5px 12px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background var(--t-fast), color var(--t-fast); }
 .cfg-seg-btn.active { background: var(--accent); color: var(--accent-hex); font-weight: 600; }
-.cfg-cv { display: flex; flex-direction: column; gap: 8px; padding: 2px; flex: 1; min-height: 0; }
-.cfg-cv-work { display: flex; flex: 1; gap: 14px; min-height: 0; }
-.cfg-cv-rail { flex: 0 0 150px; display: flex; flex-direction: column; gap: 12px; }
-.cfg-cv-tools { display: flex; gap: 6px; }
-.cfg-cv-tool { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 12.5px; font-family: inherit; cursor: pointer; white-space: nowrap; }
-.cfg-cv-tool-ic { font-size: 13px; line-height: 1; }
-.cfg-cv-tool:hover { background: var(--glass-3); }
-.cfg-cv-tool.active { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); font-weight: 600; }
-.cfg-cv-zoom { display: flex; align-items: center; gap: 6px; }
-.cfg-cv-zoom-btn { flex: 0 0 26px; height: 26px; border-radius: 50%; border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.cfg-cv-zoom-btn:hover:not(:disabled) { background: var(--glass-3); }
-.cfg-cv-zoom-btn:disabled { opacity: 0.4; cursor: default; }
-.cfg-cv-zoom-range { flex: 1; min-width: 0; accent-color: var(--accent-hex); cursor: pointer; }
-.cfg-cv-zoom-cap { font-size: 12px; color: var(--text-muted); text-align: center; font-variant-numeric: tabular-nums; }
-.cfg-cv-stage { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; }
-.cfg-cv-stage.is-locked .cfg-cv-cell { pointer-events: none; cursor: default; }
-.cfg-cv-grid { display: grid; gap: 3px; width: min(100%, 380px); aspect-ratio: 1; }
-.cfg-cv-foot { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
-.cfg-cv-foot-spacer { flex: 1; }
-.cfg-cv-foot-btn { flex: 0 0 auto; }
-.cfg-cv-hint { margin: 0; flex: 1 1 220px; min-width: 0; }
-.cfg-cv-cell { border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
+.cfg-cv { display: flex; flex-direction: column; padding: 2px; flex: 1; min-height: 0; }
+.cfg-cv-work { display: flex; flex: 1; gap: 12px; min-height: 0; }
+.cfg-cv-rail { flex: 0 0 62px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; background: var(--glass-3); border: 0.5px solid var(--glass-edge); border-radius: var(--r-md); }
+.cfg-cv-rail.is-disabled { opacity: 0.45; }
+.cfg-cv-brush { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-family: inherit; cursor: pointer; }
+.cfg-cv-brush:hover:not(:disabled) { background: var(--glass-4); }
+.cfg-cv-brush.active { background: var(--accent); border-color: var(--accent-brd); }
+.cfg-cv-brush:disabled { cursor: default; opacity: 0.4; }
+.cfg-cv-stage.is-pan { cursor: grab; }
+.cfg-cv-stage.is-pan:active { cursor: grabbing; }
+.cfg-cv-brush .cfg-cv-sw { width: 16px; height: 16px; margin: 0; }
+.cfg-cv-tool-ic { font-size: 16px; line-height: 1; }
+.cfg-cv-tool-lb { font-size: 11px; line-height: 1; }
+.cfg-cv-rail-div { width: 100%; height: 1px; background: var(--glass-edge); margin: 2px 0; }
+.cfg-cv-rail-sp { flex: 1; }
+.cfg-cv-actions { display: flex; align-items: center; gap: 8px; padding: 8px 2px 2px; }
+.cfg-cv-actions.is-disabled { opacity: 0.5; }
+.cfg-cv-fx { flex: 1; }
+.cfg-cv-zoom { display: flex; align-items: center; gap: 8px; }
+.cfg-cv-zbtn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 15px; line-height: 1; font-family: inherit; cursor: pointer; }
+.cfg-cv-zbtn:hover:not(:disabled) { background: var(--glass-4); }
+.cfg-cv-zbtn:disabled { cursor: default; opacity: 0.5; }
+.cfg-cv-zoom-h { width: 120px; cursor: pointer; accent-color: var(--accent-hex); }
+.cfg-cv-zoom-h:disabled { cursor: default; }
+.cfg-cv-zoom-cap { font-size: 11px; color: var(--text-muted); line-height: 1; font-variant-numeric: tabular-nums; min-width: 34px; }
+.cfg-cv-act { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 13px; line-height: 1; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.cfg-cv-act:hover:not(:disabled) { background: var(--glass-4); }
+.cfg-cv-act:disabled { cursor: default; }
+.cfg-cv-apply { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.cfg-cv-apply:hover:not(:disabled) { background: #4338ca; }
+/* v7.x:乾淨(無未套用變更)時套用鈕轉為中性、不再搶眼;髒時恢復靛紫主色 */
+.cfg-cv-apply:disabled { background: var(--glass-2); border-color: var(--glass-edge); color: var(--text-muted); opacity: 1; }
+.cfg-cv-stage { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; overflow: auto; padding: 6px; border: 1px solid var(--glass-edge); border-radius: var(--r-md); background: var(--glass-1); }
+.cfg-cv-grid { display: grid; gap: 4px; flex: none; width: max-content; height: max-content; margin: auto; }
+.cfg-cv-cell { position: relative; border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
 .cfg-cv-cell-scratch { background: var(--glass-4); border-color: var(--glass-edge); }
 .cfg-cv-cell-main { background: var(--accent); border: 1px solid var(--accent-hex); }
-.cfg-cv-cell-sub { background: var(--glass-2); border: 1px solid var(--accent-brd); }
+.cfg-cv-cell-sub { background: #1d9e75; border: 1px solid #0f6e56; }
 .cfg-cv-cell-stage { background: var(--glass-3); border: 1px dashed var(--text-muted); opacity: 0.65; }
-.cfg-cv-cell-sel { outline: 2px dashed var(--accent-hex); outline-offset: -2px; }
 .cfg-cv-cell-rubber { box-shadow: inset 0 0 0 2px var(--accent-brd); }
+/* v7.x:逐格「尚未套用」標記 — 不動填色(功能色不變),用靜態角標區分變更類型:
+   新增/改類(ed-add)=右上角琥珀點;清掉(ed-del)=灰色叉 + 虛線框(表示「這裡原本有、現在沒了」)。
+   無動畫,避免空格上掛呼吸框造成「那邊好像有東西」的誤讀。 */
+.cfg-cv-cell-ed-add::after {
+  content: ""; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px;
+  border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 1.5px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+.cfg-cv-cell-ed-del { border: 1px dashed #9ca3af; }
+.cfg-cv-cell-ed-del::after {
+  content: "✕"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #9ca3af; font-size: 12px; line-height: 1; font-weight: 700; pointer-events: none;
+}
+/* v7.x:畫布狀態列(已同步/尚未套用) */
+.cfg-cv-state { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cfg-cv-state.dirty { color: #b45309; font-weight: 600; }
+.cfg-cv-railhint { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+/* v7.x:畫布有未套用編輯時,鎖住左側「幾何」編輯面(避免和畫布草稿打架);套用/捨棄後解鎖 */
+.cfg-is-cvdirty { opacity: 0.5; pointer-events: none; filter: grayscale(0.15); transition: opacity var(--t-fast); }
 .cfg-cv-menu { position: absolute; z-index: 20; background: var(--glass-2); border: 0.5px solid var(--glass-edge); border-radius: var(--r-md); padding: 4px; min-width: 150px; box-shadow: var(--shadow-md); }
 .cfg-cv-mi { display: block; width: 100%; text-align: left; padding: 7px 10px; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: var(--text); font-size: 13px; font-family: inherit; }
 .cfg-cv-mi:hover { background: var(--glass-3); }
@@ -797,6 +828,6 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text); }
 .cfg-cv-sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
 .cfg-cv-sw.main { background: var(--accent); border: 1px solid var(--accent-hex); }
-.cfg-cv-sw.sub { background: var(--glass-2); border: 1px solid var(--accent-brd); }
+.cfg-cv-sw.sub { background: #1d9e75; border: 1px solid #0f6e56; }
 .cfg-cv-sw.stage { background: var(--glass-3); border: 1px dashed var(--text-muted); opacity: 0.65; }
 .cfg-cv-sw.scratch { background: var(--glass-4); }
