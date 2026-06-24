@@ -760,17 +760,25 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-seg-btn.active { background: var(--accent); color: var(--accent-hex); font-weight: 600; }
 .cfg-cv { display: flex; flex-direction: column; gap: 8px; padding: 2px; flex: 1; min-height: 0; }
 .cfg-cv-work { display: flex; flex: 1; gap: 14px; min-height: 0; }
-.cfg-cv-rail { flex: 0 0 118px; display: flex; flex-direction: column; gap: 10px; }
-.cfg-cv-tool { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 13px; font-family: inherit; cursor: pointer; }
+.cfg-cv-rail { flex: 0 0 150px; display: flex; flex-direction: column; gap: 12px; }
+.cfg-cv-tools { display: flex; gap: 6px; }
+.cfg-cv-tool { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 12.5px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.cfg-cv-tool-ic { font-size: 13px; line-height: 1; }
 .cfg-cv-tool:hover { background: var(--glass-3); }
 .cfg-cv-tool.active { background: var(--accent); border-color: var(--accent-brd); color: var(--accent-hex); font-weight: 600; }
-.cfg-cv-rail-bottom { margin-top: auto; }
-.cfg-cv-rail .btn-primary { width: 100%; }
-.cfg-cv-zoom-v { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 2px 0; }
-.cfg-cv-zoom-val { font-size: 12px; color: var(--text-muted); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.cfg-cv-zoom { display: flex; align-items: center; gap: 6px; }
+.cfg-cv-zoom-btn { flex: 0 0 26px; height: 26px; border-radius: 50%; border: 0.5px solid var(--glass-edge); background: var(--glass-2); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.cfg-cv-zoom-btn:hover:not(:disabled) { background: var(--glass-3); }
+.cfg-cv-zoom-btn:disabled { opacity: 0.4; cursor: default; }
+.cfg-cv-zoom-range { flex: 1; min-width: 0; accent-color: var(--accent-hex); cursor: pointer; }
+.cfg-cv-zoom-cap { font-size: 12px; color: var(--text-muted); text-align: center; font-variant-numeric: tabular-nums; }
 .cfg-cv-stage { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; }
-.cfg-cv-grid { display: grid; gap: 3px; width: min(100%, 400px); aspect-ratio: 1; }
-.cfg-cv-hint { margin-top: 2px; }
+.cfg-cv-stage.is-locked .cfg-cv-cell { pointer-events: none; cursor: default; }
+.cfg-cv-grid { display: grid; gap: 3px; width: min(100%, 380px); aspect-ratio: 1; }
+.cfg-cv-foot { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+.cfg-cv-foot-spacer { flex: 1; }
+.cfg-cv-foot-btn { flex: 0 0 auto; }
+.cfg-cv-hint { margin: 0; flex: 1 1 220px; min-width: 0; }
 .cfg-cv-cell { border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
 .cfg-cv-cell-scratch { background: var(--glass-4); border-color: var(--glass-edge); }
 .cfg-cv-cell-main { background: var(--accent); border: 1px solid var(--accent-hex); }

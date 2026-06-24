@@ -1354,92 +1354,30 @@
                 {{ layout.length }} 個 Reel · 主格 {{ layout.reduce((s,r)=>s+r.max_rows,0) }} ·
                 副 {{ layout.reduce((s,r)=>s+(r.has_subreel?r.subreel_rows:0),0) }}
               </span>
-              <span class="cfg-cv-legend cfg-cv-legend-top" v-show="layoutEditMode==='paint'">
+              <span class="cfg-cv-legend cfg-cv-legend-top">
                 <span><i class="cfg-cv-sw main"></i>主輪</span>
                 <span><i class="cfg-cv-sw sub"></i>副輪</span>
                 <span><i class="cfg-cv-sw stage"></i>演出</span>
                 <span><i class="cfg-cv-sw scratch"></i>未分類</span>
               </span>
             </div>
-            <div class="cfg-layout-svg-wrap" v-show="layoutEditMode==='structure'">
-              <svg :viewBox="layoutViewBox" class="cfg-layout-svg"
-                   :style="{ maxWidth: Math.min(Math.max(layout.length, 1) * 72 + 24, 620) + 'px' }"
-                   preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-                <text v-for="(lb, i) in layoutLabels" :key="'lb'+i"
-                      :x="lb.x" :y="-6"
-                      text-anchor="middle"
-                      @click="selectReelById(lb.reel_id)"
-                      :class="['cfg-layout-label', 'cfg-layout-label-interactive', lb.reel_id === (activeReel && activeReel.reel_id) ? 'cfg-layout-label-active' : '']">R{{ lb.reel_id }}</text>
-                <rect v-for="(c, i) in layoutCells" :key="'c'+i"
-                      :x="c.x" :y="c.y"
-                      :width="LAYOUT_CELL_SIZE" :height="LAYOUT_CELL_SIZE"
-                      :class="[
-                        'cfg-layout-cell',
-                        'cfg-layout-cell-interactive',
-                        c.kind === 'sub' ? 'cfg-layout-cell-sub' : 'cfg-layout-cell-main',
-                        c.kind === 'sub' && c.sub_kind ? ('cfg-layout-cell-sub-' + c.sub_kind) : '',
-                        c.reel_id === (activeReel && activeReel.reel_id) ? 'cfg-layout-cell-active' : '',
-                        (previewDragFrom >= 0 && previewDragOver === (c.reel - 1) && previewDragFrom !== (c.reel - 1)) ? 'cfg-layout-cell-dragover' : ''
-                      ]"
-                      @pointerdown="onPreviewPointerDown(c.reel - 1, $event)"
-                      @pointerenter="onPreviewPointerEnter(c.reel - 1)"
-                      rx="3" />
-                <!-- v4.7:自由副盤格子 -->
-                <rect v-for="(pc, i) in panelCells" :key="'pc'+i"
-                      :x="pc.x" :y="pc.y"
-                      :width="LAYOUT_CELL_SIZE" :height="LAYOUT_CELL_SIZE"
-                      :class="[
-                        'cfg-layout-cell',
-                        'cfg-layout-cell-interactive',
-                        'cfg-layout-cell-panel',
-                        pc.join ? 'cfg-layout-cell-panel-join' : '',
-                        pc.stage ? 'cfg-layout-cell-panel-stage' : '',
-                        pc.panel_idx === activePanelIdx ? 'cfg-layout-cell-active' : ''
-                      ]"
-                      @click="selectPanel(pc.panel_idx)"
-                      rx="3" />
-              </svg>
-            </div>
-            <div class="cfg-layout-v2-preview-legend" v-show="layoutEditMode==='structure'">
-              <span class="cfg-layout-v2-legend-item">
-                <span class="cfg-layout-v2-legend-dot main"></span> 主格
-              </span>
-              <span class="cfg-layout-v2-legend-item">
-                <span class="cfg-layout-v2-legend-dot sub"></span> 副格
-              </span>
-              <span class="cfg-layout-v2-legend-item">
-                <span class="cfg-layout-v2-legend-dot active"></span> 選中
-              </span>
-              <span v-if="g.megaways" class="cfg-layout-v2-legend-item" style="color:rgb(120,90,200); font-weight:700;">
-                ⥯ Megaways:列數每轉變動(此圖示為最大列)
-              </span>
-            </div>
-            <!-- 使用說明 -->
-            <div class="cfg-layout-v2-tips" v-show="layoutEditMode==='structure'">
-              <div class="cfg-layout-v2-tip-title">使用說明</div>
-              <div class="cfg-layout-v2-tip-item">
-                <code class="cfg-key">Y_Offset</code> 正值往下偏、負值往上偏，製造 diamond 不規則盤面
-              </div>
-              <div class="cfg-layout-v2-tip-item">
-                開啟副 Reel 後可在主 Reel 上/下方加一列，Hold &amp; Win 常用
-              </div>
-            </div>
-
-            <!-- v7.x:畫格編輯(整合進預覽面板;切到「編輯」顯示) -->
-            <div class="cfg-cv" v-show="layoutEditMode==='paint'">
+            <!-- v7.x:統一網格 — 預覽=唯讀鏡像、編輯=同一個網格 + 左側工具 -->
+            <div class="cfg-cv">
               <div class="cfg-cv-work">
-                <div class="cfg-cv-rail">
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')" title="繪製：點一格＝畫/取消，按住拖拉＝填滿矩形">✏️ 繪製</button>
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')" title="選取：只圈已畫好的格，右鍵叫出選單分類">⬚ 選取</button>
-                  <div class="cfg-cv-zoom-v">
-                    <button class="cfg-stepper-btn" @click="cvZoom(-1)" :disabled="cvDim<=4" title="放大：少一排、格子變大">+</button>
-                    <span class="cfg-cv-zoom-val">{{ cvDim }}×{{ cvDim }}</span>
-                    <button class="cfg-stepper-btn" @click="cvZoom(1)" :disabled="cvDim>=24" title="縮小：多給一排格子">−</button>
+                <div class="cfg-cv-rail" v-show="layoutEditMode==='paint'">
+                  <div class="cfg-cv-tools">
+                    <button class="cfg-cv-tool" :class="{ active: cvMode==='paint' }" @click="cvSetMode('paint')" title="繪製：點一格＝畫/取消，按住拖拉＝填滿矩形"><span class="cfg-cv-tool-ic">✏️</span><span>繪製</span></button>
+                    <button class="cfg-cv-tool" :class="{ active: cvMode==='group' }" @click="cvSetMode('group')" title="選取：只圈已畫好的格，右鍵叫出選單分類"><span class="cfg-cv-tool-ic">⬚</span><span>選取</span></button>
                   </div>
-                  <button class="cfg-cv-tool cfg-cv-rail-bottom" @click="cvClear()">清空</button>
-                  <button class="btn-primary cfg-cv-commit" @click="cvCommit()">套用到盤面</button>
+                  <div class="cfg-cv-zoom">
+                    <button class="cfg-cv-zoom-btn" @click="cvZoom(-1)" :disabled="cvDim<=4" title="放大：少一排、格子變大">−</button>
+                    <input class="cfg-cv-zoom-range" type="range" min="4" max="24" :value="cvDim" @input="cvSetDim($event.target.value)" title="拖拉調整盤面格數" />
+                    <button class="cfg-cv-zoom-btn" @click="cvZoom(1)" :disabled="cvDim>=24" title="縮小：多給一排格子">+</button>
+                  </div>
+                  <div class="cfg-cv-zoom-cap">{{ cvDim }} × {{ cvDim }}</div>
                 </div>
-                <div class="cfg-cv-stage" @contextmenu.prevent="cvCtx($event)" @pointerup="cvUp()" @pointerleave="cvUp()">
+                <div class="cfg-cv-stage" :class="{ 'is-locked': layoutEditMode!=='paint' }"
+                     @contextmenu.prevent="cvCtx($event)" @pointerup="cvUp()" @pointerleave="cvUp()">
                   <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvDim + ', 1fr)', gridTemplateRows: 'repeat(' + cvDim + ', 1fr)' }">
                     <div v-for="cell in cvGrid" :key="cell.key"
                          class="cfg-cv-cell"
@@ -1455,7 +1393,12 @@
                   </div>
                 </div>
               </div>
-              <div class="cfg-hint cfg-cv-hint">繪製：點一格＝畫/取消，按住拖拉＝填滿矩形。選取：左鍵只選已畫好的格（不新增）、右鍵叫出選單做分類。「套用到盤面」才會重建 layout＋panels（重錨定回主盤 col0），未套用前不動現有盤面。</div>
+              <div class="cfg-cv-foot" v-show="layoutEditMode==='paint'">
+                <span class="cfg-hint cfg-cv-hint">繪製：點/拖拉作畫。選取：左鍵圈已畫好的格、右鍵分類。「套用到盤面」後才會重建盤面。</span>
+                <span class="cfg-cv-foot-spacer"></span>
+                <button class="cfg-cv-tool cfg-cv-foot-btn" @click="cvClear()">清空</button>
+                <button class="btn-primary cfg-cv-foot-btn" @click="cvCommit()">套用到盤面</button>
+              </div>
             </div>
           </div><!-- /cfg-layout-v2-preview -->
 

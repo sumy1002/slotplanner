@@ -1302,7 +1302,7 @@
         cvSelPanel.value = cvPanels.value.length - 1; cvSelReelCol.value = null; cvSel.value = []; cvMenu.show = false;
         emit('status', { type: 'ok', msg: `已新增副盤（${geom.cells ? '自訂形狀' : geom.width + '×' + geom.height}）${act === 'stage' ? ' · 演出區' : ''}` });
       }
-      function cvLoadFromBoard() {
+      function cvLoadFromBoard(silent) {
         let minTop = 0;
         layout.forEach(r => { if ((r.y_offset || 0) < minTop) minTop = r.y_offset || 0; });
         panels.forEach(p => { if ((p.row || 0) < minTop) minTop = p.row || 0; });
@@ -1311,8 +1311,14 @@
         cvMain.value = main;
         cvPanels.value = panels.map(p => ({ panel_id: p.panel_id, col: p.col || 0, row: (p.row || 0) - minTop, width: p.width || 1, height: p.height || 1, cells: Array.isArray(p.cells) ? p.cells.slice() : null, panel_type: p.panel_type || 'SCROLL', join_payline: !!p.join_payline }));
         cvScratch.value = []; cvSel.value = []; cvSelReelCol.value = 0; cvSelPanel.value = -1;
-        emit('status', { type: 'ok', msg: '已從目前盤面載入畫布' });
+        // 自動調整格數以容納整個盤面(至少 8、最多 24)
+        let need = 8;
+        main.forEach(k => { const c = +k.split(',')[0] + 1, r = +k.split(',')[1] + 1; if (c > need) need = c; if (r > need) need = r; });
+        cvPanels.value.forEach(p => { panelCellSet(p).forEach(k => { const c = +k.split(',')[0] + 1, r = +k.split(',')[1] + 1; if (c > need) need = c; if (r > need) need = r; }); });
+        cvDim.value = Math.max(4, Math.min(24, need));
+        if (!silent) emit('status', { type: 'ok', msg: '已從目前盤面載入畫布' });
       }
+      function cvSetDim(v) { cvDim.value = Math.max(4, Math.min(24, parseInt(v, 10) || 8)); }
       function cvCommit() {
         if (!cvMain.value.length) { emit('status', { type: 'warn', msg: '畫布尚未設定主輪,無法套用' }); return; }
         const res = cellsToReels(cvMain.value);
@@ -1328,6 +1334,9 @@
         syncGameSpec('cvCommit');
         emit('status', { type: 'ok', msg: `已套用畫布到盤面:${res.reels.length} 個 Reel · ${newPanels.length} 塊副盤` });
       }
+      // v7.x:預覽=唯讀鏡像目前盤面 → 進預覽 / 盤面變動時自動把 layout+panels 載入畫布(同一個網格)
+      watch(layoutEditMode, (m) => { if (m === 'structure') cvLoadFromBoard(true); }, { immediate: true });
+      watch([layout, panels], () => { if (layoutEditMode.value === 'structure') cvLoadFromBoard(true); }, { deep: true });
       function renamePanel(idx, newId) {
         if (idx < 0 || idx >= panels.length) return;
         const clean = String(newId || '').trim();
@@ -7962,7 +7971,7 @@
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
         cvDim, layoutEditMode, cvMode, cvMenu, cvSelReelCol, cvSelPanel, cvCellSize,
         cvGrid, cvReels, cvPanelList,
-        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit, cvZoom,
+        cvCellDown, cvCellEnter, cvUp, cvCtx, cvSetMode, cvClear, cvClassify, cvLoadFromBoard, cvCommit, cvZoom, cvSetDim,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,
         handleSaveAsTemplate: _handleSaveAsTemplate,
