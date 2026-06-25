@@ -5256,6 +5256,7 @@
       //   行動版（≤767）= 逐層下鑽旗標:false=分頁清單,true=分頁詳細表單。
       //   桌面/平板無對應 CSS,設值無副作用。僅記憶體狀態、不寫入 localStorage。
       const cfgTabRailCollapsed = ref(false);
+      let _detachCfgSwipe = null;  // v7.6:行動版邊緣滑動 detach handle
 
       // 按搜尋詞過濾 + 仍按原本 group 結構回傳
       const filteredPresetGroups = computed(() => {
@@ -7931,8 +7932,23 @@
             emit('status', { type: 'ok', msg: `已新增約束 ${newId}(符號 ${c.symbol_id}),請設定限制內容` });
           }
         } catch (e) { /* 意圖消費失敗不影響正常載入 */ }
+        // v7.6:行動版進場預設收起分頁列(直接看內容);右滑可拉出分頁列
+        try { if (window.matchMedia('(max-width: 767px)').matches) cfgTabRailCollapsed.value = true; } catch (e) {}
+        // v7.6:行動版邊緣滑動手勢 — 右滑(左緣起手)拉出分頁列、左滑收回
+        try {
+          const _el = document.querySelector('.cfg-page');
+          const _swipe = window.SlotPlanner && window.SlotPlanner.attachEdgeSwipe;
+          if (_el && _swipe) {
+            _detachCfgSwipe = _swipe(_el, {
+              isOpen:  () => !cfgTabRailCollapsed.value,
+              onOpen:  () => { cfgTabRailCollapsed.value = false; },
+              onClose: () => { cfgTabRailCollapsed.value = true; },
+            });
+          }
+        } catch (e) { /* 手勢掛載失敗不影響功能 */ }
       });
       onUnmounted(() => {
+        if (_detachCfgSwipe) { try { _detachCfgSwipe(); } catch (e) {} _detachCfgSwipe = null; }
         window.removeEventListener('pointerup', _onMatrixPointerUp);
         document.removeEventListener('click', _onDocClickForMatrixMenu, true);
         document.removeEventListener('click', _onDocClickForRulesAddMenu, true);

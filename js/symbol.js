@@ -19,6 +19,10 @@
     template: `
 <div class="sym-page" :class="{ 'sym-has-sel': !!selectedId }">
 
+  <!-- 行動版抽屜遮罩:點擊回清單層(桌面/平板由 CSS 隱藏)-->
+  <div class="sym-drawer-scrim" @click="select(null)"></div>
+
+
   <!-- ============ 左側清單 ============ -->
   <aside class="sym-left">
     <div class="sym-toolbar">
@@ -473,6 +477,7 @@
       }
 
       const selectedId = ref(null);
+      let _detachSymSwipe = null;  // v7.6:行動版邊緣滑動 detach handle
 
       // #10:Mega 尺寸區是否展開(預設折疊,只有 mega>1×1 才自動展開)
       const showMega = ref(false);
@@ -1265,15 +1270,30 @@
         refreshMultRefs();   // v6.3 / Q3:載入模式名 + JP 選項
         // #4:載入時依新模型(啟用順序)正規化編號一次;有變才寫回
         if (renumber()) commit();
-        // 自動選第一個 symbol
-        if (symbols.value.length && selectedId.value === null) {
+        // 自動選第一個 symbol(行動版不自動選,讓使用者先看清單)
+        let _isMobile = false;
+        try { _isMobile = window.matchMedia('(max-width: 767px)').matches; } catch (e) {}
+        if (symbols.value.length && selectedId.value === null && !_isMobile) {
           select(symbols.value[0].id);
         }
         document.addEventListener('keydown', onKeyDown);
+        // v7.6:行動版邊緣滑動 — 右滑(左緣起手)回清單層;左滑無作用(需點符號進入)
+        try {
+          const _el = document.querySelector('.sym-page');
+          const _swipe = window.SlotPlanner && window.SlotPlanner.attachEdgeSwipe;
+          if (_el && _swipe) {
+            _detachSymSwipe = _swipe(_el, {
+              isOpen:  () => !!selectedId.value,   // 「開」= 在編輯層
+              onOpen:  () => {},                   // 進入編輯層需點選某符號,不自動
+              onClose: () => { select(null); },    // 右滑 → 回清單
+            });
+          }
+        } catch (e) { /* 手勢掛載失敗不影響功能 */ }
         emitStatus('wait', `共 ${symbols.value.length} 個 symbol，總權重 ${totalWeight.value}`);
       });
 
       onBeforeUnmount(() => {
+        if (_detachSymSwipe) { try { _detachSymSwipe(); } catch (e) {} _detachSymSwipe = null; }
         if (writeTimer) { clearTimeout(writeTimer); writeForm(); }
         if (unsubChanged) unsubChanged();
         if (unsubSpec) unsubSpec();

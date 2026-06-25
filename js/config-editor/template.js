@@ -329,6 +329,9 @@
   <!-- ── 左 tab 列 + 右內容 ── -->
   <div class="cfg-body">
 
+    <!-- 行動版抽屜遮罩:點擊收起分頁列(桌面/平板由 CSS 隱藏)-->
+    <div class="cfg-drawer-scrim" @click="cfgTabRailCollapsed = true"></div>
+
     <!-- ── 左:分組分頁列 ── -->
     <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed }">
       <!-- v6.1:收合切換(窄螢幕釋放橫向空間) -->
