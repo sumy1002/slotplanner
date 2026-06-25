@@ -34,12 +34,12 @@
           {{ sbCollapsed ? '›' : '‹' }}
         </button>
       </div>
-      <div class="nav-btn" :class="{active: page===0}" @click="goPage(0)">
-        <span>🗂️</span><span class="nav-label">數據文件相關</span>
-      </div>
-      <div class="nav-divider"></div>
       <div class="nav-btn" :class="{active: page===3}" @click="goPage(3)">
         <span>⚙️</span><span class="nav-label">設定檔編輯器</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-btn" :class="{active: page===0}" @click="goPage(0)">
+        <span>🗂️</span><span class="nav-label">數據文件相關</span>
       </div>
       <div class="nav-btn" :class="{active: page===4}" @click="goPage(4)">
         <span>📄</span><span class="nav-label">批次處理</span>
@@ -203,11 +203,11 @@
 
   <!-- ============ 行動版底部導覽（v7.1;桌面/平板由 CSS 隱藏）============ -->
   <nav class="mnav" aria-label="主導覽">
-    <button class="mnav-btn" :class="{active: page===0}" @click="goPage(0)">
-      <span class="mnav-ico">🗂️</span><span class="mnav-lab">數據</span>
-    </button>
     <button class="mnav-btn" :class="{active: page===3}" @click="goPage(3)">
       <span class="mnav-ico">⚙️</span><span class="mnav-lab">設定檔</span>
+    </button>
+    <button class="mnav-btn" :class="{active: page===0}" @click="goPage(0)">
+      <span class="mnav-ico">🗂️</span><span class="mnav-lab">數據</span>
     </button>
     <button class="mnav-btn" :class="{active: page===4}" @click="goPage(4)">
       <span class="mnav-ico">📄</span><span class="mnav-lab">批次</span>

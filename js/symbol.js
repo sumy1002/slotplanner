@@ -17,7 +17,7 @@
     },
     emits: ['status'],
     template: `
-<div class="sym-page">
+<div class="sym-page" :class="{ 'sym-has-sel': !!selectedId }">
 
   <!-- ============ 左側清單 ============ -->
   <aside class="sym-left">
@@ -75,6 +75,12 @@
 
   <!-- ============ 右側編輯面板 ============ -->
   <div class="sym-right">
+    <!-- 行動版返回列(桌面/平板由 CSS 隱藏;只在 ≤767 已選取詳細視圖顯示)-->
+    <div class="sym-mobile-back" @click="select(null)">
+      <span class="sym-mobile-back-ico">‹</span>
+      <span class="sym-mobile-back-txt">符號清單</span>
+      <span class="sym-mobile-back-cur">{{ selected ? (selected.name || ('#' + selected.number) || ('id=' + selected.id)) : '' }}</span>
+    </div>
     <header class="topbar">
       <div class="title">
         {{ selected ? '編輯：' + (selected.name || ('#' + selected.number) || ('id=' + selected.id)) : '編輯 Symbol' }}

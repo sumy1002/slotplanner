@@ -56,7 +56,7 @@
 
   const app = createApp({
     setup() {
-      const page        = ref(0);
+      const page        = ref(3);  // v7.6:開站直接進設定檔編輯器(nav 重排,設定檔置首)
       const sbCollapsed = ref(false);
 
       // ── 「數據文件相關」區段的子分頁（仿設定檔編輯器分頁）──
@@ -74,7 +74,7 @@
         0: '數據文件相關', 1: 'Symbol 管理',
         3: 'A 設定檔編輯器', 4: '批次處理', 5: '資料比對'
       };
-      const status = ref({ type: 'wait', msg: '已就緒' });
+      const status = ref({ type: 'wait', msg: 'A 設定檔編輯器' });
 
       // v4.9-b:Pyodide 載入狀態區塊已移除(模擬引擎下架,改外部程式執行)
 

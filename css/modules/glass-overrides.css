@@ -824,3 +824,128 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-sw.main { background: var(--accent); border: 1px solid var(--accent-hex); }
 .cfg-cv-sw.sub { background: #1d9e75; border: 1px solid #0f6e56; }
 .cfg-cv-sw.stage { background: var(--glass-3); border: 1px dashed var(--text-muted); opacity: 0.65; }
+
+/* ============================================================
+   v7.6 RWD — 行動版分頁抽屜(設定檔編輯器 + Symbol 管理)
+   ------------------------------------------------------------
+   桌面/平板:左側 rail 與右側內容並排(原樣)。
+   行動 ≤767:rail 變全寬抽屜;選分頁後 cfgTabRailCollapsed=true →
+   rail 退場、內容全寬,頂部出現「‹ 分頁列」返回鈕。
+   Symbol 頁同理:沒選→看清單、選了(.sym-has-sel)→看編輯 + 返回鈕。
+   沿用既有 token(守則 #75:暗色自動跟隨)、實色面(守則 #76)。
+   ============================================================ */
+
+/* 行動返回列預設隱藏(桌面/平板不顯示) */
+.cfg-mobile-back,
+.sym-mobile-back { display: none; }
+
+@media (max-width: 767px) {
+
+  /* ── 設定檔編輯器:rail 抽屜化 ── */
+  .cfg-body { position: relative; }
+
+  .cfg-tabs {
+    position: absolute;
+    z-index: 30;
+    inset: 0 auto 0 0;
+    width: 100%;
+    max-width: 320px;
+    box-shadow: 2px 0 16px rgba(20,28,46,0.18);
+    /* 預設(未收合)= 顯示抽屜 */
+    transform: translateX(0);
+    transition: transform var(--t-fast);
+  }
+  /* 選了分頁(cfgTabRailCollapsed=true)→ 抽屜滑出畫面外 */
+  .cfg-tabs.cfg-tabs-collapsed {
+    transform: translateX(-105%);
+    box-shadow: none;
+  }
+  /* 桌面收合鈕在手機沒意義,隱藏(改用分頁點選 + 返回鈕) */
+  .cfg-tabrail-toggle { display: none; }
+
+  /* 內容永遠佔滿,抽屜浮在其上 */
+  .cfg-content { padding: 16px 16px 24px; }
+
+  /* 行動返回列:只在抽屜收起(=正在看內容)時顯示 */
+  .cfg-tabs.cfg-tabs-collapsed ~ .cfg-mobile-back,
+  .cfg-mobile-back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    min-height: var(--touch-min);
+    background: var(--glass-2);
+    border-bottom: 0.5px solid var(--glass-edge);
+    color: var(--accent-text);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 抽屜展開時(在看分頁列)不需返回鈕 */
+  .cfg-body:has(.cfg-tabs:not(.cfg-tabs-collapsed)) .cfg-mobile-back { display: none; }
+  .cfg-mobile-back-ico { font-size: 20px; line-height: 1; }
+  .cfg-mobile-back-cur {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 50%;
+  }
+
+  /* 浮動「重設此頁」FAB 在窄屏縮小避讓 */
+  .cfg-content-reset-fab { top: 6px; right: 6px; }
+
+  /* ── Symbol 管理:清單 / 編輯抽屜化 ── */
+  .sym-page { position: relative; }
+  .sym-left {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+  }
+  .sym-right {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: var(--bg, var(--glass-1));
+    transform: translateX(105%);
+    transition: transform var(--t-fast);
+  }
+  /* 選了符號 → 編輯面滑入 */
+  .sym-page.sym-has-sel .sym-right { transform: translateX(0); }
+
+  .sym-mobile-back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    min-height: var(--touch-min);
+    background: var(--glass-2);
+    border-bottom: 0.5px solid var(--glass-edge);
+    color: var(--accent-text);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sym-mobile-back-ico { font-size: 20px; line-height: 1; }
+  .sym-mobile-back-cur {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 50%;
+  }
+
+  /* 編輯面工具列在窄屏可橫向滑動,不溢出 */
+  .sym-right .topbar { flex-wrap: wrap; height: auto; min-height: 46px; padding: 6px 12px; gap: 6px; }
+  .sym-right .topbar-actions { flex-wrap: wrap; gap: 6px; }
+  .sym-right .topbar .title { font-size: 13px; flex: 1 1 100%; }
+
+  /* ── 內容不被固定底部導覽 .mnav 遮住 ── */
+  .cfg-content,
+  .sym-list,
+  .sym-edit { padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 12px); }
+}
