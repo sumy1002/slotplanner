@@ -195,8 +195,9 @@
     </span>
     </div><!-- /cfg-source-status -->
 
-    <!-- 群組 3:檔案動作 -->
-    <div class="cfg-source-files">
+    <!-- 群組 3:檔案動作 — v7.6.1:暫時隱藏(目前用不到;保留 markup/handler 供日後維護)。
+         要恢復顯示,把 v-if="false" 改成 v-if="true" 或移除即可。 -->
+    <div class="cfg-source-files" v-if="false">
       <label class="btn-pill cfg-import-btn" title="從本機選擇 A.xlsx,解析並覆蓋目前所有設定">
         <span class="cfg-btn-icon">⇧</span>
         <span class="cfg-btn-text-full">匯入 A.xlsx</span>

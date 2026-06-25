@@ -867,14 +867,22 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
    ════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
 
-  /* ── 1. 打破視窗高度牢籠:改自然文檔流,單一 body 捲動 ──
-     base theme.css 是 html,body{overflow:hidden;height:100%}(桌面牢籠),
-     手機必須明確解除 overflow-y 才能整頁垂直捲動。*/
-  html, body {
+  /* ── 1. 打破視窗高度牢籠:改自然文檔流,單一 document 捲動 ──
+     base theme.css 是 html,body{overflow:hidden;height:100%}(桌面牢籠)。
+     手機要讓「整份文件」自然捲動:html/body 高度放開、overflow 還原 visible。
+     注意:iOS Safari 上 body{overflow:auto} 會自成一個捲動容器並產生捲動陷阱,
+     所以這裡用 visible(讓 documentElement 當捲軸),而非 auto。*/
+  html {
+    height: auto !important;
+    overflow-x: hidden;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  body {
     height: auto !important;
     min-height: 100%;
     overflow-x: hidden;
-    overflow-y: auto !important;
+    overflow-y: visible !important;
   }
   #app.app {
     height: auto;
@@ -925,6 +933,9 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
     box-shadow: none;
     transform: translateX(-102%);
     transition: transform 0.24s cubic-bezier(0.4,0,0.2,1);
+    /* 不透明背景,避免下層內容透出(截圖半透明問題)*/
+    background: var(--left-pane-bg);
+    padding-top: calc(env(safe-area-inset-top) + 10px);
     padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 16px);
   }
   #app .cfg-tabs:not(.cfg-tabs-collapsed) {
