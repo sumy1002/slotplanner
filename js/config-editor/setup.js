@@ -5843,6 +5843,181 @@
             if (nl.length > 0) layout.splice(0, layout.length, ...nl);
           } else warnings.push('找不到 02_Layout');
 
+          // ── 02b_Panels ── 副盤(panels)。15 欄,順序對齊 aconfig-xlsx.js 寫出;
+          //   第 15 欄 Cells 為 "dx,dy" 以 ';' 串接的活格遮罩(空 = 整塊矩形)。
+          //   無此分頁(舊檔)→ 不動 panels,僅提示;有分頁(含 0 列)→ 以檔案為準覆蓋。
+          const ws2b = wb.getWorksheet('02b_Panels');
+          if (ws2b) {
+            const np = [];
+            ws2b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const panel_id = asStr(row.getCell(1).value).trim();
+              if (!panel_id) return;
+              const p = makePanel(panel_id);
+              p.col    = asNum(row.getCell(2).value, 0);
+              p.row    = asNum(row.getCell(3).value, 0);
+              p.width  = asNum(row.getCell(4).value, 3);
+              p.height = asNum(row.getCell(5).value, 3);
+              const scrollFlag = asBool(row.getCell(6).value);
+              p.symbol_set     = asStr(row.getCell(7).value).trim();
+              p.inherit_weight = asBool(row.getCell(8).value);
+              p.join_payline   = asBool(row.getCell(9).value);
+              p.note           = asStr(row.getCell(10).value);
+              // 第 11 欄 Panel_Type(優先);舊檔無此欄 → 由 Scroll 推導(與 loadPanels 遷移一致)
+              const ptypeRaw = asStr(row.getCell(11).value).trim().toUpperCase();
+              p.panel_type = ptypeRaw || (scrollFlag === false ? 'COLLECT' : 'SCROLL');
+              p.scroll = (p.panel_type === 'SCROLL');
+              p.trigger_symbol    = asStr(row.getCell(12).value).trim();
+              p.collect_target_jp = asStr(row.getCell(13).value).trim();
+              p.trigger_reel      = asNum(row.getCell(14).value, 0);
+              // 第 15 欄 Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
+              const cellsRaw = asStr(row.getCell(15).value).trim();
+              const cellsArr = cellsRaw ? cellsRaw.split(/[;\s]+/).filter(Boolean) : null;
+              p.cells = Array.isArray(cellsArr) ? normalizeMask(cellsArr, p.width, p.height) : null;
+              np.push(p);
+            });
+            // 有分頁就以檔案為準覆蓋(即使 0 列 → 清空 panels);舊檔無分頁才保留現狀
+            panels.splice(0, panels.length, ...np);
+          } else warnings.push('找不到 02b_Panels(舊檔?副盤未更新)');
+
+          // ── 03b_Symbol_Sets ── 符號集 D:{ Set_Name: [Symbol_ID,...] }。有分頁 → 以檔案為準覆蓋。
+          const ws3b = wb.getWorksheet('03b_Symbol_Sets');
+          if (ws3b) {
+            const ns = {};
+            ws3b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const setName = asStr(row.getCell(1).value).trim();
+              const sid     = asStr(row.getCell(2).value).trim();
+              if (!setName || !sid) return;
+              (ns[setName] || (ns[setName] = [])).push(sid);
+            });
+            for (const k of Object.keys(symbolSets)) delete symbolSets[k];
+            Object.assign(symbolSets, ns);
+          } else warnings.push('找不到 03b_Symbol_Sets(舊檔?符號集未更新)');
+
+          // ── 04b_Reel_Strips ── { enabled, strips: { mode: { reelId: [..] } } }。Strip_Sequence 逗號分隔。
+          const ws4b = wb.getWorksheet('04b_Reel_Strips');
+          if (ws4b) {
+            const strips = {};
+            let en = false;
+            ws4b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(row.getCell(1).value).trim();
+              const rid  = asNum(row.getCell(2).value, 0);
+              if (!mode || !rid) return;
+              if (asBool(row.getCell(3).value)) en = true;
+              const seq = asStr(row.getCell(4).value).split(',').map(s => s.trim()).filter(Boolean);
+              if (!seq.length) return;
+              (strips[mode] || (strips[mode] = {}))[rid] = seq;
+            });
+            reelStrips.enabled = en;
+            for (const k of Object.keys(reelStrips.strips)) delete reelStrips.strips[k];
+            Object.assign(reelStrips.strips, strips);
+          } else warnings.push('找不到 04b_Reel_Strips(舊檔?輪帶未更新)');
+
+          // ── 13_Jackpots ── 14 欄,以 makeJackpot 為基底覆蓋。有分頁 → 以檔案為準覆蓋。
+          const ws13 = wb.getWorksheet('13_Jackpots');
+          if (ws13) {
+            const nj = [];
+            ws13.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const jp_id = asStr(row.getCell(1).value).trim();
+              const name  = asStr(row.getCell(2).value).trim();
+              if (!jp_id && !name) return;
+              const j = makeJackpot(jp_id || name);
+              j.jp_id          = jp_id;
+              j.name           = name;
+              j.kind           = asStr(row.getCell(3).value).trim() || 'FIXED';
+              j.mult           = asNum(row.getCell(4).value, 0);
+              j.increment_pct  = asNum(row.getCell(5).value, 0);
+              j.must_hit_by    = asNum(row.getCell(6).value, 0);
+              j.trigger_desc   = asStr(row.getCell(7).value);
+              j.trigger_type   = asStr(row.getCell(8).value).trim() || 'COLLECT';
+              j.accum_pct      = asNum(row.getCell(9).value, 0);
+              j.accum_mech     = asStr(row.getCell(10).value);
+              j.collect_prob   = asNum(row.getCell(11).value, 0);
+              j.collect_enter  = asStr(row.getCell(12).value);
+              j.mode_scope     = asStr(row.getCell(13).value).trim() || 'ALL';
+              j.notes          = asStr(row.getCell(14).value);
+              nj.push(j);
+            });
+            jackpots.splice(0, jackpots.length, ...nj);
+          } else warnings.push('找不到 13_Jackpots(舊檔?彩金未更新)');
+
+          // ── 14_Bet_Config ── 上半 Key/Value 的 Ante Bet 區 + 下半 Buy Feature 清單(以空白 BF_ID 表頭分段)。
+          const ws14 = wb.getWorksheet('14_Bet_Config');
+          if (ws14) {
+            const base = defaultBetConfig();
+            const bf = [];
+            let inBF = false;
+            ws14.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const c1 = asStr(row.getCell(1).value).trim();
+              if (!c1) return;                        // 空行分隔
+              if (c1 === 'BF_ID') { inBF = true; return; } // Buy Feature 區表頭
+              if (!inBF) {
+                // Ante Bet 區:Key / Value
+                const v = row.getCell(2).value;
+                if (c1 === 'Ante_Bet_Enabled')      base.ante_bet_enabled      = asBool(v);
+                else if (c1 === 'Ante_Bet_Mult')         base.ante_bet_mult         = asNum(v, 1.25);
+                else if (c1 === 'Ante_Bet_Trigger_Mult') base.ante_bet_trigger_mult = asNum(v, 2.0);
+                else if (c1 === 'Ante_Bet_Desc')         base.ante_bet_desc         = asStr(v);
+              } else {
+                // Buy Feature 列
+                const f = makeBuyFeature(asStr(row.getCell(2).value).trim());
+                f.bf_id       = c1;
+                f.target_mode = asStr(row.getCell(2).value).trim();
+                f.cost_mult   = asNum(row.getCell(3).value, 0);
+                f.rtp_target  = asNum(row.getCell(4).value, 0);
+                f.enabled     = asBool(row.getCell(5).value);
+                f.notes       = asStr(row.getCell(6).value);
+                bf.push(f);
+              }
+            });
+            base.buy_features = bf;
+            for (const k of Object.keys(betConfig)) delete betConfig[k];
+            Object.assign(betConfig, base);
+          } else warnings.push('找不到 14_Bet_Config(舊檔?押注設定未更新)');
+
+          // ── 17_Bonus_Games ── { games:[{...,items:[...]}] }。
+          //   game 主欄只在每組首列填值,其餘列首欄空白 → 沿用當前 game 累積 items。
+          const ws17 = wb.getWorksheet('17_Bonus_Games');
+          if (ws17) {
+            const games = [];
+            let cur = null;
+            ws17.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const bonus_id = asStr(row.getCell(1).value).trim();
+              if (bonus_id) {
+                // 新 game 起始列
+                cur = makeBonusGame(bonus_id, asStr(row.getCell(2).value).trim() || 'WHEEL');
+                cur.bonus_id         = bonus_id;
+                cur.type             = asStr(row.getCell(2).value).trim() || 'WHEEL';
+                cur.title            = asStr(row.getCell(3).value);
+                cur.trigger_desc     = asStr(row.getCell(4).value);
+                cur.mode_scope       = asStr(row.getCell(5).value).trim() || 'ALL';
+                cur.wheel_upgrade_to = asStr(row.getCell(6).value).trim();
+                cur.pick_count       = asNum(row.getCell(7).value, 0);
+                cur.collect_target   = asNum(row.getCell(8).value, 0);
+                cur.items            = [];
+                games.push(cur);
+              }
+              if (!cur) return;
+              // item(第 9~13 欄);label 為空視為「無項目佔位列」跳過
+              const label = asStr(row.getCell(9).value);
+              if (!label && !(row.getCell(10).value) && !(row.getCell(11).value)) return;
+              const it = makeBonusItem ? makeBonusItem() : {};
+              it.label        = label;
+              it.value        = asNum(row.getCell(10).value, 0);
+              it.weight       = asNum(row.getCell(11).value, 0);
+              it.is_end       = asBool(row.getCell(12).value);
+              it.link_jackpot = asStr(row.getCell(13).value).trim();
+              cur.items.push(it);
+            });
+            if (!bonusGames.games) bonusGames.games = [];
+            bonusGames.games.splice(0, bonusGames.games.length, ...games);
+          } else warnings.push('找不到 17_Bonus_Games(舊檔?Bonus 未更新)');
+
           // ── 11_Mode_Config ── 先匯入,後面 04/05/08/12 才有正確 modeNames
           const ws11 = wb.getWorksheet('11_Mode_Config');
           if (ws11) {
@@ -6125,6 +6300,73 @@
             if (updated > 0 || skipped > 0) {
               warnings.push(`03_Symbols:更新 ${updated} 個符號,跳過 ${skipped} 個(無對應的 Symbol_ID/Display_Name)`);
             }
+          }
+
+          // ── 15b_Symbol_Mults ── 符號倍數/彩金「權威表」,寫回符號物件的 mult_values / prize_values。
+          //   單一真相:15/16_* 為此表反推的衍生分頁,匯入端不回讀(下次匯出由 _deriveSymbolMults 重生)。
+          //   欄位:Symbol_ID | Kind(MULT/PRIZE) | Value | Weight | Link_JP | W_<mode>...(僅 PRIZE 用)。
+          //   同一符號多列:MULT 聚成 mult_values[]、PRIZE 聚成 prize_values[];以 03_Symbols 後的符號為對象。
+          const ws15b = wb.getWorksheet('15b_Symbol_Mults');
+          if (ws15b && registry) {
+            const allSyms = registry.symbols();
+            // 動態欄位偵測(W_<mode> 在尾端,數量隨模式變)
+            const hRow = ws15b.getRow(1);
+            const hIdx = {};
+            const modeCols = {};   // mode → col(W_<mode>)
+            hRow.eachCell((cell, col) => {
+              const h = asStr(cell.value).trim();
+              if (h.startsWith('W_')) modeCols[h.slice(2)] = col;
+              else hIdx[h] = col;
+            });
+            const cId   = hIdx['Symbol_ID'] || 1;
+            const cKind = hIdx['Kind']      || 2;
+            const cVal  = hIdx['Value']     || 3;
+            const cWt   = hIdx['Weight']    || 4;
+            const cLink = hIdx['Link_JP']   || 5;
+            // 聚合:sid → { mults:[], prizes:[] }
+            const bySid = new Map();
+            ws15b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const sid = asStr(row.getCell(cId).value).trim();
+              if (!sid) return;
+              const kind = asStr(row.getCell(cKind).value).trim().toUpperCase();
+              if (!bySid.has(sid)) bySid.set(sid, { mults: [], prizes: [] });
+              const bucket = bySid.get(sid);
+              if (kind === 'MULT') {
+                bucket.mults.push({ mult: asNum(row.getCell(cVal).value, 0), weight: asNum(row.getCell(cWt).value, 0) });
+              } else if (kind === 'PRIZE') {
+                const wbm = {};
+                for (const [mode, col] of Object.entries(modeCols)) {
+                  const raw = row.getCell(col).value;
+                  if (raw != null && asStr(raw).trim() !== '') wbm[mode] = asNum(raw, 0);
+                }
+                bucket.prizes.push({
+                  value: asNum(row.getCell(cVal).value, 0),
+                  weight: asNum(row.getCell(cWt).value, 0),
+                  link_jackpot: asStr(row.getCell(cLink).value).trim(),
+                  weight_by_mode: wbm,
+                });
+              }
+            });
+            // 寫回符號:有出現在 15b 的符號覆蓋,沒出現的清空(以檔案為準,與其他分頁一致)
+            let smUpdated = 0, smSkipped = 0;
+            const matchSym = (sid) => allSyms.find(s =>
+              (s.symbol_id && s.symbol_id === sid) || (s.name && s.name === sid));
+            // 先全部清空(只清有對到 registry 的),再依檔案填,避免殘留舊值造成雙真相
+            for (const s of allSyms) { s.mult_values = []; s.prize_values = []; }
+            for (const [sid, b] of bySid) {
+              const m = matchSym(sid);
+              if (!m) { smSkipped++; continue; }
+              m.mult_values  = b.mults;
+              m.prize_values = b.prizes;
+              smUpdated++;
+            }
+            try { registry.applyAll(allSyms, registry.swatchMap()); } catch (e) {}
+            if (smUpdated > 0 || smSkipped > 0) {
+              warnings.push(`15b_Symbol_Mults:更新 ${smUpdated} 個符號,跳過 ${smSkipped} 個(無對應符號)`);
+            }
+          } else if (!ws15b) {
+            warnings.push('找不到 15b_Symbol_Mults(舊檔?符號倍數/彩金未更新)');
           }
 
           sourceMode.value = 'xlsx';
@@ -6479,195 +6721,13 @@
         emit('status', { type: 'wait', msg: '正在生成 A.xlsx ...' });
 
         try {
-          const wb = new window.ExcelJS.Workbook();
-          wb.creator = 'SlotPlanner Pro';
-          wb.created = new Date();
-
-          const stamp = new Date().toLocaleString('zh-TW');
-          const boldHdr = (ws) => { ws.getRow(1).font = { bold: true, color: { argb: 'FF5A3DB0' } }; };
-          const setCols = (ws, widths) => { ws.columns = widths.map(w => ({ width: w })); };
-
-          // ── 00_README ──
-          const wsR = wb.addWorksheet('00_README');
-          wsR.addRows([
-            ['SlotPlanner Pro · A 設定檔'],
-            [`匯出時間:${stamp}`],
-            [`匯出來源:網頁版設定檔編輯器`],
-            [],
-            ['分頁列表'],
-            ['01_Global', '全域設定'],
-            ['02_Layout', '盤面結構'],
-            ['03_Symbols', '符號清單'],
-            ['04_Reel_Weights', 'Reel 權重(Mode × Reel × Symbol)'],
-            ['05_Grid_Size_Weights', '格數權重(Megaways 開幾格)'],
-            ['06_Paylines', '中獎線'],
-            ['07_Constraints', '硬約束(REEL_RESTRICT / GLOBAL_MAX/MIN)'],
-            ['08_Combo_Weights', '連爆權重(Mode × Step × Reel × Symbol)'],
-            ['09_Puzzle_Rules', '腳本規則(含 Condition 拼圖建構器)'],
-            ['10_Discard_Rules', '棄牌規則(HARD 風控 / SOFT 體感)'],
-            ['11_Mode_Config', '模式設定'],
-            ['12_Distribution_Bins', '分佈區間'],
-          ]);
-          wsR.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF5A3DB0' } };
-          wsR.getRow(5).font = { bold: true };
-          setCols(wsR, [28, 50]);
-
-          // ── 01_Global ──
-          const wsG = wb.addWorksheet('01_Global');
-          wsG.addRow(['Key', 'Value', 'Notes']);
-          for (const [k, v] of Object.entries(g)) wsG.addRow([k, v, '']);
-          boldHdr(wsG); setCols(wsG, [22, 28, 36]);
-
-          // ── 02_Layout ──
-          const wsL = wb.addWorksheet('02_Layout');
-          wsL.addRow(['Reel_ID', 'Y_Offset', 'Max_Rows', 'Has_SubReel',
-                      'SubReel_Position', 'SubReel_Rows', 'SubReel_Inherit_Weight']);
-          for (const r of layout) {
-            wsL.addRow([r.reel_id, r.y_offset, r.max_rows, r.has_subreel,
-                        r.subreel_position, r.subreel_rows, r.subreel_inherit_weight]);
+          // 單一真相:走 aconfig-xlsx.js 的完整匯出器(含 02b_Panels + Cells 等 23 sheet)
+          if (typeof window.SlotPlanner?.buildAxlsxBufferFromLS !== 'function') {
+            emit('status', { type: 'err', msg: 'aconfig-xlsx.js 未載入,無法匯出' });
+            return;
           }
-          boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22]);
-
-          // ── 03_Symbols(從 registry 讀,含 A.xlsx 擴充欄位)──
-          const wsS = wb.addWorksheet('03_Symbols');
-          wsS.addRow([
-            'Symbol_ID', 'Display_Name', 'Number', 'Type',
-            'Pay_3x', 'Pay_4x', 'Pay_5x', 'Pay_6x',
-            'Mega_W', 'Mega_H', 'Is_Wild', 'Is_Scatter',
-            'Weight', 'Max_Count', 'Use_Max', 'Reel_Limit',
-          ]);
-          if (registry) {
-            for (const s of registry.symbols()) {
-              const sid = s.symbol_id || s.name || `#${s.number}`;
-              wsS.addRow([
-                sid, s.name, s.number, s.type || 'HIGH',
-                s.pay_3x || 0, s.pay_4x || 0, s.pay_5x || 0, s.pay_6x || 0,
-                s.mega_w || 1, s.mega_h || 1, !!s.is_wild, !!s.is_scatter,
-                s.weight, s.max_count, s.use_max, (s.reel_limit || []).join(','),
-              ]);
-            }
-          }
-          boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18]);
-
-          // ── 04_Reel_Weights(扁平化)──
-          const wsRW = wb.addWorksheet('04_Reel_Weights');
-          wsRW.addRow(['Mode_Scope', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
-          for (const m of modeNames.value) {
-            ensureReelWeightsForMode(m);
-            const e = reelWeights[m];
-            for (let r = 1; r <= layout.length; r++) {
-              for (const sid of e.symbol_ids) {
-                const w = e.weights[`${r}-${sid}`];
-                if (typeof w === 'number' && w > 0) {
-                  wsRW.addRow([m, r, sid, w, '']);
-                }
-              }
-            }
-          }
-          boldHdr(wsRW); setCols(wsRW, [12, 10, 14, 10, 24]);
-
-          // ── 05_Grid_Size_Weights(扁平化)──
-          const wsGW = wb.addWorksheet('05_Grid_Size_Weights');
-          wsGW.addRow(['Mode_Scope', 'Reel_ID', 'Grid_Size', 'Weight', 'Notes']);
-          for (const m of modeNames.value) {
-            ensureGridWeightsForMode(m);
-            const e = gridWeights[m];
-            for (let r = 1; r <= layout.length; r++) {
-              for (const sz of e.grid_sizes) {
-                const w = e.weights[`${r}-${sz}`];
-                if (typeof w === 'number' && w > 0) {
-                  wsGW.addRow([m, r, sz, w, '']);
-                }
-              }
-            }
-          }
-          boldHdr(wsGW); setCols(wsGW, [12, 10, 11, 10, 24]);
-
-          // ── 06_Paylines ──
-          const wsP = wb.addWorksheet('06_Paylines');
-          wsP.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
-          // v4.0 / #16:方向是全域設定;每行寫入 g.payline_direction(後端仍逐行讀 Direction,維持相容)
-          for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, g.payline_direction || 'LTR', pl.notes]);
-          boldHdr(wsP); setCols(wsP, [10, 44, 12, 28]);
-
-          // ── 07_Constraints ──
-          const wsC = wb.addWorksheet('07_Constraints');
-          wsC.addRow(['Constraint_ID', 'Type', 'Symbol_ID', 'Reels_Allowed',
-                      'Max_Count_Global', 'Mode_Scope', 'Notes']);
-          for (const c of constraints) {
-            wsC.addRow([c.constraint_id, c.ctype, c.symbol_id, c.reels_allowed,
-                        c.threshold, c.mode_scope, c.notes]);
-          }
-          boldHdr(wsC); setCols(wsC, [14, 16, 13, 16, 18, 13, 28]);
-
-          // ── 08_Combo_Weights(扁平化)──
-          const wsCW = wb.addWorksheet('08_Combo_Weights');
-          wsCW.addRow(['Mode_Scope', 'Combo_Step', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
-          for (const m of modeNames.value) {
-            ensureComboWeightsForMode(m);
-            const e = comboWeights[m];
-            for (const step of e.steps) {
-              for (let r = 1; r <= layout.length; r++) {
-                for (const sid of e.symbol_ids) {
-                  const w = e.weights[`${step}-${r}-${sid}`];
-                  if (typeof w === 'number' && w > 0) {
-                    wsCW.addRow([m, step, r, sid, w, '']);
-                  }
-                }
-              }
-            }
-          }
-          boldHdr(wsCW); setCols(wsCW, [12, 12, 10, 14, 10, 24]);
-
-          const wsPR = wb.addWorksheet('09_Puzzle_Rules');
-          wsPR.addRow(['Rule_ID', 'Priority', 'Trigger', 'Condition',
-                       'Actions', 'Emits', 'Enabled', 'Description']);
-          // 依 priority 由小到大排序匯出(數字越小越優先 — 對齊後端 logic_parser._build_index 的排序鍵)
-          const sortedRules = [...rules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
-          for (const r of sortedRules) {
-            const condition = composeConditionWithModeScope(r.mode_scope, r.condition);
-            const actionsDSL = buildActionsDSL(r.actions);
-            const emitsStr = (r.emits || []).join(',');
-            wsPR.addRow([
-              r.rule_id,
-              r.priority,
-              r.trigger,
-              condition,
-              actionsDSL,
-              emitsStr,
-              r.enabled !== false ? 'TRUE' : 'FALSE',
-              r.description || '',
-            ]);
-          }
-          boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28]);
-
-          const wsDR = wb.addWorksheet('10_Discard_Rules');
-          wsDR.addRow(['Discard_ID', 'Discard_Kind', 'Mode_Scope', 'Condition', 'Notes']);
-          for (const d of discards) {
-            wsDR.addRow([d.discard_id, d.discard_kind, d.mode_scope, d.condition, d.notes]);
-          }
-          boldHdr(wsDR); setCols(wsDR, [12, 14, 13, 36, 24]);
-
-          // ── 11_Mode_Config ──
-          const wsM = wb.addWorksheet('11_Mode_Config');
-          wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
-                      'On_Enter_Reset_Vars', 'Notes']);
-          for (const m of modes) {
-            wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
-                        m.on_enter_reset_vars, m.notes]);
-          }
-          boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28]);
-
-          // ── 12_Distribution_Bins ──
-          const wsB = wb.addWorksheet('12_Distribution_Bins');
-          wsB.addRow(['Mode_Scope', 'Bin_Edges', 'Notes']);
-          for (const [m, entry] of Object.entries(bins)) {
-            wsB.addRow([m, entry.bin_edges, entry.notes]);
-          }
-          boldHdr(wsB); setCols(wsB, [13, 40, 28]);
-
           // ── 寫出 + 下載 ──
-          const buf = await wb.xlsx.writeBuffer();
+          const buf = await window.SlotPlanner.buildAxlsxBufferFromLS();
           const blob = new Blob([buf], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           });
