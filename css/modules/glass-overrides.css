@@ -234,9 +234,9 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* 暗色下 trace 區塊(SimPage 用) */
 :root[data-theme="dark"] .sim-trace-act,
 :root[data-theme="dark"] .sim-trace-hint {
-  background: rgba(220,180,100,0.10) !important;
-  border-color: rgba(220,180,100,0.25) !important;
-  color: #e0c080 !important;
+  background: rgba(99,102,241,0.12) !important;
+  border-color: rgba(99,102,241,0.30) !important;
+  color: #c7d2fe !important;
 }
 
 /* ============================================================
@@ -316,7 +316,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   -webkit-tap-highlight-color: transparent;
 }
 .cfg-stepper-btn:not(:disabled):hover {
-  color: var(--accent-hex);
+  color: var(--accent-text);
   border-color: var(--accent-brd);
   background: var(--accent);
 }
@@ -415,11 +415,11 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 
 /* 亮色:header 改用陶土橘調 */
 .cfg-inspector-header {
-  background: linear-gradient(to right, rgba(190,130,105,0.12), rgba(190,130,105,0.05));
-  border-bottom-color: rgba(190,130,105,0.25);
+  background: linear-gradient(to right, rgba(99,102,241,0.12), rgba(99,102,241,0.05));
+  border-bottom-color: rgba(99,102,241,0.25);
 }
 .cfg-inspector-header:hover {
-  background: linear-gradient(to right, rgba(190,130,105,0.20), rgba(190,130,105,0.08));
+  background: linear-gradient(to right, rgba(99,102,241,0.20), rgba(99,102,241,0.08));
 }
 
 /* ctx toggle 改用陶土橘調 */
@@ -435,7 +435,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* trace-row 預設改為玻璃白,與新系統一致 */
 .cfg-inspector-trace-row {
   background: var(--glass-3);
-  border-color: rgba(190,130,105,0.08);
+  border-color: rgba(99,102,241,0.08);
 }
 
 /* ── 暗色覆寫 ── */
@@ -448,20 +448,20 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 }
 :root[data-theme="dark"] .cfg-inspector-header {
   background: linear-gradient(to right,
-    rgba(210,155,120,0.18), rgba(210,155,120,0.06));
-  border-bottom-color: rgba(210,155,120,0.28);
+    rgba(99,102,241,0.18), rgba(99,102,241,0.06));
+  border-bottom-color: rgba(99,102,241,0.28);
 }
 :root[data-theme="dark"] .cfg-inspector-header:hover {
   background: linear-gradient(to right,
-    rgba(210,155,120,0.26), rgba(210,155,120,0.10));
+    rgba(99,102,241,0.26), rgba(99,102,241,0.10));
 }
 :root[data-theme="dark"] .cfg-inspector-ctx-toggle {
-  background: rgba(210,155,120,0.10);
-  border-color: rgba(210,155,120,0.22);
+  background: rgba(99,102,241,0.10);
+  border-color: rgba(99,102,241,0.22);
   color: var(--text);
 }
 :root[data-theme="dark"] .cfg-inspector-ctx-toggle:hover {
-  background: rgba(210,155,120,0.18);
+  background: rgba(99,102,241,0.18);
 }
 :root[data-theme="dark"] .cfg-inspector-trace-row {
   background: rgba(255,255,255,0.04);
@@ -592,7 +592,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-payline-global-dir-chip.active {
   background: var(--accent);
   border-color: var(--accent-brd);
-  color: var(--accent-hex);
+  color: var(--accent-text);
   font-weight: 700;
 }
 .cfg-payline-v2-item-note { color: var(--text-light); }
@@ -633,7 +633,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   padding: 7px 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--accent-hex);
+  color: var(--accent-text);
   background: var(--glass-2);
   border: 1px dashed var(--glass-edge);
   border-radius: var(--r-sm);
@@ -665,7 +665,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   border-color: var(--accent-brd);
   box-shadow: var(--inset-btn), var(--focus-ring);
 }
-.cfg-layout-reel-chip.active .cfg-layout-reel-chip-id { color: var(--accent-hex); }
+.cfg-layout-reel-chip.active .cfg-layout-reel-chip-id { color: var(--accent-text); }
 .cfg-layout-reel-chip.has-sub { border-left: 3px solid rgba(220,140,80,0.85); }
 .cfg-layout-reel-chip.dragging { opacity: 0.4; cursor: grabbing; }
 .cfg-layout-reel-chip.drag-over {
@@ -734,14 +734,14 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* 主按鈕在暗色:亮一階靛紫 */
 :root[data-theme="dark"] .btn-primary,
 :root[data-theme="dark"] .btn-glass.is-primary {
-  background: #6366f1 !important;
-  border-color: #6366f1 !important;
+  background: #8186de !important;
+  border-color: #8186de !important;
   color: #ffffff !important;
 }
 :root[data-theme="dark"] .btn-primary:hover,
 :root[data-theme="dark"] .btn-glass.is-primary:hover {
-  background: #4f46e5 !important;
-  border-color: #4f46e5 !important;
+  background: #6f74cf !important;
+  border-color: #6f74cf !important;
 }
 
 /* ============================================================
@@ -784,7 +784,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 /* R 欄標籤列:與 .cfg-cv-grid 同欄寬同 gap,黏頂端(垂直捲動時固定、水平捲動時跟著盤面欄浮動) */
 .cfg-cv-collabels { display: grid; gap: 4px; flex: none; width: max-content; height: 18px; position: sticky; top: 0; z-index: 2; }
 .cfg-cv-collabel { display: flex; align-items: flex-end; justify-content: center; font-size: 10px; line-height: 1; font-weight: 600; color: var(--text-muted); user-select: none; }
-.cfg-cv-collabel.has-r { color: var(--accent-hex); }
+.cfg-cv-collabel.has-r { color: var(--accent-text); }
 .cfg-cv-cell { position: relative; border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
 .cfg-cv-cell-main { background: var(--accent); border: 1px solid var(--accent-hex); }
 .cfg-cv-cell-sub { background: #1d9e75; border: 1px solid #0f6e56; }

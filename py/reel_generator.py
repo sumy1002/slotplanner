@@ -213,9 +213,12 @@ class ReelGenerator:
             active_rows = self._get_active_rows(mode, reel, rng)
             self.last_active_rows[rid] = active_rows
 
+            # ── 本欄活格 row index（v7.5-Layer C:遮罩裁切;cells=None → 全實心）──
+            active_local = reel.active_local_rows(active_rows)
+
             # ── 鎖定 Reel：從舊 sticky_cells 複製整欄 ──
             if rid in locked_reels:
-                for row in range(active_rows):
+                for row in active_local:
                     k = (rid, row)
                     grid[k] = sticky_cells.get(k) or self._fallback_draw(mode, rid, False, rng, combo_step)
                 # 副輪
@@ -228,7 +231,7 @@ class ReelGenerator:
             if pool is None:
                 raise RuntimeError(f"找不到抽樣池：mode={mode} reel={rid}")
 
-            for row in range(active_rows):
+            for row in active_local:
                 k = (rid, row)
                 if k in sticky_cells:
                     grid[k] = sticky_cells[k]

@@ -204,6 +204,7 @@ class GridEngine:
         from .schemas import TriggerType
         ctx.grid = self         # grid_engine 本身掛在 ctx 供 action stub 呼叫
         ctx.spin_locals["_grid_cells"] = grid
+        ctx.spin_locals["_rng"] = rng   # v7.5-Layer C:供 BOARD_FILL 等補抽 action 可重現用
         logic_parser.dispatch(TriggerType.ON_GRID_GENERATED, ctx)
 
         return SpinResult(
@@ -240,15 +241,13 @@ class GridEngine:
             self._apply_board_destroy(action, grid, ctx)
 
         elif atype == ActionType.BOARD_FILL:
-            # S3 補實作；先呼叫不做事
-            pass
+            self._apply_board_fill(action, grid, ctx)
 
         elif atype == ActionType.BOARD_TRANSFORM:
             self._apply_board_transform(action, grid, ctx)
 
         elif atype == ActionType.MOVE:
-            # S3 補實作
-            pass
+            self._apply_move(action, grid, ctx)
 
         elif atype == ActionType.SWAP:
             self._apply_swap(action, grid, ctx)
@@ -375,6 +374,112 @@ class GridEngine:
         if key_a in grid and key_b in grid:
             grid[key_a].symbol, grid[key_b].symbol = \
                 grid[key_b].symbol, grid[key_a].symbol
+
+    # ────────────────────────────────────────────────────────────
+    # v7.5-Layer C:洞格判定 + MOVE / BOARD_FILL（皆跳洞格）
+    # ────────────────────────────────────────────────────────────
+
+    def _reel_active_rows_set(self, reel_id: int) -> set[int] | None:
+        """回傳該主輪的活格 row index 集合（遮罩裁切後）；
+        非主輪 / 查無 → None（代表不施加洞格限制）。
+        洞格＝結構性永遠空：MOVE/FILL 的目標 row 不得落在洞上。
+        """
+        for reel in self._gen._layout.reels:
+            if reel.reel_id == reel_id:
+                active = reel.active_local_rows(
+                    self._gen.last_active_rows.get(reel_id)
+                )
+                return set(active)
+        return None
+
+    def _is_hole(self, reel_id: int, row_idx: int) -> bool:
+        """目標格是否為洞（結構性永遠空）。非主輪一律 False。"""
+        active = self._reel_active_rows_set(reel_id)
+        if active is None:
+            return False
+        return row_idx not in active
+
+    def _apply_move(
+        self,
+        action: Action,
+        grid: dict[tuple[int, int], Cell],
+        ctx: "EvalContext",
+    ) -> None:
+        """MOVE：把來源格符號搬到目標格（來源清空 destroyed）。
+        params:
+          from  [reel, row]
+          to    [reel, row]
+        洞格守則:目標若為洞 → 略過搬移（不物化洞格）。
+        """
+        src = action.params.get("from")
+        dst = action.params.get("to")
+        if not src or not dst:
+            return
+        key_src = (int(src[0]), int(src[1]))
+        key_dst = (int(dst[0]), int(dst[1]))
+        if key_src not in grid:
+            return
+        # 目標為洞 → 不搬（洞格永遠空）
+        if self._is_hole(key_dst[0], key_dst[1]):
+            return
+        src_cell = grid[key_src]
+        if key_dst in grid:
+            grid[key_dst].symbol = src_cell.symbol
+        else:
+            grid[key_dst] = Cell(
+                symbol=src_cell.symbol,
+                reel_id=key_dst[0],
+                row_idx=key_dst[1],
+                is_subreel=src_cell.is_subreel,
+            )
+        # 來源清空
+        src_cell.destroyed = True
+
+    def _apply_board_fill(
+        self,
+        action: Action,
+        grid: dict[tuple[int, int], Cell],
+        ctx: "EvalContext",
+    ) -> None:
+        """BOARD_FILL：重力填補——把已消除（destroyed）的格往下塌、空缺由上方補抽。
+        逐主輪處理；洞格守則:洞格不參與塌落、不被填入（永遠空）。
+        params:
+          mode  (可選) 抽符號用的模式;省略 → 用 ctx.mode
+        """
+        mode = action.params.get("mode") or ctx.mode
+        for reel in self._gen._layout.reels:
+            rid = reel.reel_id
+            active = sorted(
+                reel.active_local_rows(self._gen.last_active_rows.get(rid))
+            )
+            if not active:
+                continue
+            # 收集本欄活格中「存活（未消除）」的符號,由上而下保序
+            survivors = []
+            for row in active:
+                c = grid.get((rid, row))
+                if c is not None and not c.destroyed:
+                    survivors.append(c.symbol)
+            # 重力:存活符號沉到底（活格序列的尾端）,上方空缺補抽
+            need = len(active) - len(survivors)
+            pool = self._gen._get_pool(mode, rid, False, 0)
+            new_syms = []
+            for _ in range(max(0, need)):
+                new_syms.append(pool.draw(self._spin_rng(ctx)) if pool else survivors[0])
+            ordered = new_syms + survivors   # 新符在上、存活在下
+            for row, sym in zip(active, ordered):
+                k = (rid, row)
+                if k in grid:
+                    grid[k].symbol = sym
+                    grid[k].destroyed = False
+                else:
+                    grid[k] = Cell(symbol=sym, reel_id=rid, row_idx=row)
+
+    @staticmethod
+    def _spin_rng(ctx: "EvalContext") -> random.Random:
+        """取本 spin 的 rng;若 ctx 未掛則退回模組級 Random（不保證可重現,僅保底）。"""
+        rng = ctx.spin_locals.get("_rng")
+        return rng if isinstance(rng, random.Random) else random.Random()
 
     # ────────────────────────────────────────────────────────────
     # 棄牌輔助

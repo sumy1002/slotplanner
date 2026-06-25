@@ -225,6 +225,69 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
+  //  v7.5-B:中獎線 ASCII 示意（純函式，可單測；docgen 獨立,不依賴 setup.js computed）
+  //
+  //  路徑格式同 helpers.parsePathString:"(col,row)-(col,row)-…"(1-based,col=reel)。
+  //  這裡自包一份解析(避免跨檔耦合),只取座標,不做盤面範圍校驗(校驗在 06_Paylines)。
+  // ════════════════════════════════════════════════════════════════════
+  function _parsePathPoints(str) {
+    if (!str) return [];
+    const matches = String(str).match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
+    if (!matches) return [];
+    return matches.map(mm => {
+      const [c, r] = mm.replace(/[()]/g, '').split(',').map(x => parseInt(x.trim(), 10));
+      return { col: c, row: r };
+    }).filter(p => Number.isFinite(p.col) && Number.isFinite(p.row));
+  }
+
+  // 主盤幾何(吃不等高):由 cfg.layout 的 y_offset/max_rows 算出每欄的「有效列範圍」。
+  //   回傳 { reelCount, rowMin, rowMax, colRange: {col -> {top,bot}} }(1-based row,經 y_offset 平移)。
+  function _mainBoardGeom(layout) {
+    const rows = (Array.isArray(layout) ? layout : []).map(r => ({
+      yo: Number(r.y_offset) || 0,
+      mr: Math.max(1, Number(r.max_rows) || 1),
+    }));
+    if (!rows.length) return null;
+    let lo = Infinity, hi = -Infinity;
+    rows.forEach(r => { lo = Math.min(lo, r.yo); hi = Math.max(hi, r.yo + r.mr - 1); });
+    // 平移成 1-based 顯示列(top 對齊整體最高點)
+    const colRange = {};
+    rows.forEach((r, i) => {
+      colRange[i + 1] = { top: (r.yo - lo) + 1, bot: (r.yo + r.mr - 1 - lo) + 1 };
+    });
+    return { reelCount: rows.length, rowMin: 1, rowMax: (hi - lo) + 1, colRange };
+  }
+
+  // 把一條線(points,座標 1-based)畫成 ASCII 網格。
+  //   geom:來自 _mainBoardGeom;若某格在該欄有效列內＝可放格,命中點標 ●,其餘 ·,欄外空白。
+  //   回傳多行字串陣列(含 reel 表頭 + 每列)。
+  function _renderPaylineAscii(points, geom) {
+    if (!geom) return ['（無盤面資料）'];
+    const hit = new Set(points.map(p => p.col + ',' + p.row));
+    const lines = [];
+    // 表頭:R1 R2 …
+    const head = ['   '];
+    for (let c = 1; c <= geom.reelCount; c++) head.push('R' + c);
+    lines.push(head.join(' '));
+    for (let r = geom.rowMin; r <= geom.rowMax; r++) {
+      const cells = ['r' + r + ' '];
+      for (let c = 1; c <= geom.reelCount; c++) {
+        const rng = geom.colRange[c];
+        const inCol = rng && r >= rng.top && r <= rng.bot;
+        if (!inCol) { cells.push('  '); continue; }      // 該欄無此列(不等高留白)
+        cells.push(hit.has(c + ',' + r) ? '● ' : '· ');
+      }
+      lines.push(cells.join(''));
+    }
+    return lines;
+  }
+
+  // 一條線的純文字路徑:R1r2 → R2r2 → …
+  function _pathArrowStr(points) {
+    return points.map(p => `R${p.col}r${p.row}`).join(' → ');
+  }
+
+  // ════════════════════════════════════════════════════════════════════
   //  手填敘述（meta）— 預設 / 讀寫 / 補齊
   // ════════════════════════════════════════════════════════════════════
   // v5.1:從設定檔 LS 讀 JP 定義 → docgen rows;無資料回 null
@@ -624,12 +687,24 @@
     XR++;
     const plDir = (cfg.global && cfg.global.payline_direction) || (cfg.global && cfg.global.ways_direction) || 'LTR';
     if (cfg.paylines.length) {
+      // v7.5-B:中獎線 ASCII 示意(僅逐線盤面;WAYS 不繪)。與 MD 共用 renderer。
+      const plGeom = cfg.derived.isWaysLike ? null : _mainBoardGeom(cfg.layout);
       cfg.paylines.forEach(pl => {
         _cell(wsX, XR, 1, pl.line_id, { h: 'center' });
         _cell(wsX, XR, 2, pl.path || '');
         _cell(wsX, XR, 3, plDir, { h: 'center' });
         _cell(wsX, XR, 4, pl.notes || '');
         XR++;
+        if (plGeom) {
+          const pts = _parsePathPoints(pl.path);
+          const art = pts.length ? _renderPaylineAscii(pts, plGeom).join('\n') : '（無有效路徑座標）';
+          wsX.mergeCells(XR, 1, XR, 4);
+          const cell = _cell(wsX, XR, 1, art, { wrap: true, fg: C.thFg });
+          cell.font = { name: 'Consolas', size: 10, color: { argb: _argb(C.thFg) } };  // 等寬字對齊網格
+          cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+          wsX.getRow(XR).height = Math.max(16, (plGeom.rowMax + 1) * 15);
+          XR++;
+        }
       });
     } else {
       wsX.mergeCells(XR, 1, XR, 4);
@@ -921,6 +996,35 @@
     }
     L.push('');
 
+    // v7.5-B:中獎線示意(ASCII 網格;吃主盤不等高幾何)
+    if (!cfg.derived.isWaysLike && Array.isArray(cfg.paylines) && cfg.paylines.length) {
+      const geom = _mainBoardGeom(cfg.layout);
+      L.push('## 中獎線示意');
+      L.push('');
+      L.push('> `●`＝命中格、`·`＝盤面空格、空白＝該欄無此列（不等高盤面）。');
+      L.push('');
+      cfg.paylines.forEach(pl => {
+        const pts = _parsePathPoints(pl.path);
+        const titleBits = [`Line ${pl.line_id}`];
+        if (pl.direction) titleBits.push(pl.direction);
+        if (pl.notes) titleBits.push(pl.notes);
+        L.push(`### ${titleBits.join('　·　')}`);
+        L.push('');
+        if (!pts.length) { L.push('_（無有效路徑座標）_'); L.push(''); return; }
+        L.push('路徑：' + _pathArrowStr(pts));
+        L.push('');
+        L.push('```');
+        _renderPaylineAscii(pts, geom).forEach(ln => L.push(ln));
+        L.push('```');
+        L.push('');
+      });
+    } else if (cfg.derived.isWaysLike && Array.isArray(cfg.paylines)) {
+      L.push('## 中獎線示意');
+      L.push('');
+      L.push('全路徑（WAYS／Megaways）模式，無逐線定義，故不繪製中獎線示意。');
+      L.push('');
+    }
+
     // v6.3 / Q3:倍數 / 彩金摘要(由符號 mult_values / prize_values 帶入)
     {
       const multSyms = (cfg.symbols || []).filter(s => Array.isArray(s.mult_values) && s.mult_values.length);
@@ -1143,6 +1247,8 @@
     behaviorTemplate,
     _jackpotRowsFromConfig,   // v5.1
     _isSpecial, _symId, _symRole,
+    // v7.5-B:中獎線 ASCII renderer(純函式,可單測)
+    _parsePathPoints, _mainBoardGeom, _renderPaylineAscii, _pathArrowStr,
   };
 
   // ════════════════════════════════════════════════════════════════════

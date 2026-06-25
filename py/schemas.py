@@ -171,6 +171,12 @@ class ReelLayout:
     #   舊檔無此欄 → 空字串)。引擎優先序:
     #   04 副盤專屬權重 → 此符號集等權 → subreel_inherit_weight 沿用主輪。
     subreel_symbol_set: str = ""
+    # v7.5-Layer C：主輪活格遮罩 ["0,dy",…]（dx 恆 0，dy = 相對 y_offset 的 row）。
+    #   None = 該欄 y_offset..y_offset+max_rows-1 實心（向後相容舊檔）。
+    #   非 None = 只有遮罩內的 row 被物化（不抽符號、不入 grid、不計連線/symbol_count）。
+    #   洞格語義＝結構性永遠空（不是暫時空位）；MOVE / BOARD_FILL 必須跳過洞格。
+    #   與 Panel 的 cells 採同一套表示法與收斂規則（full/empty → None），單一真相。
+    cells: Optional[list[str]] = None
 
     @property
     def effective_kind(self) -> str:
@@ -179,6 +185,42 @@ class ReelLayout:
     @property
     def is_dual_panel(self) -> bool:
         return self.has_subreel and self.effective_kind == "DUAL_PANEL"
+
+    def active_local_rows(self, active_rows: Optional[int] = None) -> list[int]:
+        """要物化的局部 row index（0-based，相對 y_offset）。
+
+        :param active_rows: 本 spin 實際顯示列數（Megaways）；None → 用 max_rows。
+        cells=None → range(active_rows) 全實心。
+        cells 非 None → 只回落在 [0, active_rows) 內的遮罩 row（超界裁掉、去重、升冪）。
+        洞格＝不在回傳清單內的 row。
+        """
+        n = self.max_rows if active_rows is None else active_rows
+        n = max(0, int(n))
+        if not self.cells:
+            return list(range(n))
+        seen: set[int] = set()
+        out: list[int] = []
+        for s in self.cells:
+            try:
+                dx_s, dy_s = str(s).strip().split(",")
+                dx, dy = int(dx_s), int(dy_s)
+            except (ValueError, AttributeError):
+                continue
+            # 主輪 mask 的 dx 恆為 0（單欄）；非 0 視為非法、忽略。
+            if dx != 0:
+                continue
+            if 0 <= dy < n and dy not in seen:
+                seen.add(dy)
+                out.append(dy)
+        out.sort()
+        return out
+
+    @property
+    def active_row_count(self) -> int:
+        """實際物化的列數（遮罩時為活格數，否則 = max_rows）。供統計/docgen。"""
+        if self.cells:
+            return len(self.active_local_rows())
+        return max(0, self.max_rows)
 
 
 # ============================================================

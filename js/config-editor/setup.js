@@ -1149,16 +1149,25 @@
         }
         const cols = [...byCol.keys()].sort((a, b) => a - b);
         if (cols.length === 0) return { ok: false, error: '沒有選取任何格子' };
+        // 斷欄(欄與欄之間有空欄)仍視為非法 —— 主輪各欄必須相連
         for (let i = 1; i < cols.length; i++)
           if (cols[i] !== cols[i - 1] + 1)
             return { ok: false, error: `主輪欄位之間有空欄(欄 ${cols[i - 1]} 與 ${cols[i]} 不相鄰);主輪各欄必須相連` };
+        // v7.5-Layer C:欄內挖洞改為合法 —— 不再擋洞,改用 cells mask 表達。
+        //   y_offset = 該欄最小 row - gMin;max_rows = 該欄 row 跨距(含洞);
+        //   cells = 該欄活格相對 y_offset 的 ["0,dy",…];實心欄(無洞)→ cells:null(向後相容)。
         const reels = [];
         for (let i = 0; i < cols.length; i++) {
           const rows = byCol.get(cols[i]).slice().sort((a, b) => a - b);
-          const run = rows[rows.length - 1] - rows[0] + 1;
-          if (run !== rows.length)
-            return { ok: false, error: `欄 ${cols[i]} 中間有洞;主輪一欄必須是連續的格(有洞請改用副盤遮罩)` };
-          reels.push({ reel_id: i + 1, y_offset: rows[0] - gMin, max_rows: rows.length });
+          const span = rows[rows.length - 1] - rows[0] + 1;   // 含洞的跨距
+          const y_offset = rows[0] - gMin;
+          let cells = null;
+          if (rows.length < span) {
+            // 有洞 → 產生 mask(相對該欄 row0)
+            const top = rows[0];
+            cells = rows.map(r => '0,' + (r - top));
+          }
+          reels.push({ reel_id: i + 1, y_offset, max_rows: span, cells });
         }
         return { ok: true, reels };
       }
@@ -1169,7 +1178,7 @@
         if (layout.length > 0 && !confirm(
           `把框選的格子設為主輪會「重建」整個主盤:\n\n  目前:${layout.length} 個 Reel\n  重建後:${next} 個 Reel\n\n` +
           `04/05/08 權重以 Reel 編號保留;缺的補 0、多的空著(同套用範本)。\n\n確定嗎?`)) return;
-        const rows = res.reels.map(r => ({ ...makeReel(r.reel_id), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows }));
+        const rows = res.reels.map(r => ({ ...makeReel(r.reel_id), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows, cells: Array.isArray(r.cells) ? r.cells.slice() : null }));
         layout.splice(0, layout.length, ...rows);   // 同 applyLayoutPreset:splice 保 reactivity
         activeReelIdx.value = 0;
         selectedReelIdxs.value = [];
@@ -1274,19 +1283,14 @@
         }
         return out;
       });
-      // v7.x P4:主輪「斷欄 / 單欄有洞」的問題格集合(套用前即時標記;cellsToReels 會擋,這裡只負責視覺與停用套用)
+      // v7.5-Layer C:主輪「斷欄」的問題格集合(套用前即時標記)。
+      //   欄內挖洞已合法(改用 cells mask),不再標記;只剩「欄與欄之間有空欄」視為非法。
       const cvMainInvalid = computed(() => {
         const bad = new Set();
         if (!cvMain.value.length) return bad;
         const byCol = new Map();
         for (const k of cvMain.value) { const c = +k.split(',')[0], r = +k.split(',')[1]; if (!byCol.has(c)) byCol.set(c, []); byCol.get(c).push(r); }
         const cols = [...byCol.keys()].sort((a, b) => a - b);
-        // 單欄有洞:該欄所有格標記
-        for (const c of cols) {
-          const rows = byCol.get(c).slice().sort((a, b) => a - b);
-          const run = rows[rows.length - 1] - rows[0] + 1;
-          if (run !== rows.length) rows.forEach(r => bad.add(c + ',' + r));
-        }
         // 斷欄:缺號欄的「兩側相鄰欄」標記(提示這裡斷開了)
         for (let i = 1; i < cols.length; i++) {
           if (cols[i] !== cols[i - 1] + 1) {
@@ -1407,7 +1411,20 @@
         layout.forEach(r => { if ((r.y_offset || 0) < minTop) minTop = r.y_offset || 0; });
         panels.forEach(p => { if ((p.row || 0) < minTop) minTop = p.row || 0; });
         const main0 = [];
-        layout.forEach((r, idx) => { for (let i = 0; i < (r.max_rows || 1); i++) main0.push(idx + ',' + ((r.y_offset || 0) + i - minTop)); });
+        layout.forEach((r, idx) => {
+          // v7.5-Layer C:主輪有 cells mask → 只展開遮罩內的 row(洞格不鏡像進畫布);無 → 實心展開。
+          const yo = (r.y_offset || 0), mr = (r.max_rows || 1);
+          let dys = null;
+          if (Array.isArray(r.cells) && r.cells.length) {
+            dys = [];
+            for (const s of r.cells) {
+              const m = /^(-?\d+),(-?\d+)$/.exec(String(s).trim());
+              if (m && +m[1] === 0) { const dy = +m[2]; if (dy >= 0 && dy < mr) dys.push(dy); }
+            }
+          }
+          if (dys) { dys.forEach(dy => main0.push(idx + ',' + (yo + dy - minTop))); }
+          else { for (let i = 0; i < mr; i++) main0.push(idx + ',' + (yo + i - minTop)); }
+        });
         const sub0 = [], stage0 = [];
         panels.forEach(p => {
           const isStage = (p.panel_type === 'STAGE');
@@ -1457,10 +1474,10 @@
         if (_mergeHit && !confirm('偵測到相鄰的不同副盤會被合併為同一塊;合併後部分參數(如「參與連線」join_payline)將以重疊最多者為準。\n\n確定套用嗎?')) return;
         const aCol = Math.min(...cvMain.value.map(k => +k.split(',')[0]));
         const aRow = Math.min(...cvMain.value.map(k => +k.split(',')[1]));
-        // v7.x:合併,不砍掉重建 — 以 reel_id 保留既有 Reel 的權重/副盤參數,只覆蓋幾何(y_offset/max_rows)
+        // v7.x:合併,不砍掉重建 — 以 reel_id 保留既有 Reel 的權重/副盤參數,只覆蓋幾何(y_offset/max_rows/cells)
         const rows = res.reels.map(r => {
           const prev = layout.find(x => x.reel_id === r.reel_id);
-          return { ...makeReel(r.reel_id), ...(prev || {}), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows };
+          return { ...makeReel(r.reel_id), ...(prev || {}), reel_id: r.reel_id, y_offset: r.y_offset, max_rows: r.max_rows, cells: Array.isArray(r.cells) ? r.cells.slice() : null };
         });
         // 既有面板的絕對格集(盤面座標),供幾何重疊比對保留設定
         const prevPanels = panels.map(p => ({ p, set: panelCellSet(p) }));

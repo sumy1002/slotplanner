@@ -209,6 +209,8 @@ def _parse_layout(df: pd.DataFrame) -> LayoutConfig:
                 subreel_inherit_weight=_to_bool(r.get("SubReel_Inherit_Weight")),
                 subreel_kind=(_to_str(r.get("SubReel_Kind")) or "STACK"),  # v4.6:空→STACK 向後相容
                 subreel_symbol_set=_to_str(r.get("SubReel_Symbol_Set")),    # v5.1:選用欄,缺→空
+                # v7.5-Layer C:主輪活格遮罩,選用欄,以欄名 .get 讀取（守則 #81）。缺欄/空 → None。
+                cells=_parse_reel_cells(r.get("Cells"), int(r["Max_Rows"])),
             ))
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
@@ -322,6 +324,38 @@ def _parse_panel_cells(raw: Any, width: int, height: int) -> Optional[list[str]]
         if sid not in out[name]:
             out[name].append(sid)
     return out
+
+
+def _parse_reel_cells(raw: Any, max_rows: int) -> Optional[list[str]]:
+    """v7.5-Layer C:解析 02_Layout 的 Cells 欄為主輪活格遮罩 ["0,dy",…]。
+
+    收斂規則與 _parse_panel_cells / 前端 normalizeMask 對齊,但主輪為單欄:
+      - dx 恆為 0;非 0（理論上不該出現）一律忽略。
+      - dy 範圍 [0, max_rows)；越界裁掉。
+      - 去重、升冪（依 dy）。
+      - 空 或 恰好填滿整欄（len == max_rows）→ None（收斂成實心欄,舊檔行為）。
+    NaN / None / 空字串 → None（向後相容）。
+    """
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    s = str(raw).strip()
+    if not s or s.lower() == "nan":
+        return None
+    n = max(1, int(max_rows or 1))
+    seen: set[int] = set()
+    for tok in re.split(r"[;\s]+", s):
+        tok = tok.strip()
+        if not tok:
+            continue
+        m = re.match(r"^(-?\d+),(-?\d+)$", tok)
+        if not m:
+            continue
+        dx, dy = int(m.group(1)), int(m.group(2))
+        if dx == 0 and 0 <= dy < n:
+            seen.add(dy)
+    if not seen or len(seen) == n:
+        return None
+    return [f"0,{dy}" for dy in sorted(seen)]
 
 
 def _parse_paytable_03c(df, symbols: dict) -> None:
