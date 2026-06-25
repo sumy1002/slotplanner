@@ -903,7 +903,9 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
     position: static;
   }
 
-  /* 分頁列 = 左側抽屜,蓋在內容上 */
+  /* 分頁列 = 左側抽屜,蓋在內容上。
+     預設(fail-safe)藏在畫面外,只有明確「未收起」時才滑入,
+     避免狀態未就緒時露出空白抽屜。*/
   .cfg-tabs {
     position: fixed;
     top: 0; bottom: 0; left: 0;
@@ -912,13 +914,16 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
     z-index: 60;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    box-shadow: 3px 0 20px rgba(20,28,46,0.22);
-    transform: translateX(0);
+    box-shadow: none;
+    transform: translateX(-102%);
     transition: transform 0.24s cubic-bezier(0.4,0,0.2,1);
     padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 16px);
   }
-  /* 收起(看內容)→ 抽屜滑出畫面 */
-  .cfg-tabs.cfg-tabs-collapsed { transform: translateX(-102%); box-shadow: none; }
+  /* 未收起(=要看分頁列)→ 滑入 */
+  .cfg-tabs:not(.cfg-tabs-collapsed) {
+    transform: translateX(0);
+    box-shadow: 3px 0 20px rgba(20,28,46,0.22);
+  }
   .cfg-tabrail-toggle { display: none; }
 
   /* 遮罩:抽屜開著(未收起)時顯示 */
@@ -1003,8 +1008,19 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   }
   .cfg-layout-v2-preview .cfg-layout-svg { max-height: none; }
 
-  /* 設定檔頂部資料來源 / 範本面板:單欄、可換行 */
-  .cfg-source-bar { flex-wrap: wrap; height: auto; min-height: 46px; padding: 8px 12px; gap: 6px; }
+  /* 設定檔頂部資料來源:單列、可橫向滑動(不換行避免左側破碎留白)*/
+  .cfg-source-bar {
+    flex-wrap: nowrap;
+    height: 46px;
+    padding: 0 12px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .cfg-source-bar::-webkit-scrollbar { display: none; }
+  .cfg-source-bar > * { flex: 0 0 auto; }
+  .cfg-source-bar .cfg-spacer { display: none; }
   .cfg-tpl-panel { max-height: none; }
   .cfg-tpl-filter-row { flex-wrap: wrap; gap: 6px; }
   .cfg-tpl-item { flex-direction: column; align-items: stretch; gap: 8px; }
