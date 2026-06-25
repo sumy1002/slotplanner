@@ -7934,14 +7934,14 @@
         } catch (e) { /* 意圖消費失敗不影響正常載入 */ }
         // v7.6:行動版進場預設收起分頁列(直接看內容);右滑可拉出分頁列
         try { if (window.matchMedia('(max-width: 767px)').matches) cfgTabRailCollapsed.value = true; } catch (e) {}
-        // v7.6:行動版邊緣滑動手勢 — 右滑(左緣起手)拉出分頁列、左滑收回
+        // v7.6.1:行動版抽屜 — 開用漢堡鈕(點按);關用 drag-follow(拖分頁列關閉,跟手)
         try {
-          const _el = document.querySelector('.cfg-page');
-          const _swipe = window.SlotPlanner && window.SlotPlanner.attachEdgeSwipe;
-          if (_el && _swipe) {
-            _detachCfgSwipe = _swipe(_el, {
+          const _el = document.querySelector('.cfg-tabs');
+          const _drag = window.SlotPlanner && window.SlotPlanner.attachDrawerDrag;
+          if (_el && _drag) {
+            _detachCfgSwipe = _drag(_el, {
+              side: 'left',
               isOpen:  () => !cfgTabRailCollapsed.value,
-              onOpen:  () => { cfgTabRailCollapsed.value = false; },
               onClose: () => { cfgTabRailCollapsed.value = true; },
             });
           }

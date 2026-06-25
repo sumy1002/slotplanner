@@ -1,83 +1,115 @@
 // ============================================================
-//  mobile-gestures.js — 行動版邊緣滑動手勢(Discord 式抽屜)
+//  mobile-gestures.js — 行動版抽屜手勢(v7.6.1)
 //  公開接口(掛在 window.SlotPlanner):
-//    attachEdgeSwipe(el, opts) -> detach()
+//    attachDrawerDrag(drawerEl, opts) -> detach()
 //
-//  行為:
-//    - 只在 ≤767px(行動版)生效;桌面/平板自動不掛。
-//    - 右滑:必須從畫面左緣 EDGE_PX 內起手(像 Discord),才拉出抽屜。
-//    - 左滑:抽屜開著時,任意位置左滑可關。
-//    - 水平/垂直判別:水平位移需明顯大於垂直(>H_RATIO 倍)且超過 THRESHOLD,
-//      否則視為正常垂直捲動,完全不攔截(避免「隨便滑就亂飄」)。
+//  設計(避開 iOS 系統手勢):
+//    - 「開」抽屜改用漢堡鈕點按(不在螢幕左緣搶手勢,零誤觸)。
+//    - 「關」抽屜用 drag-follow:手指拖到哪、抽屜跟到哪(跟隨軌跡),
+//      放手時依「拖超過門檻 or 甩動速度夠快」決定關閉或彈回。
+//    - 只在 ≤767px 生效;桌面/平板不掛。
 //
 //  opts:
-//    isOpen()  -> boolean   目前抽屜是否開啟
-//    onOpen()               要求開啟
-//    onClose()              要求關閉
-//    enabled() -> boolean   (選填)是否啟用(預設只看寬度)
+//    side: 'left' | 'right'   抽屜停駐邊(left=分頁列,right=Symbol 編輯)
+//    isOpen() -> boolean      目前是否開啟(只有開啟時才允許拖關)
+//    onClose()                確定關閉時呼叫(讓 Vue 改 state)
+//    enabled() -> boolean     (選填)是否啟用
 // ============================================================
 (function () {
   'use strict';
 
-  const EDGE_PX   = 24;   // 左緣起手判定區
-  const THRESHOLD = 45;   // 觸發換層的最小水平位移
-  const H_RATIO   = 1.5;  // 水平須是垂直的幾倍才算「水平滑」
-  const MQ        = '(max-width: 767px)';
+  var CLOSE_RATIO = 0.4;   // 拖超過抽屜寬度的 40% → 關
+  var FLING_V     = 0.5;   // px/ms,甩動速度門檻 → 關
+  var H_RATIO     = 1.2;   // 水平須略大於垂直才算拖抽屜
+  var MQ          = '(max-width: 767px)';
 
-  function attachEdgeSwipe(el, opts) {
+  function attachDrawerDrag(el, opts) {
     if (!el || !opts) return function () {};
+    var side = opts.side === 'right' ? 'right' : 'left';
 
-    let sx = 0, sy = 0, tracking = false, fromEdge = false, decided = false, horizontal = false;
+    var sx = 0, sy = 0, lastX = 0, lastT = 0, vx = 0;
+    var w = 0, tracking = false, decided = false, horizontal = false, dragging = false;
 
     function mobile() {
       if (!window.matchMedia(MQ).matches) return false;
       return opts.enabled ? !!opts.enabled() : true;
     }
 
+    function _scrim() {
+      var parent = (el.closest && (el.closest('.cfg-body') || el.closest('.sym-page'))) || el.parentElement;
+      if (!parent) return null;
+      return parent.querySelector('.cfg-drawer-scrim, .sym-drawer-scrim');
+    }
+
+    function applyOffset(dx) {
+      var off = side === 'left' ? Math.min(0, dx) : Math.max(0, dx);
+      el.style.transition = 'none';
+      el.style.transform = 'translateX(' + off + 'px)';
+      var prog = Math.min(1, Math.abs(off) / (w || 1));
+      var scrim = _scrim();
+      if (scrim) { scrim.style.transition = 'none'; scrim.style.opacity = String(1 - prog); }
+    }
+
+    function clearInline() {
+      el.style.transition = '';
+      el.style.transform = '';
+      var scrim = _scrim();
+      if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
+    }
+
     function onStart(e) {
-      if (!mobile()) return;
-      const t = e.touches ? e.touches[0] : e;
-      sx = t.clientX; sy = t.clientY;
-      tracking = true; decided = false; horizontal = false;
-      fromEdge = sx <= EDGE_PX;
+      if (!mobile() || !(opts.isOpen && opts.isOpen())) return;
+      var t = e.touches ? e.touches[0] : e;
+      sx = lastX = t.clientX; sy = t.clientY; lastT = Date.now(); vx = 0;
+      w = el.getBoundingClientRect().width || 1;
+      tracking = true; decided = false; horizontal = false; dragging = false;
     }
 
     function onMove(e) {
       if (!tracking || !mobile()) return;
-      const t = e.touches ? e.touches[0] : e;
-      const dx = t.clientX - sx;
-      const dy = t.clientY - sy;
-      const adx = Math.abs(dx), ady = Math.abs(dy);
+      var t = e.touches ? e.touches[0] : e;
+      var dx = t.clientX - sx;
+      var dy = t.clientY - sy;
+      var adx = Math.abs(dx), ady = Math.abs(dy);
 
-      // 還沒判定方向:等位移夠大再決定是水平還是垂直
       if (!decided) {
-        if (adx < 10 && ady < 10) return;          // 太小,先不判
-        horizontal = adx > ady * H_RATIO;          // 水平須明顯大於垂直
+        if (adx < 8 && ady < 8) return;
+        var towardClose = side === 'left' ? dx < 0 : dx > 0;
+        horizontal = adx > ady * H_RATIO && towardClose;
         decided = true;
-        if (!horizontal) { tracking = false; return; } // 垂直 → 放手給正常捲動
+        if (!horizontal) { tracking = false; return; }
+        dragging = true;
       }
 
-      // 水平手勢:只有「可動作」的滑動才攔截(左緣右滑開、或開著時左滑關),
-      // 其餘水平滑動(例如畫布內平移)放行,避免搶走原生捲動。
-      const open = opts.isOpen && opts.isOpen();
-      const actionable = (dx > 0 && fromEdge && !open) || (dx < 0 && open);
-      if (horizontal && actionable && e.cancelable) e.preventDefault();
-
-      // 右滑開:需從左緣起手
-      if (dx > THRESHOLD && fromEdge && !open) {
-        opts.onOpen && opts.onOpen();
-        tracking = false;
-      }
-      // 左滑關:抽屜開著時任意位置
-      else if (dx < -THRESHOLD && open) {
-        opts.onClose && opts.onClose();
-        tracking = false;
+      if (dragging) {
+        if (e.cancelable) e.preventDefault();
+        var now = Date.now();
+        var dt = now - lastT;
+        if (dt > 0) vx = (t.clientX - lastX) / dt;
+        lastX = t.clientX; lastT = now;
+        applyOffset(dx);
       }
     }
 
-    function onEnd() { tracking = false; }
+    function onEnd() {
+      if (!tracking) return;
+      tracking = false;
+      if (!dragging) return;
+      dragging = false;
 
-    // passive:false 才能在水平手勢時 preventDefault
+      var m = (el.style.transform.match(/-?\d+\.?\d*/) || ['0'])[0];
+      var moved = Math.abs(parseFloat(m) || 0);
+      var passedDist = moved >= w * CLOSE_RATIO;
+      // 甩動關閉:需速度夠快「且」至少拖動一段距離(避免極小位移誤關)
+      var fast = side === 'left' ? (vx < -FLING_V) : (vx > FLING_V);
+      var passedFling = fast && moved >= 40;
+
+      clearInline();
+      if (passedDist || passedFling) {
+        opts.onClose && opts.onClose();
+      }
+    }
+
     el.addEventListener('touchstart', onStart, { passive: true });
     el.addEventListener('touchmove',  onMove,  { passive: false });
     el.addEventListener('touchend',   onEnd,   { passive: true });
@@ -88,9 +120,10 @@
       el.removeEventListener('touchmove',  onMove);
       el.removeEventListener('touchend',   onEnd);
       el.removeEventListener('touchcancel', onEnd);
+      clearInline();
     };
   }
 
   window.SlotPlanner = window.SlotPlanner || {};
-  window.SlotPlanner.attachEdgeSwipe = attachEdgeSwipe;
+  window.SlotPlanner.attachDrawerDrag = attachDrawerDrag;
 })();

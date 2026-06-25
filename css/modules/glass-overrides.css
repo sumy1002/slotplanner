@@ -841,11 +841,12 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
    沿用既有 token(守則 #75 暗色自動跟隨)、實色面(守則 #76)。
    ============================================================ */
 
-/* 行動返回列 + 遮罩預設隱藏(桌面/平板不顯示) */
+/* 行動返回列 + 遮罩 + 漢堡鈕預設隱藏(桌面/平板不顯示) */
 .cfg-mobile-back,
 .sym-mobile-back,
 .cfg-drawer-scrim,
-.sym-drawer-scrim { display: none; }
+.sym-drawer-scrim,
+.cfg-hamburger { display: none; }
 
 /* ════════════════ 平板 768–1024:雙欄但收窄、好點 ════════════════ */
 @media (min-width: 768px) and (max-width: 1024px) {
@@ -866,8 +867,15 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
    ════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
 
-  /* ── 1. 打破視窗高度牢籠:改自然文檔流,單一 body 捲動 ── */
-  html, body { height: auto; overflow-x: hidden; }
+  /* ── 1. 打破視窗高度牢籠:改自然文檔流,單一 body 捲動 ──
+     base theme.css 是 html,body{overflow:hidden;height:100%}(桌面牢籠),
+     手機必須明確解除 overflow-y 才能整頁垂直捲動。*/
+  html, body {
+    height: auto !important;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+  }
   #app.app {
     height: auto;
     min-height: 100dvh;
@@ -1011,6 +1019,33 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   #app .cfg-source-bar::-webkit-scrollbar { display: none; }
   #app .cfg-source-bar > * { flex: 0 0 auto; }
   #app .cfg-source-bar .cfg-spacer { display: none; }
+
+  /* 漢堡鈕:點按開分頁列(取代左緣滑動,避開 iOS 系統返回手勢)*/
+  #app .cfg-hamburger {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    flex: 0 0 auto;
+    width: 38px; height: 34px;
+    margin-right: 2px;
+    border: 0.5px solid var(--glass-edge);
+    background: var(--glass-3);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app .cfg-hamburger:active { background: var(--glass-4); }
+  .cfg-hamburger-bars,
+  .cfg-hamburger-bars::before,
+  .cfg-hamburger-bars::after {
+    content: "";
+    display: block;
+    width: 18px; height: 2px;
+    background: var(--text-light);
+    border-radius: 2px;
+    position: relative;
+  }
+  .cfg-hamburger-bars::before { position: absolute; top: -6px; }
+  .cfg-hamburger-bars::after  { position: absolute; top: 6px; }
   #app .cfg-tpl-panel { max-height: none; }
   #app .cfg-tpl-filter-row { flex-wrap: wrap; gap: 6px; }
   #app .cfg-tpl-item { flex-direction: column; align-items: stretch; gap: 8px; }

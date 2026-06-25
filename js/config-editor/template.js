@@ -19,6 +19,10 @@
 
   <!-- ── 頂部資料來源指示器 ── -->
   <div class="cfg-source-bar">
+    <!-- 行動版漢堡鈕:點按開啟分頁列(桌面/平板由 CSS 隱藏)-->
+    <button class="cfg-hamburger" @click="cfgTabRailCollapsed = false" title="分頁列" aria-label="開啟分頁列">
+      <span class="cfg-hamburger-bars"></span>
+    </button>
     <!-- 群組 1:資料來源資訊 -->
     <div class="cfg-source-info">
       <span class="cfg-source-icon"
@@ -400,11 +404,7 @@
     </button>
 
     <!-- 行動版下鑽返回列(桌面/平板由 CSS 隱藏;只在 ≤767 詳細視圖顯示)-->
-    <div class="cfg-mobile-back" @click="cfgTabRailCollapsed = false">
-      <span class="cfg-mobile-back-ico">‹</span>
-      <span class="cfg-mobile-back-txt">分頁列</span>
-      <span class="cfg-mobile-back-cur">{{ (activeTab && activeTab.name) || '' }}</span>
-    </div>
+    <!-- v7.6.1:分頁列開啟改用頂部漢堡鈕;關閉用拖曳/遮罩。原 cfg-mobile-back 返回列移除以免重複 -->
 
     <div class="cfg-content" :class="{ 'cfg-content-fullpane': activeTab.kind === 'fullpane' }">
 

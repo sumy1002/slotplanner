@@ -1277,15 +1277,15 @@
           select(symbols.value[0].id);
         }
         document.addEventListener('keydown', onKeyDown);
-        // v7.6:行動版邊緣滑動 — 右滑(左緣起手)回清單層;左滑無作用(需點符號進入)
+        // v7.6.1:行動版編輯抽屜 — 開=點符號;關=drag-follow(往右拖編輯面關閉,跟手)
         try {
-          const _el = document.querySelector('.sym-page');
-          const _swipe = window.SlotPlanner && window.SlotPlanner.attachEdgeSwipe;
-          if (_el && _swipe) {
-            _detachSymSwipe = _swipe(_el, {
-              isOpen:  () => !!selectedId.value,   // 「開」= 在編輯層
-              onOpen:  () => {},                   // 進入編輯層需點選某符號,不自動
-              onClose: () => { select(null); },    // 右滑 → 回清單
+          const _el = document.querySelector('.sym-right');
+          const _drag = window.SlotPlanner && window.SlotPlanner.attachDrawerDrag;
+          if (_el && _drag) {
+            _detachSymSwipe = _drag(_el, {
+              side: 'right',
+              isOpen:  () => !!selectedId.value,
+              onClose: () => { select(null); },
             });
           }
         } catch (e) { /* 手勢掛載失敗不影響功能 */ }
