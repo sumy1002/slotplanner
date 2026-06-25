@@ -201,9 +201,38 @@ class PanelDef:
     inherit_weight: bool = False  # 無獨立權重時是否沿用全域第一輪池（保底）
     join_payline: bool = False  # 是否參與主盤連線（P1 僅存旗標）
     note: str = ""
+    # v7.x Layer B/C：活格遮罩 ["dx,dy",…]（相對外框左上）。None = 整塊矩形（向後相容）。
+    #   - 遮罩外的格子不被物化（不抽符號、不計連線、不計 symbol_count）→ 不規則盤 / 環形盤。
+    #   - 與 join_payline 正交：遮罩決定「哪些格存在」，join_payline 決定「存在的格算不算主盤連線」。
+    cells: Optional[list[str]] = None
+
+    def active_local_cells(self) -> list[tuple[int, int]]:
+        """要物化的局部座標 (c, r)。cells=None → 整塊 width×height 矩形。
+
+        遮罩內非法/越界座標已在載入時（_parse_panel_cells）裁掉,此處僅做安全夾取。
+        """
+        w = max(0, self.width)
+        h = max(0, self.height)
+        if not self.cells:
+            return [(c, r) for r in range(h) for c in range(w)]
+        out: list[tuple[int, int]] = []
+        seen: set[tuple[int, int]] = set()
+        for s in self.cells:
+            try:
+                dx_s, dy_s = str(s).strip().split(",")
+                dx, dy = int(dx_s), int(dy_s)
+            except (ValueError, AttributeError):
+                continue
+            if 0 <= dx < w and 0 <= dy < h and (dx, dy) not in seen:
+                seen.add((dx, dy))
+                out.append((dx, dy))
+        return out
 
     @property
     def cell_count(self) -> int:
+        # v7.x:遮罩時回實際活格數（非外框 w×h）,讓統計 / docgen 自動正確。
+        if self.cells:
+            return len(self.active_local_cells())
         return max(0, self.width) * max(0, self.height)
 
 

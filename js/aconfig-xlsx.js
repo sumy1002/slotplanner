@@ -14,12 +14,12 @@
 // ============================================================
 (function () {
   'use strict';
-
+ 
   // ════════════════════════════════════════════════════════════════════
   //  Helpers — 與 config-editor.js 中同名函式保持邏輯一致
   //  (此檔為獨立 IIFE,不能依賴 config-editor 的內部變數,故需內嵌一份)
   // ════════════════════════════════════════════════════════════════════
-
+ 
   // mode_scope ↔ condition 合併:後端 PuzzleRule 沒有 mode_scope 欄位
   function _composeConditionWithModeScope(modeScope, condition) {
     const ms = (modeScope || 'ALL').toString().trim();
@@ -30,7 +30,7 @@
     if (re.test(cond)) return cond;
     return `mode == ${ms} AND (${cond})`;
   }
-
+ 
   // value 編碼 — 對齊後端 condition_parser._parse_value 反推
   function _encodeActionValue(v) {
     if (v == null || v === '') return '';
@@ -46,7 +46,7 @@
     if (/^-?\d+(\.\d+)?$/.test(s)) return s;
     return '"' + s.replace(/"/g, '\\"') + '"';
   }
-
+ 
   // 把單一 action 物件編成後端認得的 DSL 片段
   function _encodeAction(act) {
     if (!act || !act.atype) return '';
@@ -55,13 +55,13 @@
     const pairs = keys.map(k => `${k}=${_encodeActionValue(params[k])}`);
     return `${act.atype}(${pairs.join(', ')})`;
   }
-
+ 
   // actions list → DSL 字串(分號分隔多個 action)
   function _buildActionsDSL(actions) {
     if (!Array.isArray(actions) || actions.length === 0) return '';
     return actions.filter(a => a && a.atype).map(_encodeAction).join('; ');
   }
-
+ 
   // v6.3 / Q3:由「符號 mult_values/prize_values + 模式 progress_ladder」反推。
   //   回傳 { perSymbol, legacy }。legacy 為 best-effort 對應舊 15/16 格式(只能表達單一
   //   WILD / RANDOM / COIN 來源;完整資料以 15b_Symbol_Mults 為權威)。
@@ -79,7 +79,7 @@
         weight_by_mode: (v.weight_by_mode && typeof v.weight_by_mode === 'object') ? v.weight_by_mode : {},
       }))
       .filter(v => v.value > 0 || v.link_jackpot);
-
+ 
     const perSymbol = [];
     for (const s of list) {
       const mults = normMults(s.mult_values);
@@ -88,12 +88,12 @@
         perSymbol.push({ sid: sidOf(s), name: s.name || '', is_wild: !!s.is_wild || s.type === 'WILD', mults, prizes });
       }
     }
-
+ 
     // legacy best-effort:取首個 wild / 首個非 wild / 首個帶 prize 的符號
     const wildSym = perSymbol.find(p => p.is_wild && p.mults.length);
     const randSym = perSymbol.find(p => !p.is_wild && p.mults.length);
     const coinSym = perSymbol.find(p => p.prizes.length);
-
+ 
     const ladders = {};
     let progressReset = true, progressEnabled = false, resetSet = false;
     for (const m of (Array.isArray(modes) ? modes : [])) {
@@ -105,7 +105,7 @@
         if (!resetSet) { progressReset = m.progress_reset !== false; resetSet = true; }
       }
     }
-
+ 
     return {
       perSymbol,
       legacy: {
@@ -123,7 +123,7 @@
       },
     };
   }
-
+ 
   // ════════════════════════════════════════════════════════════════════
   //  公開:從 localStorage 直接生 A.xlsx ArrayBuffer
   //  讓 SimPage 等其他 component 可以拿來餵 Pyodide,不必經過實體檔案
@@ -132,7 +132,7 @@
     if (typeof window.ExcelJS === 'undefined') {
       throw new Error('ExcelJS 未載入');
     }
-
+ 
     // ── 從 LS 讀取所有資料(用 JSON parse 並提供 fallback)──
     function readLS(key, def) {
       try {
@@ -145,7 +145,7 @@
         return def;
       }
     }
-
+ 
     const g           = readLS('slotplanner.aconfig.global.v1',       {});
     const modes       = readLS('slotplanner.aconfig.modes.v1',        []);
     const layoutRows  = readLS('slotplanner.aconfig.layout.v1',       []);
@@ -166,19 +166,19 @@
     const coinValues  = readLS('slotplanner.aconfig.coinvalues.v1',  {});  // v5.4
     const bonusGames  = readLS('slotplanner.aconfig.bonusgames.v1',  {});  // v6.0-c
     const registryRaw = readLS('slotplanner.registry.v1',             { symbols: [] });
-
+ 
     const modeNames = modes.map(m => m.mode).filter(Boolean);
     const layoutLength = layoutRows.length;
-
+ 
     // ── 建 workbook ──
     const wb = new window.ExcelJS.Workbook();
     wb.creator = 'SlotPlanner Pro';
     wb.created = new Date();
-
+ 
     const stamp = new Date().toLocaleString('zh-TW');
     const boldHdr = (ws) => { ws.getRow(1).font = { bold: true, color: { argb: 'FF5A3DB0' } }; };
     const setCols = (ws, widths) => { ws.columns = widths.map(w => ({ width: w })); };
-
+ 
     // 00_README
     const wsR = wb.addWorksheet('00_README');
     wsR.addRows([
@@ -210,13 +210,13 @@
     ]);
     wsR.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF5A3DB0' } };
     setCols(wsR, [28, 50]);
-
+ 
     // 01_Global
     const wsG = wb.addWorksheet('01_Global');
     wsG.addRow(['Key', 'Value', 'Notes']);
     for (const [k, v] of Object.entries(g)) wsG.addRow([k, v, '']);
     boldHdr(wsG); setCols(wsG, [22, 28, 36]);
-
+ 
     // 02_Layout
     const wsL = wb.addWorksheet('02_Layout');
     wsL.addRow(['Reel_ID', 'Y_Offset', 'Max_Rows', 'Has_SubReel',
@@ -229,24 +229,28 @@
                   r.subreel_symbol_set || '']);   // v5.1:契約加法欄
     }
     boldHdr(wsL); setCols(wsL, [10, 10, 10, 13, 18, 14, 22, 14, 20]);
-
+ 
     // 02b_Panels(v4.7:自由副盤;無 panel → 仍寫表頭，引擎讀到空 → panels=[])
+    // v7.x Layer B:尾端新增第 15 欄 Cells(活格遮罩 "dx,dy" 以 ';' 串接;空 = 整塊矩形)。
+    //   前 14 欄順序/內容不動;a_loader.py 以欄名 .get 讀取,缺欄 → None(additive 契約)。
     const wsPnl = wb.addWorksheet("02b_Panels");
     wsPnl.addRow(['Panel_ID', 'Col', 'Row', 'Width', 'Height',
                 'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note',
-                'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel']);
+                'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel', 'Cells']);
     for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
       if (!p || !p.panel_id) continue;
       // v6.2:Scroll 由 panel_type 推導(向後相容:無 panel_type 時用舊 scroll)
       const ptype = p.panel_type || (p.scroll === false ? 'COLLECT' : 'SCROLL');
+      // v7.x:cells 為 ["dx,dy",…] 或 null(整塊矩形)。null/空 → 空字串(與 maskToStr 一致)。
+      const cellsStr = (Array.isArray(p.cells) && p.cells.length) ? p.cells.join(';') : '';
       wsPnl.addRow([
         p.panel_id, p.col || 0, p.row || 0, p.width || 3, p.height || 3,
         (ptype === 'SCROLL'), p.symbol_set || '', !!p.inherit_weight, !!p.join_payline, p.note || '',
-        ptype, p.trigger_symbol || '', p.collect_target_jp || '', Number(p.trigger_reel) || 0,
+        ptype, p.trigger_symbol || '', p.collect_target_jp || '', Number(p.trigger_reel) || 0, cellsStr,
       ]);
     }
-    boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12]);
-
+    boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12, 22]);
+ 
     // 03b_Symbol_Sets(v4.7:符號集 D;{set: [sym,...]} 攤平成多列)
     const wsSS = wb.addWorksheet('03b_Symbol_Sets');
     wsSS.addRow(['Set_Name', 'Symbol_ID']);
@@ -259,7 +263,7 @@
       }
     }
     boldHdr(wsSS); setCols(wsSS, [18, 16]);
-
+ 
     // 03_Symbols(含擴充欄位)
     const wsS = wb.addWorksheet('03_Symbols');
     wsS.addRow([
@@ -289,7 +293,7 @@
       ]);
     }
     boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18]);
-
+ 
     // 03c_Paytable(v5.3:動態賠付表)
     const wsPaytable = wb.addWorksheet('03c_Paytable');
     wsPaytable.addRow(['Symbol_ID', 'Count', 'Pay']);
@@ -305,7 +309,7 @@
       }
     }
     boldHdr(wsPaytable); setCols(wsPaytable, [16, 10, 12]);
-
+ 
     // 04_Reel_Weights(扁平化)
     const wsRW = wb.addWorksheet('04_Reel_Weights');
     wsRW.addRow(['Mode_Scope', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
@@ -354,7 +358,7 @@
       }
     }
     boldHdr(wsRW); setCols(wsRW, [12, 10, 14, 10, 24]);
-
+ 
     // 04b_Reel_Strips(v6.0-b:Mode_Scope / Reel_ID / Enabled / Strip_Sequence)
     //   逗號分隔的符號序列;空輪帶不寫列。Enabled 旗標寫在每列(讀取端取首列即可)。
     const wsStrip = wb.addWorksheet('04b_Reel_Strips');
@@ -372,7 +376,7 @@
       }
     }
     boldHdr(wsStrip); setCols(wsStrip, [13, 9, 9, 80]);
-
+ 
     // 05_Grid_Size_Weights(扁平化)
     const wsGW = wb.addWorksheet('05_Grid_Size_Weights');
     wsGW.addRow(['Mode_Scope', 'Reel_ID', 'Grid_Size', 'Weight', 'Notes']);
@@ -389,7 +393,7 @@
       }
     }
     boldHdr(wsGW); setCols(wsGW, [12, 10, 11, 10, 24]);
-
+ 
     // 06_Paylines
     const wsP = wb.addWorksheet('06_Paylines');
     wsPaytable.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
@@ -397,7 +401,7 @@
     const _plDir = (g && g.payline_direction) || 'LTR';
     for (const pl of paylines) wsPaytable.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
     boldHdr(wsPaytable); setCols(wsPaytable, [10, 44, 12, 28]);
-
+ 
     // 07_Constraints
     const wsC = wb.addWorksheet('07_Constraints');
     wsC.addRow(['Constraint_ID', 'Type', 'Symbol_ID', 'Reels_Allowed',
@@ -407,7 +411,7 @@
                   c.threshold, c.mode_scope, c.notes]);
     }
     boldHdr(wsC); setCols(wsC, [14, 16, 13, 16, 18, 13, 28]);
-
+ 
     // 08_Combo_Weights(扁平化)
     const wsCW = wb.addWorksheet('08_Combo_Weights');
     wsCW.addRow(['Mode_Scope', 'Combo_Step', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
@@ -427,7 +431,7 @@
       }
     }
     boldHdr(wsCW); setCols(wsCW, [12, 12, 10, 14, 10, 24]);
-
+ 
     // 09_Puzzle_Rules — 對齊後端 a_loader._parse_puzzle_rules 期望欄位
     //   schema: Rule_ID | Priority | Trigger | Condition | Actions | Emits | Enabled | Description
     //   Actions 欄用後端 condition_parser.parse_actions 認得的 DSL 格式
@@ -452,7 +456,7 @@
       ]);
     }
     boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28]);
-
+ 
     // 10_Discard_Rules
     const wsDR = wb.addWorksheet('10_Discard_Rules');
     wsDR.addRow(['Discard_ID', 'Discard_Kind', 'Mode_Scope', 'Condition', 'Notes']);
@@ -460,7 +464,7 @@
       wsDR.addRow([d.discard_id, d.discard_kind, d.mode_scope, d.condition, d.notes]);
     }
     boldHdr(wsDR); setCols(wsDR, [12, 14, 13, 36, 24]);
-
+ 
     // 11_Mode_Config
     const wsM = wb.addWorksheet('11_Mode_Config');
     wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
@@ -470,7 +474,7 @@
                   m.on_enter_reset_vars, m.notes]);
     }
     boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28]);
-
+ 
     // 12_Distribution_Bins
     const wsB = wb.addWorksheet('12_Distribution_Bins');
     wsB.addRow(['Mode_Scope', 'Bin_Edges', 'Notes']);
@@ -478,7 +482,7 @@
       wsB.addRow([m, entry.bin_edges, entry.notes]);
     }
     boldHdr(wsB); setCols(wsB, [13, 40, 28]);
-
+ 
     // 13_Jackpots(v5.1:選用分頁;契約加法。引擎不讀,供文件生成/前端使用。
     //   無 JP → 仍寫表頭,讀取端讀到空 → jackpots=[])
     const wsJ = wb.addWorksheet('13_Jackpots');
@@ -496,7 +500,7 @@
                   j.mode_scope || 'ALL', j.notes || '']);
     }
     boldHdr(wsJ); setCols(wsJ, [10, 16, 13, 12, 13, 12, 26, 12, 11, 22, 12, 22, 14, 22]);
-
+ 
     // 14_Bet_Config(v5.3:選用分頁;引擎讀取。無 Buy Feature → 仍寫 Ante Bet 區塊 + 空清單)
     const wsBet = wb.addWorksheet('14_Bet_Config');
     const bc = typeof betConfig === 'object' && betConfig ? betConfig : {};
@@ -515,7 +519,7 @@
                    Number(bf.rtp_target) || 0, bf.enabled !== false, bf.notes || '']);
     }
     boldHdr(wsBet); setCols(wsBet, [22, 16, 12, 12, 10, 28]);
-
+ 
     // 15_Multipliers(v5.4:三段 — WILD / PROGRESS / RANDOM。引擎讀取;選用分頁)
     //   v6.3 / Q3:來源改由符號/模式反推;符號無資料時 fallback 舊 multipliers 物件(遷移前相容)。
     const derivedMults = _deriveSymbolMults(syms, modes);
@@ -555,7 +559,7 @@
       wsMul.addRow(['RANDOM', 'Mult', Number(v.mult) || 0, Number(v.weight) || 0, '']);
     }
     boldHdr(wsMul); setCols(wsMul, [12, 14, 14, 10, 24]);
-
+ 
     // 16_Coin_Values(v5.4:Hold&Win 金幣面額。各模式權重展開成欄。引擎讀取;選用分頁)
     //   v6.3 / Q3:來源改由符號 prize_values 反推;無資料時 fallback 舊 coinValues 物件。
     const wsCoin = wb.addWorksheet('16_Coin_Values');
@@ -579,7 +583,7 @@
       ]);
     }
     boldHdr(wsCoin); setCols(wsCoin, [16, 12, 14, ...coinModeNames.map(() => 10)]);
-
+ 
     // 15b_Symbol_Mults(v6.3 / Q3:每符號倍數/彩金的「權威」分頁;py 忽略未知分頁,加表安全)
     //   Kind=MULT → Value=倍數(×N)、Weight=權重;Kind=PRIZE → Value=面額(N×)、Weight=基礎權重、
     //   Link_JP=連結 JP、W_<mode>=各模式權重。
@@ -597,8 +601,8 @@
       }
     }
     boldHdr(wsSm); setCols(wsSm, [16, 8, 12, 10, 16, ...smModeNames.map(() => 10)]);
-
-
+ 
+ 
     // 17_Bonus_Games(v6.0-c:每個 game 一段 KV header + 其 items 列。引擎讀取;選用)
     const wsBonus = wb.addWorksheet('17_Bonus_Games');
     wsBonus.addRow(['Bonus_ID', 'Type', 'Title', 'Trigger_Desc', 'Mode_Scope',
@@ -635,10 +639,10 @@
       }
     }
     boldHdr(wsBonus); setCols(wsBonus, [10, 12, 16, 24, 12, 11, 10, 12, 14, 11, 11, 10, 12]);
-
+ 
     return await wb.xlsx.writeBuffer();
   }
-
+ 
   // 摘要:回傳目前 LS 中的狀態,給 UI 顯示「會使用什麼設定」
   function getAxlsxSummaryFromLS() {
     function safeReadCount(key, kind) {
@@ -676,11 +680,11 @@
       },
     };
   }
-
+ 
   window.SlotPlanner = window.SlotPlanner || {};
   window.SlotPlanner.buildAxlsxBufferFromLS = buildAxlsxBufferFromLS;
   window.SlotPlanner.getAxlsxSummaryFromLS = getAxlsxSummaryFromLS;
-
+ 
   // ════════════════════════════════════════════════════════════════════
   //  設定範本管理(localStorage 多份快照)
   //    每個範本 = 完整 12 個 aconfig keys + registry 的 JSON 快照
@@ -695,7 +699,7 @@
     // 保留中英數字,其他換成 _,連續多個 _ 合併
     return String(name).trim().replace(/[^\w\u4e00-\u9fff\u3400-\u4dbf-]+/g, '_').replace(/_+/g, '_').slice(0, 60);
   }
-
+ 
   // 取目前所有 aconfig LS keys 對應的資料(全份快照)
   function _snapshotAllLS() {
     const keys = {
@@ -766,7 +770,7 @@
       }
     }
   }
-
+ 
   function listTemplates() {
     try {
       const raw = localStorage.getItem(LS_TPL_LIST_KEY);
@@ -777,7 +781,7 @@
   function _saveTemplateList(list) {
     localStorage.setItem(LS_TPL_LIST_KEY, JSON.stringify(list));
   }
-
+ 
   // 公開:儲存範本(自動 slugify 名稱;同 slug 會覆蓋)
   function saveTemplate(name, description) {
     if (!name || !name.trim()) throw new Error('範本名稱不可空白');
@@ -811,7 +815,7 @@
     _saveTemplateList(list);
     return meta;
   }
-
+ 
   // 公開:載入範本(覆寫所有 LS keys),回傳被載入的 metadata
   function loadTemplate(slug) {
     // v4.9:內建範本不在 LS,直接還原 builder 資料
@@ -830,7 +834,7 @@
     const list = listTemplates();
     return list.find(t => t.slug === slug);
   }
-
+ 
   // 公開:刪除範本
   function deleteTemplate(slug) {
     // v4.9:內建範本不可刪除
@@ -839,7 +843,7 @@
     const list = listTemplates().filter(t => t.slug !== slug);
     _saveTemplateList(list);
   }
-
+ 
   // 公開:把範本匯出成 JSON(讓使用者下載,給別人使用)
   function exportTemplateJSON(slug) {
     // v4.9:內建範本即時組 payload(允許匯出分享)
@@ -856,7 +860,7 @@
     try { payload = JSON.parse(raw); } catch (e) { throw new Error('範本 JSON 解析失敗'); }
     return JSON.stringify({ meta, payload }, null, 2);
   }
-
+ 
   // 公開:從 JSON 字串匯入範本(不覆寫當前設定,只新增到範本列表)
   function importTemplateJSON(jsonStr, overrideName) {
     let obj;
@@ -894,7 +898,7 @@
     _saveTemplateList(list);
     return meta;
   }
-
+ 
   // ──────────────────────────────────────────────────────────
   //  v4.9-a:內建示範範本(builtin)
   //  - 不存 LS、不可刪除;按「▶ 載入」即套用一套完整、零驗證錯誤、
@@ -907,10 +911,10 @@
   const BUILTIN_SLUG_PREFIX = 'builtin-';
   const BUILTIN_DEMO_SLUG = 'builtin-demo-jade';
   const BUILTIN_DEMO_STAMP = '2026-06-12T00:00:00.000Z';
-
+ 
   function _buildBuiltinDemoData() {
     const REELS = 5;
-
+ 
     // ── 03_Symbols(SymbolRegistry toJSON 格式;name = symbol_id,
     //    確保 04/07/09 以名稱引用符號時與 03 完全對齊、零孤兒警告)──
     const SYM_DEFS = [
@@ -947,7 +951,7 @@
         swatch: [...d.sw],
       })),
     };
-
+ 
     // ── 01_Global + 11_Mode_Config ──
     const global = {
       simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
@@ -962,7 +966,7 @@
       { mode: 'FG1', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 10,
         inherit_globals: false, on_enter_reset_vars: 'fg_combo_count', notes: '10 局免費遊戲' },
     ];
-
+ 
     // ── 02_Layout:5×3;R3 帶一個 STACK 副輪(沿用母輪權重 → 零警告)──
     const layout = [];
     for (let r = 1; r <= REELS; r++) {
@@ -984,7 +988,7 @@
       note: '頂部收集盤(獨立符號集示範)',
     }];
     const symbolsets = { HWSET: ['SCAT', 'H1', 'L1'] };
-
+ 
     // ── 04_Reel_Weights:NG / FG1 兩套完整權重
     //    WILD 在 R1/R5 權重 0,與 C001(REEL_RESTRICT WILD 2,3,4)語義一致 ──
     const BASE_W = { WILD: 16, SCAT: 10, MEGA: 4, H1: 22, H2: 26, H3: 30, H4: 34, L1: 58, L2: 62, L3: 66, L4: 70 };
@@ -1007,7 +1011,7 @@
       FG1: { symbol_ids: [...sidList], weights: _mkWeights(FG_W),
              notes: 'FG 提高 WILD / MEGA 出現率', sub_weights: {}, panel_weights: {} },
     };
-
+ 
     // ── 05_Grid_Size_Weights:固定 3 列(非 Megaways,示範表結構)──
     function _mkGrid() {
       const w = {};
@@ -1015,7 +1019,7 @@
       return { grid_sizes: [3], weights: w, notes: '固定 3 列(非 Megaways)' };
     }
     const gridweights = { NG: _mkGrid(), FG1: _mkGrid() };
-
+ 
     // ── 06_Paylines:10 線(全部落在 1..3 列、1..5 輪 → 驗證全過)──
     const paylines = [
       { line_id: 1,  path: '(1,1)-(2,1)-(3,1)-(4,1)-(5,1)', direction: 'LTR', notes: '頂列' },
@@ -1029,7 +1033,7 @@
       { line_id: 9,  path: '(1,2)-(2,3)-(3,2)-(4,3)-(5,2)', direction: 'LTR', notes: '中下鋸齒' },
       { line_id: 10, path: '(1,1)-(2,1)-(3,2)-(4,3)-(5,3)', direction: 'LTR', notes: '左上→右下階梯' },
     ];
-
+ 
     // ── 07_Constraints ──
     const constraints = [
       { constraint_id: 'C001', ctype: 'REEL_RESTRICT', symbol_id: 'WILD',
@@ -1039,7 +1043,7 @@
       { constraint_id: 'C003', ctype: 'GLOBAL_MAX', symbol_id: 'MEGA',
         reels_allowed: '', threshold: 1, mode_scope: 'ALL', notes: 'MEGA(2×2)全盤最多 1 個' },
     ];
-
+ 
     // ── 09_Puzzle_Rules(trigger / atype / 必填參數均對齊 catalog → 零錯誤)──
     const rules = [
       { rule_id: 'P001', mode_scope: 'ALL', trigger: 'ON_GRID_GENERATED',
@@ -1066,7 +1070,7 @@
         emits: ['big_win'], enabled: true, priority: 90,
         description: '累計 100 倍以上廣播 big_win 事件' },
     ];
-
+ 
     // ── 10_Discard_Rules ──
     const discards = [
       { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL',
@@ -1076,19 +1080,19 @@
       { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'FG1',
         condition: 'spin_locals.fg_combo_count == 0', notes: 'FG 完全沒中,體感極差' },
     ];
-
+ 
     // ── 12_Distribution_Bins ──
     const bins = {
       NG:  { bin_edges: '0, 0.001, 2, 10, 50',        notes: 'NG 倍數分佈區間' },
       FG1: { bin_edges: '0, 0.001, 20, 60, 120, 600', notes: 'FG 倍數分佈區間' },
     };
-
+ 
     // 鍵名對齊 _snapshotAllLS / _restoreAllLS 的 snapshot key
     // (comboweights 刻意不含 → 還原時清空,與 v4.0 #14 移除一致)
     return { global, modes, layout, panels, symbolsets, bins, paylines,
              constraints, reelweights, gridweights, discards, rules, registry };
   }
-
+ 
   const BUILTIN_TEMPLATES = [{
     slug: BUILTIN_DEMO_SLUG,
     builtin: true,
@@ -1101,7 +1105,7 @@
     counts: { modes: 2, rules: 4, discards: 3, symbols: 11,
               layout: 5, paylines: 10, constraints: 3 },
   }];
-
+ 
   function _isBuiltinSlug(slug) {
     return typeof slug === 'string' && slug.startsWith(BUILTIN_SLUG_PREFIX);
   }
@@ -1132,7 +1136,7 @@
       return obj.data || null;
     } catch (e) { return null; }
   }
-
+ 
   // 暴露
   window.SlotPlanner.Templates = {
     list:   listAllTemplates,   // v4.9:內建範本置頂 + LS 使用者範本
@@ -1144,6 +1148,6 @@
     getData:   getTemplateData,   // v4.9:diff / 載入預覽共用(支援內建)
     isBuiltin: _isBuiltinSlug,    // v4.9
   };
-
+ 
   console.log('[aconfig-xlsx] loaded');
 })();

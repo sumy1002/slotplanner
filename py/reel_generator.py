@@ -362,8 +362,13 @@ class ReelGenerator:
             return
         w = max(0, panel.width)
         h = max(0, panel.height)
+        # v7.x Layer C:只物化活格遮罩內的格子;遮罩外的格不抽符號、不入 grid
+        #   → 自動不參與連線 / symbol_count（下游遍歷 grid 實際 key）。cells=None → 整塊矩形。
+        active = set(panel.active_local_cells())
         for r in range(h):
             for c in range(w):
+                if (c, r) not in active:
+                    continue
                 local = r * w + c
                 k = (panel.panel_id, local)
                 if k in sticky_cells:

@@ -246,17 +246,21 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
             raise ConfigValidationError(sheet, f"Panel_ID 重複: {pid}", row=idx + 2)
         seen.add(pid)
         try:
+            width = int(r.get("Width", 3) or 3)
+            height = int(r.get("Height", 3) or 3)
             p = PanelDef(
                 panel_id=pid,
                 col=int(r.get("Col", 0) or 0),
                 row=int(r.get("Row", 0) or 0),
-                width=int(r.get("Width", 3) or 3),
-                height=int(r.get("Height", 3) or 3),
+                width=width,
+                height=height,
                 scroll=_to_bool(r.get("Scroll")),
                 symbol_set=_to_str(r.get("Symbol_Set")),
                 inherit_weight=_to_bool(r.get("Inherit_Weight")),
                 join_payline=_to_bool(r.get("Join_Payline")),
                 note=_to_str(r.get("Note")),
+                # v7.x Layer B:選用欄,以欄名 .get 讀取（守則 #81）。缺欄 / 空 → None。
+                cells=_parse_panel_cells(r.get("Cells"), width, height),
             )
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Panel {pid} 解析失敗: {e}", row=idx + 2)
@@ -268,7 +272,39 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
     return out
 
 
-def _parse_symbol_sets(df: pd.DataFrame | None) -> dict[str, list[str]]:
+def _parse_panel_cells(raw: Any, width: int, height: int) -> Optional[list[str]]:
+    """v7.x Layer B:解析 02b_Panels 的 Cells 欄為活格遮罩 ["dx,dy",…]。
+
+    收斂規則與前端 helpers.js `normalizeMask` 逐字對齊,確保 LS→A.xlsx→py
+    round-trip 不變形:
+      - NaN / None / 空字串 → None（整塊矩形,舊檔行為）
+      - 以 ';' 或空白分隔,逐項比對 ^(-?\\d+),(-?\\d+)$
+      - 越界（dx/dy < 0 或 >= width/height）裁掉
+      - 去重；排序鍵 (dy, dx)（與 JS `ay-by || ax-bx` 一致）
+      - 空 或 恰好填滿整個矩形（len == w*h）→ None（收斂成整塊矩形）
+    """
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    s = str(raw).strip()
+    if not s or s.lower() == "nan":
+        return None
+    w = max(1, int(width or 1))
+    h = max(1, int(height or 1))
+    seen: set[tuple[int, int]] = set()
+    for tok in re.split(r"[;\s]+", s):
+        tok = tok.strip()
+        if not tok:
+            continue
+        m = re.match(r"^(-?\d+),(-?\d+)$", tok)
+        if not m:
+            continue
+        dx, dy = int(m.group(1)), int(m.group(2))
+        if 0 <= dx < w and 0 <= dy < h:
+            seen.add((dx, dy))
+    if not seen or len(seen) == w * h:
+        return None
+    ordered = sorted(seen, key=lambda t: (t[1], t[0]))
+    return [f"{dx},{dy}" for (dx, dy) in ordered]
     """v4.7:03b_Symbol_Sets 符號集（panel 獨立符號集用）。選用分頁。"""
     if df is None:
         return {}

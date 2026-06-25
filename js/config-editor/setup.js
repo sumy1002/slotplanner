@@ -1179,15 +1179,10 @@
       }
 
       // ── v7.x:畫格編輯畫布(自成座標;「套用到盤面」時才轉成 layout[]+panels[]) ──
-      const cvDim = ref(6);                       // v7.x:編輯畫布格數(正方形;預設 6×6)。滑桿拖曳改變;預覽改吃盤面實際欄列(見 cvCols/cvRows)
       const cvMode = ref('pan');                 // v7.x:預設「移動」工具(不會手滑作畫;選筆刷才開始編輯)。'main'|'sub'|'stage' 分類筆刷 | 'erase' 橡皮擦 | 'pan' 平移
-      const cvCellSize = computed(() => Math.max(14, Math.min(40, Math.floor(300 / cvDim.value))));  // 相容保留(格子已改 1fr 自適應)
       const cvMain = ref([]);                    // 主輪格 "col,row"
       const cvSub = ref([]);                     // 副輪格 "col,row"(套用時依連通區塊分群成多塊 SCROLL 面板)
       const cvStage = ref([]);                   // 演出格 "col,row"(同上 → STAGE 面板)
-      const cvSelReelCol = ref(null);            // (相容保留)
-      const cvSelPanel = ref(-1);                // (相容保留)
-      const cvMenu = reactive({ show: false, x: 0, y: 0 });  // (相容保留;筆刷模型已無右鍵分類選單)
       const cvRubber = ref(null);                // 拖拉預覽框 {c0,r0,c1,r1}
       let _cvDown = false, _cvStart = null, _cvCur = null;
       function _cvHas(a, k) { return a.indexOf(k) >= 0; }
@@ -1232,13 +1227,41 @@
         for (const k of all) { const c = clsCur(k); if (c !== clsBa(k)) out.set(k, c ? 'add' : 'del'); }
         return out;
       });
+      // v7.x N3/U4:未套用變更的 add/del 計數(供畫布角落圖例總覽;由 cvEditedSet 派生,輕量)
+      const cvEditCount = computed(() => {
+        let add = 0, del = 0;
+        cvEditedSet.value.forEach(v => { if (v === 'del') del++; else add++; });
+        return { add, del };
+      });
+      // v7.x E1:拖拉橡皮筋獨立成 Set，與 cvGrid 解耦 —— 拖拉(cvCellEnter 高頻)時只重算這個小 Set，
+      // 不再讓 400 格的 cvGrid 陣列整個重建。模板對每格的 rubber class 直接查此 Set(O(1))。
+      const cvRubberSet = computed(() => {
+        const rb = cvRubber.value;
+        if (!rb) return null;
+        const s = new Set();
+        for (let r = rb.r0; r <= rb.r1; r++) for (let c = rb.c0; c <= rb.c1; c++) s.add(c + ',' + r);
+        return s;
+      });
+      // v7.x（C / 路線圖）:R 欄標籤 —— 標在統一網格上方,跟著盤面欄浮動。
+      //   主輪各欄(由左到右)= R1、R2…,與 cellsToReels 的 reel_id 指派完全一致
+      //   (reel_id = 已佔用主輪欄由小到大的排名)。空欄 / 非主輪欄 → 無標籤。
+      //   隨畫布水平平移(置於可捲動 stage 內、與 grid 同欄寬),符合「跟盤面欄浮動」方案。
+      const cvColLabels = computed(() => {
+        const cols = cvCols.value;
+        const labels = new Array(cols).fill('');
+        // 取主輪佔用的欄,由小到大排名 → R{rank}
+        const occupied = [...new Set(cvMain.value.map(k => +k.split(',')[0]))]
+          .filter(c => c >= 0 && c < cols)
+          .sort((a, b) => a - b);
+        occupied.forEach((c, i) => { labels[c] = 'R' + (i + 1); });
+        return labels;
+      });
       const cvGrid = computed(() => {
         const mainSet = new Set(cvMain.value);
         const subSet = new Set(cvSub.value);
         const stageSet = new Set(cvStage.value);
         const editMap = cvEditedSet.value;
         const badSet = cvMainInvalid.value;
-        const rb = cvRubber.value;
         const out = [];
         const COLS = cvCols.value, ROWS = cvRows.value;
         for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -1247,15 +1270,9 @@
           if (mainSet.has(k)) cls = 'main';
           else if (subSet.has(k)) cls = 'sub';
           else if (stageSet.has(k)) cls = 'stage';
-          const rubber = !!(rb && c >= rb.c0 && c <= rb.c1 && r >= rb.r0 && r <= rb.r1);
-          out.push({ key: k, col: c, row: r, cls, rubber, editKind: editMap.get(k) || '', invalid: badSet.has(k) });
+          out.push({ key: k, col: c, row: r, cls, editKind: editMap.get(k) || '', invalid: badSet.has(k) });
         }
         return out;
-      });
-      const cvReels = computed(() => {
-        const byCol = new Map();
-        for (const k of cvMain.value) { const [c, r] = k.split(',').map(Number); if (!byCol.has(c)) byCol.set(c, []); byCol.get(c).push(r); }
-        return [...byCol.keys()].sort((a, b) => a - b).map((c, i) => { const rows = byCol.get(c).sort((a, b) => a - b); return { col: c, reel_id: i + 1, rows: rows[rows.length - 1] - rows[0] + 1, top: rows[0] }; });
       });
       // v7.x P4:主輪「斷欄 / 單欄有洞」的問題格集合(套用前即時標記;cellsToReels 會擋,這裡只負責視覺與停用套用)
       const cvMainInvalid = computed(() => {
@@ -1298,29 +1315,34 @@
         return comps;
       }
       // 預覽:把目前 cvSub/cvStage 即時解析成面板清單(套用前鏡像)
-      const cvPanelList = computed(() => {
-        const out = []; let pid = 0;
-        [['SCROLL', cvSub.value], ['STAGE', cvStage.value]].forEach((pair) => {
-          const type = pair[0];
-          _cvComponents(pair[1]).forEach((comp) => {
-            const g = cellsToPanelGeom(comp);
-            if (g) { pid++; out.push({ i: out.length, panel_id: 'P' + pid, w: g.width, h: g.height, n: comp.length, masked: !!(Array.isArray(g.cells) && g.cells.length), type }); }
-          });
-        });
-        return out;
-      });
       function _cvRect(a, b) { return { c0: Math.min(a.col, b.col), r0: Math.min(a.row, b.row), c1: Math.max(a.col, b.col), r1: Math.max(a.row, b.row) }; }
       function _cvCellsInRect(rc) { const out = []; for (let r = rc.r0; r <= rc.r1; r++) for (let c = rc.c0; c <= rc.c1; c++) out.push(c + ',' + r); return out; }
       function cvCellDown(cell, ev) {
         if (ev && ev.button !== 0) return;       // 只左鍵作畫/選取
         if (cvMode.value === 'pan') return;      // 移動工具:左鍵交給 stage 平移,不作畫
-        cvMenu.show = false;
         _cvDown = true; _cvStart = { col: cell.col, row: cell.row }; _cvCur = _cvStart;
         cvRubber.value = _cvRect(_cvStart, _cvCur);
       }
       function cvCellEnter(cell) {
         if (!_cvDown) return;
         _cvCur = { col: cell.col, row: cell.row };
+        cvRubber.value = _cvRect(_cvStart, _cvCur);
+      }
+      // v7.x E2:事件委派 —— grid 容器單一 pointermove，用格距(cvCell+gap)數學換算 col/row，
+      // 取代 400 個 per-cell @pointerenter。只在「跨到新的一格」時才更新 rubber，避免每像素重算。
+      let _cvGridEl = null;
+      function cvGridMove(ev) {
+        if (!_cvDown) return;
+        const el = ev.currentTarget || _cvGridEl;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const step = cvCell.value + CV_GAP;
+        let c = Math.floor((ev.clientX - rect.left) / step);
+        let r = Math.floor((ev.clientY - rect.top) / step);
+        c = Math.max(0, Math.min(cvCols.value - 1, c));
+        r = Math.max(0, Math.min(cvRows.value - 1, r));
+        if (_cvCur && _cvCur.col === c && _cvCur.row === r) return;  // 同格不重算
+        _cvCur = { col: c, row: r };
         cvRubber.value = _cvRect(_cvStart, _cvCur);
       }
       function cvUp() {
@@ -1341,7 +1363,6 @@
         }
         _cvStart = _cvCur = null;
       }
-      function cvCtx() { /* v7.x:筆刷模型不用右鍵分類選單;保留空函式以相容 template 綁定 */ }
       // v7.x:中鍵拖曳平移畫布(原生捲動為底、此為加分快捷);左鍵交給格子作畫
       function cvPanStart(ev) { if (!ev) return; const ok = ev.button === 1 || (ev.button === 0 && cvMode.value === 'pan'); if (!ok) return; _cvPan.on = true; _cvPan.el = ev.currentTarget; _cvPan.x = ev.clientX; _cvPan.y = ev.clientY; ev.preventDefault(); }
       function cvPanMove(ev) { if (!_cvPan.on || !_cvPan.el) return; _cvPan.el.scrollLeft -= (ev.clientX - _cvPan.x); _cvPan.el.scrollTop -= (ev.clientY - _cvPan.y); _cvPan.x = ev.clientX; _cvPan.y = ev.clientY; }
@@ -1379,9 +1400,8 @@
           el.scrollTo({ left: cx * pitch - el.clientWidth / 2, top: cy * pitch - el.clientHeight / 2, behavior: tries > 0 ? 'auto' : 'smooth' });
         });
       }
-      function cvZoom(d) { cvDim.value = Math.max(4, Math.min(24, cvDim.value + d)); }
-      function cvSetMode(m) { cvMode.value = m; cvMenu.show = false; }
-      function cvClear() { cvMain.value = []; cvSub.value = []; cvStage.value = []; cvSelReelCol.value = null; cvSelPanel.value = -1; emit('status', { type: 'ok', msg: '已清空畫布(尚未套用;按「套用到盤面」生效、或「捨棄」還原)' }); }
+      function cvSetMode(m) { cvMode.value = m; }
+      function cvClear() { cvMain.value = []; cvSub.value = []; cvStage.value = []; emit('status', { type: 'ok', msg: '已清空畫布(尚未套用;按「套用到盤面」生效、或「捨棄」還原)' }); }
       function cvLoadFromBoard(silent) {
         let minTop = 0;
         layout.forEach(r => { if ((r.y_offset || 0) < minTop) minTop = r.y_offset || 0; });
@@ -1406,7 +1426,6 @@
         cvMain.value = shift(main0); cvSub.value = shift(sub0); cvStage.value = shift(stage0);
         // 刷新基準快照 → 此刻畫布「乾淨」(= 盤面鏡像);琥珀標記與套用鈕都歸位
         cvMainBase.value = cvMain.value.slice(); cvSubBase.value = cvSub.value.slice(); cvStageBase.value = cvStage.value.slice();
-        cvSelReelCol.value = 0; cvSelPanel.value = -1;
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cvResetView());
         if (!silent) emit('status', { type: 'ok', msg: '已從目前盤面載入畫布' });
       }
@@ -1416,7 +1435,6 @@
         cvLoadFromBoard(true);
         emit('status', { type: 'ok', msg: '已捨棄未套用的編輯' });
       }
-      function cvSetDim(v) { cvDim.value = Math.max(4, Math.min(24, parseInt(v, 10) || 6)); }
       function cvCommit() {
         if (!cvDirty.value) { emit('status', { type: 'ok', msg: '畫布已與盤面同步,沒有要套用的變更' }); return; }
         if (!cvMain.value.length) { emit('status', { type: 'warn', msg: '畫布尚未設定主輪,無法套用' }); return; }
@@ -2780,16 +2798,14 @@
       }
       function removeBuyFeature(idx) { betConfig.buy_features.splice(idx, 1); }
 
-      // ── v5.4:倍數系統(15_Multipliers)──
-      // ⚠ DORMANT UI(v6.3 / Q3):下列 addWildMultValue/wildMultPct/...等「編輯器函式」
-      //   只服務已隱藏的 multipliers/coin_values 分頁(template 對應區塊不可達),排程 v6.4 移除。
-      //   ⚠ 但 `multipliers` / `coinValues` reactive 物件本身「不可移除」:
-      //      仍由一次性遷移(migrateQ3)、自動存檔 watch、validate 驗證、docgen 反推使用。
+      // ── v5.4:倍數系統(15_Multipliers)資料層 ──
+      // v6.4 死碼移除:multipliers 分頁的編輯器函式(addWildMultValue/removeWildMultValue/
+      //   addRandomMultValue/removeRandomMultValue/wildMultPct/randomMultPct/
+      //   wildMultExpected/randomMultExpected)服務已不可達的分頁,已移除。
+      //   multipliers reactive 物件「不可移除」:仍由一次性遷移(migrateQ3)、自動存檔 watch、
+      //   validate 驗證、docgen 反推使用。progressLadderStr/_syncProgressStrFromData/
+      //   commitProgressLadder 亦保留 —— 由 modeNames 的活躍 watch 調用(非死碼)。
       const multipliers = reactive(loadMultipliers());
-      function addWildMultValue() { multipliers.wild_mult_values.push(makeMultValue(2, 100)); }
-      function removeWildMultValue(i) { multipliers.wild_mult_values.splice(i, 1); }
-      function addRandomMultValue() { multipliers.random_values.push(makeMultValue(2, 100)); }
-      function removeRandomMultValue(i) { multipliers.random_values.splice(i, 1); }
       const progressLadderStr = reactive({});
       function _syncProgressStrFromData() {
         for (const m of modeNames.value) {
@@ -2802,37 +2818,11 @@
         if (arr.length) multipliers.progress_ladders[mode] = arr;
         else delete multipliers.progress_ladders[mode];
       }
-      function wildMultPct(i) {
-        const tot = multipliers.wild_mult_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
-        if (!tot) return 0;
-        return ((Number(multipliers.wild_mult_values[i].weight) || 0) / tot * 100);
-      }
-      function randomMultPct(i) {
-        const tot = multipliers.random_values.reduce((a, v) => a + (Number(v.weight) || 0), 0);
-        if (!tot) return 0;
-        return ((Number(multipliers.random_values[i].weight) || 0) / tot * 100);
-      }
-      const wildMultExpected = computed(() => {
-        const vs = multipliers.wild_mult_values;
-        const tot = vs.reduce((a, v) => a + (Number(v.weight) || 0), 0);
-        if (!tot) return 0;
-        return vs.reduce((a, v) => a + (Number(v.mult) || 0) * (Number(v.weight) || 0), 0) / tot;
-      });
-      const randomMultExpected = computed(() => {
-        const vs = multipliers.random_values;
-        const tot = vs.reduce((a, v) => a + (Number(v.weight) || 0), 0);
-        if (!tot) return 0;
-        return vs.reduce((a, v) => a + (Number(v.mult) || 0) * (Number(v.weight) || 0), 0) / tot;
-      });
 
       // ── v5.4:金幣面額(16_Coin_Values;Hold&Win 核心)──
+      // v6.4 死碼移除:addCoinDenom/removeCoinDenom/coinDenomPct/coinExpectedValue 編輯器函式
+      //   只服務已不可達的 coin_values 分頁,已移除。coinValues 物件本身仍供遷移/存檔/驗證使用。
       const coinValues = reactive(loadCoinValues());
-      function addCoinDenom() {
-        const dn = makeCoinDenom('', 1);
-        for (const m of modeNames.value) dn.weight_by_mode[m] = 0;
-        coinValues.denominations.push(dn);
-      }
-      function removeCoinDenom(i) { coinValues.denominations.splice(i, 1); }
 
       // ── v6.0-c:Bonus 小遊戲(17_Bonus_Games)──
       const bonusGames = reactive(loadBonusGames());
@@ -2989,24 +2979,7 @@
         }
         // v6.0-b:輪帶 per-mode 同步移到後面專屬 watch（避免 TDZ）
       }, { immediate: true });
-      function coinDenomPct(di, mode) {
-        const tot = coinValues.denominations.reduce((a, d) => a + (Number(d.weight_by_mode[mode]) || 0), 0);
-        if (!tot) return 0;
-        return ((Number(coinValues.denominations[di].weight_by_mode[mode]) || 0) / tot * 100);
-      }
-      function coinExpectedValue(mode) {
-        const ds = coinValues.denominations;
-        const tot = ds.reduce((a, d) => a + (Number(d.weight_by_mode[mode]) || 0), 0);
-        if (!tot) return 0;
-        return ds.reduce((a, d) => {
-          let v = Number(d.value) || 0;
-          if (d.link_jackpot) {
-            const jp = jackpots.find(j => j.jp_id === d.link_jackpot);
-            if (jp) v = Number(jp.mult) || v;
-          }
-          return a + v * (Number(d.weight_by_mode[mode]) || 0);
-        }, 0) / tot;
-      }
+      // v6.4 死碼移除:coinDenomPct/coinExpectedValue 編輯器函式(服務不可達的 coin_values 分頁)已移除。
 
       // ── v5.1:JP 定義(13_Jackpots;文件生成自動帶入)──
       const jackpots = reactive(loadJackpots());
@@ -6782,8 +6755,7 @@
         { key: 'starting_mode',    label: '起始模式' },
         { key: 'jackpots',         label: 'JP 定義' },   // v5.2
         { key: 'bet_config',       label: '投注結構' },  // v5.3
-        { key: 'multipliers',      label: '倍數系統' },  // v5.4
-        { key: 'coin_values',      label: '金幣面額' },  // v5.4
+        // v6.4 死碼移除:multipliers/coin_values 為不可達分頁,移除其搜尋索引項。
       ];
 
       // 建立扁平索引,每次 reactive 變動會自動重算
@@ -8118,9 +8090,9 @@
         previewDragFrom, previewDragOver, onPreviewPointerDown, onPreviewPointerEnter,
         selectedCells, toggleCellSelection, clearCellSelection,
         cellsToPanelGeom, classifySelectionAsSub, cellsToReels, classifySelectionAsMain,
-        cvMode, cvCols, cvRows, cvCell, cvDirty, cvMainInvalid,
-        cvGrid,
-        cvCellDown, cvCellEnter, cvUp, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard,
+        cvMode, cvCols, cvRows, cvCell, cvDirty, cvMainInvalid, cvRubberSet, cvEditCount,
+        cvGrid, cvColLabels,
+        cvCellDown, cvCellEnter, cvGridMove, cvUp, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard,
         cvStageRef, cvPanStart, cvPanMove, cvPanEnd, cvStageUp, cvResetView,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
         selectItem: _selectItem,
@@ -8270,9 +8242,8 @@
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
         betConfig, addBuyFeature, removeBuyFeature,
-        multipliers, addWildMultValue, removeWildMultValue, addRandomMultValue, removeRandomMultValue,
-        progressLadderStr, commitProgressLadder, wildMultPct, randomMultPct, wildMultExpected, randomMultExpected,
-        coinValues, addCoinDenom, removeCoinDenom, coinDenomPct, coinExpectedValue,
+        // v6.4 死碼移除:multipliers/coin_values 編輯器函式不再導出(對應 template 區塊已移除)。
+        //   multipliers/coinValues 物件本身內部仍由存檔 watch / 驗證 / 遷移使用,無需導出至模板。
         rtpResult, rtpPct, rtpVsTarget,
         reelStrips, stripActiveMode, stripStr, stripLen, commitStrip, stripDist,
         stripGenLen, stripGenStacked,

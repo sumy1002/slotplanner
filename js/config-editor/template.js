@@ -1006,16 +1006,16 @@
                 <span class="cfg-panel-chip-id">{{ p.panel_id }}</span>
                 <span class="cfg-panel-chip-size">{{ p.width }}×{{ p.height }}</span>
                 <span v-if="p.join_payline" class="cfg-panel-chip-join" title="參與主盤連線">🔗</span>
-                <button class="cfg-panel-chip-del" @click.stop="removePanel(pi)" title="移除">×</button>
+                <button class="cfg-panel-chip-del" @click.stop="removePanel(pi)" :disabled="cvDirty" :title="cvDirty ? '畫布有未套用編輯時鎖定' : '移除'">×</button>
               </div>
-              <button class="cfg-layout-v2-add-btn cfg-panel-add" @click="addPanel" title="新增自由副盤">
+              <button class="cfg-layout-v2-add-btn cfg-panel-add" @click="addPanel" :disabled="cvDirty" :title="cvDirty ? '畫布有未套用編輯時鎖定;套用或捨棄後可新增' : '新增自由副盤'">
                 <span>＋ 副盤</span>
               </button>
             </div>
           </div>
 
           <!-- v4.7:選中 Panel 的詳情欄位（與主輪詳情並列，二擇一）-->
-          <div class="cfg-layout-v2-detail cfg-panel-detail" :class="{ 'cfg-is-cvdirty': cvDirty }" v-if="activePanel && activePanelIdx >= 0">
+          <div class="cfg-layout-v2-detail cfg-panel-detail" v-if="activePanel && activePanelIdx >= 0">
             <div class="cfg-layout-v2-detail-header">
               <span class="cfg-panel-detail-title">🧩 自由副盤 {{ activePanel.panel_id }}</span>
             </div>
@@ -1026,22 +1026,22 @@
                      @change="renamePanel(activePanelIdx, $event.target.value)">
             </div>
 
-            <div class="cfg-mode-grid">
+            <div class="cfg-mode-grid" :class="{ 'cfg-is-cvdirty': cvDirty }" :title="cvDirty ? '畫布有未套用編輯時,面板幾何(座標/寬高)鎖定;套用或捨棄後解鎖' : ''">
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">X 位置 <span class="cfg-key">Col</span></label>
-                <input class="input input-w-num" type="number" v-model.number="activePanel.col">
+                <input class="input input-w-num" type="number" :disabled="cvDirty" v-model.number="activePanel.col">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">Y 位置 <span class="cfg-key">Row</span></label>
-                <input class="input input-w-num" type="number" v-model.number="activePanel.row">
+                <input class="input input-w-num" type="number" :disabled="cvDirty" v-model.number="activePanel.row">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">寬 <span class="cfg-key">Width</span></label>
-                <input class="input input-w-num" type="number" min="1" max="12" v-model.number="activePanel.width">
+                <input class="input input-w-num" type="number" min="1" max="12" :disabled="cvDirty" v-model.number="activePanel.width">
               </div>
               <div class="cfg-field cfg-field-compact">
                 <label class="cfg-label">高 <span class="cfg-key">Height</span></label>
-                <input class="input input-w-num" type="number" min="1" max="12" v-model.number="activePanel.height">
+                <input class="input input-w-num" type="number" min="1" max="12" :disabled="cvDirty" v-model.number="activePanel.height">
               </div>
             </div>
             <!-- v4.9-c / C2:長 hint 移出兩欄 grid,整寬顯示 -->
@@ -1381,13 +1381,24 @@
                 <div class="cfg-cv-stage" :class="{ 'is-pan': cvMode==='pan' }" ref="cvStageRef"
                      @contextmenu.prevent @pointerdown="cvPanStart" @pointermove="cvPanMove" @pointerup="cvStageUp()" @pointerleave="cvStageUp()"
                      title="中鍵拖曳可平移畫布(也可直接捲動)">
-                  <div class="cfg-cv-grid" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
-                    <div v-for="cell in cvGrid" :key="cell.key"
-                         class="cfg-cv-cell"
-                         :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', cell.rubber ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '' ]"
-                         @pointerdown.prevent="cvCellDown(cell, $event)"
-                         @pointerenter="cvCellEnter(cell)"></div>
+                  <!-- v7.x（C）:R 欄標籤 + 網格包在同一個置中容器,標籤與網格同欄寬、隨盤面欄一起浮動平移。 -->
+                  <div class="cfg-cv-board">
+                    <div class="cfg-cv-collabels" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)' }">
+                      <div v-for="(lb, ci) in cvColLabels" :key="'cl'+ci"
+                           class="cfg-cv-collabel" :class="{ 'has-r': !!lb }">{{ lb }}</div>
+                    </div>
+                    <div class="cfg-cv-grid" @pointermove="cvGridMove" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
+                      <div v-for="cell in cvGrid" :key="cell.key"
+                           class="cfg-cv-cell"
+                           :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', (cvRubberSet && cvRubberSet.has(cell.key)) ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '' ]"
+                           @pointerdown.prevent="cvCellDown(cell, $event)"></div>
+                    </div>
                   </div>
+                </div>
+                <!-- v7.x N3/U4:未套用變更圖例(僅髒時顯示)— 解釋逐格角標、給總覽格數;貼 work 右上,不隨畫布捲動 -->
+                <div class="cfg-cv-overlay-legend" v-if="cvDirty">
+                  <span class="cfg-cv-ol-row"><i class="cfg-cv-ol-add"></i>新增/改類 {{ cvEditCount.add }}</span>
+                  <span class="cfg-cv-ol-row"><i class="cfg-cv-ol-del"></i>清除 {{ cvEditCount.del }}</span>
                 </div>
               </div>
               <!-- 底部動作列:狀態(已同步/尚未套用) + 置中視圖 + 捨棄/清空/套用 -->
@@ -4848,210 +4859,9 @@
         </template>
       </div><!-- /reel_strips -->
 
-      <!-- ─── 15:倍數系統(v5.4:Wild / Progress / Random)─── -->
-      <!-- ⚠ DORMANT(v6.3 / Q3):此分頁已併入「符號頁 → 倍數/彩金」與「模式 progress」,
-           TABS 已標 hidden:true → active 永遠不會是 'multipliers',本區塊不可達。
-           保留僅為過渡安全;確認遷移穩定後,排程於 v6.4 連同 setup 對應事件一併移除。
-           註:multipliers 資料物件仍由遷移/匯出層使用,移除的只是這段「編輯 UI」。 -->
-      <div v-else-if="active === 'multipliers'" class="cfg-form cfg-mult-form">
+      <!-- v6.4 死碼移除:15_Multipliers / 16_Coin_Values 編輯 UI 區塊(分頁不可達)已移除。
+           資料物件 multipliers/coinValues 仍由遷移/存檔/驗證層維護,見 setup.js。 -->
 
-        <!-- Wild 倍數 -->
-        <div class="cfg-section">
-          <div class="cfg-section-title">Wild 倍數 <span class="cfg-key">wild_mult</span></div>
-          <div class="cfg-hint">Wild 符號參與連線時附帶的倍數。可設固定值，或用權重表隨機抽。</div>
-          <div class="cfg-field">
-            <label class="chk">
-              <input type="checkbox" v-model="multipliers.wild_mult_enabled">
-              <span class="box"></span>
-              <span>{{ multipliers.wild_mult_enabled ? '已啟用' : '關閉' }}</span>
-            </label>
-          </div>
-          <template v-if="multipliers.wild_mult_enabled">
-            <div class="cfg-field">
-              <label class="cfg-label">固定倍數 <span class="cfg-key">權重表為空時使用</span></label>
-              <input class="input input-w-num input-center" type="number" min="1" step="any"
-                     v-model.number="multipliers.wild_mult_fixed">
-            </div>
-            <div class="cfg-mult-table-wrap">
-              <div class="cfg-mult-table-title">
-                權重表（隨機 Wild 倍數）
-                <span v-if="wildMultExpected > 0" class="cfg-mult-ev">期望 ×{{ wildMultExpected.toFixed(2) }}</span>
-              </div>
-              <div v-for="(v, vi) in multipliers.wild_mult_values" :key="'wm'+vi" class="cfg-mult-row">
-                <div class="cfg-mult-cell">
-                  <label class="cfg-label">倍數</label>
-                  <input class="input input-w-num input-center" type="number" min="1" step="any" v-model.number="v.mult">
-                </div>
-                <div class="cfg-mult-cell">
-                  <label class="cfg-label">權重</label>
-                  <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="v.weight">
-                </div>
-                <div class="cfg-mult-pct">{{ wildMultPct(vi).toFixed(1) }}%</div>
-                <button class="cfg-mode-delete-btn" @click="removeWildMultValue(vi)" title="刪除">✕</button>
-              </div>
-              <button class="cfg-mode-add-btn cfg-mult-add" @click="addWildMultValue">
-                <span style="font-size:14px">+</span> 新增倍數列
-              </button>
-            </div>
-          </template>
-        </div>
-
-        <!-- Progress 進度倍數階梯 -->
-        <div class="cfg-section">
-          <div class="cfg-section-title">進度倍數 <span class="cfg-key">progress_ladder</span></div>
-          <div class="cfg-hint">cascade / 連爆每次累進的倍數階梯，逐模式設定（如 NG：1,2,3,5）。</div>
-          <div class="cfg-field">
-            <label class="chk">
-              <input type="checkbox" v-model="multipliers.progress_enabled">
-              <span class="box"></span>
-              <span>{{ multipliers.progress_enabled ? '已啟用' : '關閉' }}</span>
-            </label>
-          </div>
-          <template v-if="multipliers.progress_enabled">
-            <div class="cfg-field">
-              <label class="chk">
-                <input type="checkbox" v-model="multipliers.progress_reset_on_mode">
-                <span class="box"></span>
-                <span>切模式時重置倍數（FG 累積通常取消勾選）</span>
-              </label>
-            </div>
-            <div class="cfg-mult-ladder-list">
-              <div v-for="mn in modeNames" :key="'pl'+mn" class="cfg-mult-ladder-row">
-                <label class="cfg-label cfg-mult-ladder-mode">{{ mn }}</label>
-                <input class="input input-w-name cfg-mono" type="text"
-                       v-model="progressLadderStr[mn]"
-                       @input="commitProgressLadder(mn)"
-                       placeholder="1, 2, 3, 5">
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <!-- Random 隨機倍數符號 -->
-        <div class="cfg-section">
-          <div class="cfg-section-title">隨機倍數符號 <span class="cfg-key">random_mult</span></div>
-          <div class="cfg-hint">特定符號出現時，依權重表抽一個倍數（如 Money 符號 2×–500×）。</div>
-          <div class="cfg-field">
-            <label class="chk">
-              <input type="checkbox" v-model="multipliers.random_enabled">
-              <span class="box"></span>
-              <span>{{ multipliers.random_enabled ? '已啟用' : '關閉' }}</span>
-            </label>
-          </div>
-          <template v-if="multipliers.random_enabled">
-            <div class="cfg-field">
-              <label class="cfg-label">承載符號 <span class="cfg-key">Symbol_ID</span></label>
-              <input class="input input-w-id cfg-mono" type="text" v-model.trim="multipliers.random_symbol_id"
-                     placeholder="MULTI / MONEY">
-            </div>
-            <div class="cfg-mult-table-wrap">
-              <div class="cfg-mult-table-title">
-                權重表
-                <span v-if="randomMultExpected > 0" class="cfg-mult-ev">期望 ×{{ randomMultExpected.toFixed(2) }}</span>
-              </div>
-              <div v-for="(v, vi) in multipliers.random_values" :key="'rm'+vi" class="cfg-mult-row">
-                <div class="cfg-mult-cell">
-                  <label class="cfg-label">倍數</label>
-                  <input class="input input-w-num input-center" type="number" min="1" step="any" v-model.number="v.mult">
-                </div>
-                <div class="cfg-mult-cell">
-                  <label class="cfg-label">權重</label>
-                  <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="v.weight">
-                </div>
-                <div class="cfg-mult-pct">{{ randomMultPct(vi).toFixed(1) }}%</div>
-                <button class="cfg-mode-delete-btn" @click="removeRandomMultValue(vi)" title="刪除">✕</button>
-              </div>
-              <button class="cfg-mode-add-btn cfg-mult-add" @click="addRandomMultValue">
-                <span style="font-size:14px">+</span> 新增倍數列
-              </button>
-            </div>
-          </template>
-        </div>
-
-      </div><!-- /multipliers -->
-
-      <!-- ─── 16:金幣面額(v5.4:Hold&Win 核心)─── -->
-      <!-- ⚠ DORMANT(v6.3 / Q3):已併入「符號頁 → 倍數/彩金」的 prize_values;
-           TABS 標 hidden:true → 不可達。排程 v6.4 連同 setup 對應事件移除。
-           coin_values 資料物件仍供遷移/匯出層使用,移除的只是這段編輯 UI。 -->
-      <div v-else-if="active === 'coin_values'" class="cfg-form cfg-coin-form">
-
-        <div class="cfg-section">
-          <div class="cfg-section-title">金幣面額 <span class="cfg-key">Coin_Values</span></div>
-          <div class="cfg-hint">
-            Hold&amp;Win / Link&amp;Win 的金幣符號面額表。每個面額可分模式設定權重，
-            並可連結 13_Jackpots 的固定獎（GRAND/MAJOR…）。
-          </div>
-          <div class="cfg-field">
-            <label class="chk">
-              <input type="checkbox" v-model="coinValues.enabled">
-              <span class="box"></span>
-              <span>{{ coinValues.enabled ? '已啟用' : '關閉' }}</span>
-            </label>
-          </div>
-
-          <template v-if="coinValues.enabled">
-            <div class="cfg-field">
-              <label class="cfg-label">金幣符號 <span class="cfg-key">Symbol_ID</span></label>
-              <input class="input input-w-id cfg-mono" type="text" v-model.trim="coinValues.coin_symbol_id"
-                     placeholder="COIN / MONEY">
-            </div>
-
-            <div v-if="coinValues.denominations.length === 0" class="cfg-hint" style="margin-bottom:8px;">
-              尚未定義面額；點下方新增。
-            </div>
-
-            <div class="cfg-coin-list">
-              <div v-for="(d, di) in coinValues.denominations" :key="'cd'+di" class="cfg-coin-row">
-                <div class="cfg-coin-head">
-                  <div class="cfg-coin-cell">
-                    <label class="cfg-label">標籤</label>
-                    <input class="input input-w-id" type="text" v-model.trim="d.label" placeholder="(選填)">
-                  </div>
-                  <div class="cfg-coin-cell">
-                    <label class="cfg-label">面額 <span class="cfg-key">×注額</span></label>
-                    <input class="input input-w-num input-center" type="number" min="0" step="any"
-                           v-model.number="d.value" :disabled="!!d.link_jackpot"
-                           :title="d.link_jackpot ? '已連結 JP,面額由 JP 倍數決定' : ''">
-                  </div>
-                  <div class="cfg-coin-cell">
-                    <label class="cfg-label">連結 JP <span class="cfg-key">選填</span></label>
-                    <select class="input input-w-id" v-model="d.link_jackpot">
-                      <option value="">（純面額）</option>
-                      <option v-for="j in jackpots" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
-                    </select>
-                  </div>
-                  <button class="cfg-mode-delete-btn cfg-coin-del" @click="removeCoinDenom(di)" title="刪除面額">✕</button>
-                </div>
-                <div class="cfg-coin-weights">
-                  <div class="cfg-coin-weights-label">各模式權重</div>
-                  <div v-for="mn in modeNames" :key="'cw'+di+mn" class="cfg-coin-wcell">
-                    <label class="cfg-label">{{ mn }}</label>
-                    <input class="input input-w-num input-center" type="number" min="0" step="1"
-                           v-model.number="d.weight_by_mode[mn]">
-                    <span class="cfg-coin-wpct">{{ coinDenomPct(di, mn).toFixed(0) }}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button class="cfg-mode-add-btn" @click="addCoinDenom">
-              <span style="font-size:16px">+</span>
-              <span>新增面額</span>
-            </button>
-
-            <div v-if="coinValues.denominations.length" class="cfg-coin-ev">
-              <div class="cfg-coin-ev-title">期望金幣面額（權重加權，含連結 JP）</div>
-              <div class="cfg-coin-ev-row">
-                <span v-for="mn in modeNames" :key="'ev'+mn" class="cfg-coin-ev-chip">
-                  {{ mn }}: ×{{ coinExpectedValue(mn).toFixed(2) }}
-                </span>
-              </div>
-            </div>
-          </template>
-        </div>
-
-      </div><!-- /coin_values -->
 
       <!-- ─── 17:Bonus 小遊戲（v6.0-c）─── -->
       <div v-else-if="active === 'bonus_games'" class="cfg-form cfg-bonus-form">
