@@ -338,13 +338,15 @@
     <div class="cfg-drawer-scrim" @click="cfgTabRailCollapsed = true"></div>
 
     <!-- ── 左:分組分頁列 ── -->
-    <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed }">
-      <!-- v6.1:收合切換(窄螢幕釋放橫向空間) -->
+    <!-- v7.9.2:桌面收合態的流佔位(56px),讓 hover 浮層 absolute 化時內容不位移 -->
+    <div class="cfg-tabs-spacer" :class="{ 'cfg-rail-pinned': cfgRailPinned }"></div>
+    <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed, 'cfg-rail-pinned': cfgRailPinned }">
+      <!-- v6.1:收合切換 — 行動版開關抽屜;桌面切換常駐展開/收合(hover 浮層) -->
       <button class="cfg-tabrail-toggle"
-              @click="cfgTabRailCollapsed = !cfgTabRailCollapsed"
-              :title="cfgTabRailCollapsed ? '展開分頁列' : '收合分頁列'">
-        <span class="cfg-tabrail-toggle-icon">{{ cfgTabRailCollapsed ? '»' : '«' }}</span>
-        <span class="cfg-tabrail-toggle-label">收合分頁列</span>
+              @click="cfgTabRailCollapsed = !cfgTabRailCollapsed; toggleCfgRailPinned()"
+              :title="cfgRailPinned ? '收合分頁列（移入時暫時展開）' : '釘選展開分頁列'">
+        <span class="cfg-tabrail-toggle-icon">{{ cfgRailPinned ? '«' : '»' }}</span>
+        <span class="cfg-tabrail-toggle-label">{{ cfgRailPinned ? '收合分頁列' : '釘選展開' }}</span>
       </button>
       <div v-for="grp in visibleTabGroups" :key="grp.id" class="cfg-tab-group">
         <div class="cfg-tab-group-header">

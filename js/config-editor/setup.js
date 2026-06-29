@@ -5313,6 +5313,18 @@
       //   行動版（≤767）= 逐層下鑽旗標:false=分頁清單,true=分頁詳細表單。
       //   桌面/平板無對應 CSS,設值無副作用。僅記憶體狀態、不寫入 localStorage。
       const cfgTabRailCollapsed = ref(true);  // v7.6.1:預設收起(桌面 rail 仍顯示;手機起始關閉抽屜,不擋捲動)
+      // v7.9:桌面分頁列「常駐展開」狀態(與行動版 cfgTabRailCollapsed 分離)。
+      //   false = 收合窄條(hover 暫時浮層展開);true = 常駐展開(跳板、推開內容)。
+      //   持久化於 LS,讓使用者偏好跨 session 保留。
+      const cfgRailPinned = ref(false);
+      try {
+        const _rp = localStorage.getItem('slotplanner.cfg.railPinned.v1');
+        if (_rp === '1') cfgRailPinned.value = true;
+      } catch (e) {}
+      watch(cfgRailPinned, (v) => {
+        try { localStorage.setItem('slotplanner.cfg.railPinned.v1', v ? '1' : '0'); } catch (e) {}
+      });
+      function toggleCfgRailPinned() { cfgRailPinned.value = !cfgRailPinned.value; }
       let _detachCfgSwipe = null;  // v7.6:行動版邊緣滑動 detach handle
 
       // 按搜尋詞過濾 + 仍按原本 group 結構回傳
@@ -8406,6 +8418,7 @@
         activeTabIssues,
         presetDrawerOpen, presetSearch, filteredPresetGroups, insertPreset,
         cfgTabRailCollapsed,
+        cfgRailPinned, toggleCfgRailPinned,
         latestSimStats, getRuleSimBadge, refreshLatestSimStats,
         TRIGGER_TYPES, TRIGGER_CATALOG, TRIGGER_BY_TYPE,
         OP_TYPES, OP_IS_LIST, VAR_CATEGORIES, VAR_CATEGORY_MAP,

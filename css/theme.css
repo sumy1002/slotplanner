@@ -633,14 +633,12 @@ select.input,
   background: transparent;
 }
 .sym-left {
-  width: 240px;
-  min-width: 200px;
+  width: 300px;
+  min-width: 260px;
   background: var(--left-pane-bg);
   border-right: 0.5px solid var(--glass-edge);
   display: flex; flex-direction: column;
   flex-shrink: 0;
-  backdrop-filter: var(--blur-thin);
-  -webkit-backdrop-filter: var(--blur-thin);
 }
 .sym-right {
   flex: 1;
@@ -790,8 +788,8 @@ select.input,
   flex: 1; overflow-y: auto;
   padding: 18px 22px;
 }
-/* #12:限制內容寬度,避免欄位被拉得過寬難看 */
-.sym-edit-body { max-width: 720px; }
+/* #12:限制內容寬度,避免欄位被拉得過寬難看(雙欄時放寬上限) */
+.sym-edit-body { max-width: 1100px; }
 .sym-id-fields {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; gap: 8px;
@@ -854,7 +852,7 @@ select.input,
 .swatch-cell {
   width: 25px; height: 25px;
   border-radius: var(--r-xs);
-  border: 1.5px solid rgba(255,255,255,0.65);
+  border: 1.5px solid var(--glass-edge);
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition: transform 120ms var(--ease-spring), border-color var(--t-fast);
@@ -1059,3 +1057,289 @@ code {
   transition: background var(--t-fast);
 }
 .topbar-theme-m:active { background: var(--glass-4); }
+
+/* ============================================================
+   v7.9 — Symbol 管理頁:清單緊湊化 / 拖曳把手 / 編輯面板卡片化
+   （純前端 UI;倍數彩金資料層未動。卡片摺疊狀態存於 LS）
+   ============================================================ */
+
+/* ── 清單緊湊化(request 2):兩行佈局 + 拖曳把手 ── */
+.sym-item {
+  position: relative;
+  gap: 9px;
+}
+/* 拖曳把手(request 3):⠿,只有從這裡起拖 */
+.sym-drag-handle {
+  flex-shrink: 0;
+  width: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  font-size: 15px; line-height: 1;
+  cursor: grab;
+  border-radius: 5px;
+  user-select: none;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.sym-drag-handle:hover { color: var(--text); background: var(--glass-3); }
+.sym-drag-handle:active { cursor: grabbing; }
+
+/* info 改兩行:第一行 名稱+占比;第二行 #號 權重 */
+.sym-item-row1 {
+  display: flex; align-items: baseline; gap: 8px;
+  justify-content: space-between;
+}
+.sym-item-row1 .sym-item-name { flex: 1; min-width: 0; }
+.sym-item-row1 .sym-item-pct { margin-left: auto; }
+
+/* 拖曳中:被拖項半透明 */
+.sym-item-dragging {
+  opacity: 0.4;
+}
+/* 讓位:虛線插入指示框(request 3 — 虛線框表示會移動到的位子) */
+.sym-item-dropbefore::before,
+.sym-item-dropafter::after {
+  content: '';
+  position: absolute;
+  left: 4px; right: 4px;
+  height: 0;
+  border-top: 2px dashed var(--accent-hex);
+  pointer-events: none;
+}
+.sym-item-dropbefore::before { top: -4px; }
+.sym-item-dropafter::after   { bottom: -4px; }
+
+/* 清單/預覽 swatch 圖片模式 */
+.sym-swatch.has-img,
+.sym-swatch-preview.has-img {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: transparent;
+}
+
+/* ── 外觀卡片:圖片控制 + 自訂色票提示(request 4) ── */
+.sym-card-body .sym-appearance-row { align-items: flex-start; }
+.sym-appearance-ctrls {
+  display: flex; flex-direction: column; gap: 8px;
+  min-width: 0; flex: 1;
+}
+.sym-swatch-preview { position: relative; }
+.sym-img-clear {
+  position: absolute; top: -7px; right: -7px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--glass-edge);
+  background: var(--glass-2);
+  color: var(--danger-text);
+  font-size: 11px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+.sym-img-clear:hover { background: var(--danger); }
+/* 自訂色票格:虛線框 + 滴管,提示「可自由選色」 */
+.swatch-custom {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  border-style: dashed !important;
+  border-color: var(--input-focus-brd) !important;
+  cursor: pointer;
+}
+.sym-color-input {
+  position: absolute; inset: 0;
+  opacity: 0; width: 100%; height: 100%;
+  cursor: pointer; border: 0; padding: 0;
+}
+.swatch-custom-ico { font-size: 12px; line-height: 1; pointer-events: none; }
+.swatch-custom.selected .swatch-custom-ico { filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); }
+.sym-img-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sym-img-btn { font-size: 11px; padding: 0 10px; }
+.sym-img-hint {
+  font-size: 10.5px; color: var(--text-light); line-height: 1.4;
+}
+
+/* ── 賠付錯誤/警告:亮色可讀(request 5)— 用 warn token ── */
+.sym-pay-issue {
+  font-size: 12px;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-brd);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* ════════════════════════════════════════════════════════
+   編輯面板卡片化(request 6 / 7)
+   每個區塊 = 一張卡片;可選卡片標頭帶開關,可收合
+   ════════════════════════════════════════════════════════ */
+.sym-card {
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.sym-card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  user-select: none;
+}
+.sym-card-head:hover {
+  background: var(--glass-1);
+}
+.sym-card-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  flex-shrink: 0;
+}
+.sym-card-sub {
+  font-size: 11px; color: var(--text-light);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sym-card-req-tag {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700;
+  color: var(--text-muted);
+  background: var(--glass-3);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+/* v7.9.4:收合摘要 — 靠左(緊鄰標題)*/
+.sym-card-summary {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--text-light);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* v7.9.5:狀態指示 ✓ / —(唯讀「有沒有資料」,非開關)*/
+.sym-card-status {
+  flex-shrink: 0;
+  font-size: 12px; font-weight: 800; line-height: 1;
+  color: var(--text-muted);        /* 未設定 = 灰色 — */
+  width: 13px; text-align: center;
+}
+.sym-card-status.on { color: var(--ok-dot); }   /* 已設定 = 綠色 ✓ */
+/* 舊狀態點(保留樣式以防引用)*/
+.sym-card-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid var(--text-muted);
+  background: transparent;
+  box-sizing: border-box;
+}
+.sym-card-dot.on {
+  border-color: var(--ok-dot);
+  background: var(--ok-dot);
+}
+/* v7.9.5:卡片內子分區標題 + 分隔 */
+.sym-subsection-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: var(--text);
+  margin: 4px 0 10px;
+}
+.sym-subsection-divider {
+  height: 0.5px; background: var(--glass-edge);
+  margin: 16px 0 14px;
+}
+/* v7.9.5:預留功能提示(規劃中、尚未接引擎)*/
+.sym-future-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  font-size: 11px; line-height: 1.5;
+  color: var(--text-light);
+  background: var(--glass-1);
+  border: 0.5px dashed var(--glass-edge);
+  border-radius: var(--r-sm);
+}
+.sym-future-note-tag {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border: 0.5px solid var(--warn-brd);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+.sym-card-summary-chip {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 0.5px solid var(--accent-brd);
+  border-radius: var(--r-pill);
+  padding: 1px 9px;
+}
+.sym-card-summary-sep { color: var(--text-muted); }
+.sym-card-summary-muted { color: var(--text-muted); font-style: italic; }
+/* v7.9.3:收合 / 展開指示箭頭(› 旋轉)*/
+.sym-card-collapse {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 16px; line-height: 1;
+  color: var(--text-muted);
+  transform: rotate(90deg);          /* 收合時朝下 */
+  transition: transform 0.18s ease;
+}
+.sym-card-collapse.open { transform: rotate(-90deg); }   /* 展開時朝上 */
+/* 卡片開關(舊式;v7.9.3 已改用 collapse 箭頭,保留樣式以防引用)*/
+.sym-card-switch {
+  margin-left: auto;
+  position: relative;
+  width: 36px; height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--r-pill);
+  background: rgba(120,120,140,0.28);
+  transition: background var(--t-fast);
+}
+.sym-card-switch.on { background: var(--accent-hex); }
+.sym-card-switch-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.28);
+  transition: transform var(--t-pop);
+}
+.sym-card-switch.on .sym-card-switch-knob { transform: translateX(16px); }
+/* 收合態:標頭底線收掉,內容已 v-show 隱藏 */
+.sym-card-closed { box-shadow: none; }
+.sym-card-closed .sym-card-head { min-height: 40px; }
+/* 卡片內容 */
+.sym-card-body {
+  padding: 4px 14px 14px;
+}
+/* v7.9.3:權重併入類型卡 */
+.sym-weight-block { margin-top: 12px; }
+.sym-weight-block .field-label-sm { margin-bottom: 4px; }
+/* refresh 小鈕在卡片標頭內 */
+.sym-card-head .sym-mult-refresh,
+.sym-card-head .btn-pill { flex-shrink: 0; }
+
+/* 卡片化後,原 section 內距由 card-body 提供;移除舊 section 殘留間距 */
+.sym-card-body > .sym-pay-dynamic,
+.sym-card-body > .sym-mult-grp:first-child { margin-top: 2px; }
+
+/* ── 暗色 ── */
+:root[data-theme="dark"] .sym-card { background: var(--glass-2); border-color: var(--glass-edge); }
+:root[data-theme="dark"] .sym-card:not(.sym-card-req) > .sym-card-head:hover { background: rgba(255,255,255,0.04); }
+:root[data-theme="dark"] .sym-drag-handle:hover { background: rgba(255,255,255,0.06); }
+:root[data-theme="dark"] .sym-img-clear { background: var(--glass-3); }
+
+/* ════════════════════════════════════════════════════════
+   v7.9.1 — Symbol 編輯面板雙欄(網頁版)
+   左欄:角色/外觀/賠付/權重;右欄:出現限制/圖示尺寸/倍數彩金/規則連結
+   ════════════════════════════════════════════════════════ */
+.sym-edit-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.sym-edit-col { min-width: 0; }
+/* 編輯區窄於 ~1180px 退單欄堆疊(右欄接在左欄下) */
+@media (max-width: 1180px) {
+  .sym-edit-cols { grid-template-columns: 1fr; }
+}

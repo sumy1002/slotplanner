@@ -83,6 +83,7 @@
       prize_values: [],   // v6.3 / Q3:「彩金倍數」N× / 金幣面額;含 per-mode 權重與 link_jackpot
       is_wild: false,
       is_scatter: false,
+      image: null,        // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
     };
   }
 
@@ -112,6 +113,7 @@
       prize_values: _normPrizeValues(s.prize_values),
       is_wild:    s.is_wild    != null ? s.is_wild    : false,
       is_scatter: s.is_scatter != null ? s.is_scatter : false,
+      image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
     };
   }
 
@@ -309,6 +311,7 @@
           prize_values: _normPrizeValues(s.prize_values),
           is_wild:    !!s.is_wild,
           is_scatter: !!s.is_scatter,
+          image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
           swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
@@ -345,6 +348,7 @@
           prize_values: _normPrizeValues(d.prize_values),
           is_wild:    !!d.is_wild,
           is_scatter: !!d.is_scatter,
+          image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
@@ -405,6 +409,7 @@
             prize_values: _normPrizeValues(d.prize_values),
             is_wild:    !!d.is_wild,
             is_scatter: !!d.is_scatter,
+            image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

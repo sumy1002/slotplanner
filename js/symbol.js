@@ -34,31 +34,38 @@
     <div class="sym-list">
       <div v-for="(s, idx) in symbols" :key="s.id"
            class="sym-item"
-           :class="{selected: s.id === selectedId, 'sym-item-disabled': s.enabled === false}"
-           :style="(dragOverIdx === idx && dragIdx !== idx) ? 'box-shadow: inset 0 2px 0 0 var(--accent, #4a90d9);' : ''"
+           :class="{
+             selected: s.id === selectedId,
+             'sym-item-disabled': s.enabled === false,
+             'sym-item-dragging': dragIdx === idx,
+             'sym-item-dropbefore': dragOverIdx === idx && dragIdx !== idx && dragIdx > idx,
+             'sym-item-dropafter': dragOverIdx === idx && dragIdx !== idx && dragIdx < idx
+           }"
            draggable="true"
            @dragstart="onDragStart(idx, $event)"
            @dragover="onDragOver(idx, $event)"
            @drop="onDrop(idx)"
            @dragend="onDragEnd"
            @click="select(s.id)">
-        <div class="sym-reorder" style="display:flex; flex-direction:column; gap:2px; margin-right:4px;">
-          <button @click.stop="moveSymbol(idx, -1)" :disabled="idx === 0" title="上移"
-                  style="font-size:9px; line-height:1; padding:1px 4px; cursor:pointer; border-radius:4px;">▲</button>
-          <button @click.stop="moveSymbol(idx, 1)" :disabled="idx === symbols.length - 1" title="下移"
-                  style="font-size:9px; line-height:1; padding:1px 4px; cursor:pointer; border-radius:4px;">▼</button>
-        </div>
-        <div class="sym-swatch" :style="swatchStyle(s.id)">
-          {{ initialOf(s) }}
+        <div class="sym-drag-handle"
+             @mousedown="dragHandleArmed = true"
+             @mouseup="dragHandleArmed = false"
+             @click.stop
+             title="拖曳調整順序">⠿</div>
+        <div class="sym-swatch" :class="{ 'has-img': !!s.image }"
+             :style="s.image ? { backgroundImage: 'url(' + s.image + ')' } : swatchStyle(s.id)">
+          <span v-if="!s.image">{{ initialOf(s) }}</span>
         </div>
         <div class="sym-item-info">
-          <div class="sym-item-name">{{ s.name || '(未命名)' }}<span v-if="s.enabled === false" class="sym-item-off-tag">已停用</span></div>
+          <div class="sym-item-row1">
+            <span class="sym-item-name">{{ s.name || '(未命名)' }}<span v-if="s.enabled === false" class="sym-item-off-tag">已停用</span></span>
+            <span class="sym-item-pct">{{ pctOf(s) }}%</span>
+          </div>
           <div class="sym-item-meta">
             <span>{{ s.enabled === false ? '—' : ('#' + s.number) }}</span>
             <span>權重 {{ s.weight }}</span>
           </div>
         </div>
-        <div class="sym-item-pct">{{ pctOf(s) }}%</div>
         <button class="sym-item-toggle"
                 :class="{ on: s.enabled !== false }"
                 @click.stop="toggleEnabled(s.id)"
@@ -115,44 +122,81 @@
       </div>
 
       <div class="sym-edit-body" :class="{ 'is-off': selected.enabled === false }">
+        <div class="sym-edit-cols">
+        <div class="sym-edit-col sym-edit-col-left">
 
-        <!-- ═══ 角色 / 類型(#9:移到最前,wild/scatter 由 Type 自動推導)═══ -->
-        <div class="sym-edit-section">
-          <div class="section-title">角色 / 類型</div>
-          <div class="sym-type-chips sym-type-chips-lg">
-            <button v-for="t in SYMBOL_TYPES" :key="t"
-                    class="sym-type-chip"
-                    :class="{ active: form.type === t }"
-                    @click="setType(t)">{{ t }}</button>
+        <!-- ═══ 類型 / 權重(v7.9.3:合併權重;可收合,收合顯示類型)═══ -->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.type }">
+          <div class="sym-card-head" @click="toggleCard('type')">
+            <span class="sym-card-title">類型 / 權重</span>
+            <span v-if="!cardOpen.type" class="sym-card-summary">
+              <span class="sym-card-summary-chip">{{ form.type }}</span>
+            </span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.type }" title="展開 / 收合">›</span>
           </div>
-          <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
-        </div>
-        <div class="sep"></div>
-
-        <!-- 外觀 / 識別(顏色 + 編號 + 名稱 + 代碼)— v5.0-a 壓縮版 -->
-        <div class="sym-edit-section">
-          <div class="section-title">外觀 / 識別</div>
-          <div class="sym-appearance-row">
-            <div class="sym-swatch-preview" :style="swatchStyle(selected.id)">
-              {{ initialOf(selected) }}
+          <div class="sym-card-body" v-show="cardOpen.type">
+            <div class="sym-type-chips sym-type-chips-lg">
+              <button v-for="t in SYMBOL_TYPES" :key="t"
+                      class="sym-type-chip"
+                      :class="{ active: form.type === t }"
+                      @click="setType(t)">{{ t }}</button>
             </div>
-            <div class="swatch-strip" style="display:grid; grid-template-columns:repeat(4, 23px); gap:5px; flex:none;">
-              <div v-for="(c, i) in SWATCH_COLORS" :key="i"
-                   class="swatch-cell"
-                   :class="{selected: isCurrentSwatch(i)}"
-                   :style="{background: c[0]}"
-                   :title="c[0]"
-                   @click="pickSwatch(i)"></div>
-              <!-- #3:自訂色票 — 點擊開色票選色器 -->
-              <label class="swatch-cell swatch-custom"
-                     :class="{selected: isCustomSwatch}"
-                     :style="{ background: isCustomSwatch ? currentBg : 'transparent', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }"
-                     title="自訂顏色（色票選色）">
-                <input type="color" :value="currentBg"
-                       @input="pickCustom($event.target.value)"
-                       style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; border:0; padding:0;">
-                <span v-if="!isCustomSwatch" style="font-size:12px; line-height:1; pointer-events:none;">＋</span>
-              </label>
+            <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
+            <!-- 權重(併入此卡)-->
+            <div class="sym-weight-block">
+              <div class="field-label-sm">權重</div>
+              <div class="weight-row">
+                <input type="range" class="weight-slider"
+                       min="0" max="1000" step="1"
+                       v-model.number="form.weight"
+                       :style="{'--val': (form.weight / 10) + '%'}"
+                       @input="onFieldEdit">
+                <div class="weight-val">{{ form.weight }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 外觀 / 識別(顏色/圖片 + 編號 + 名稱 + 代碼)— v7.9 卡片化 + 圖片 -->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.appearance }">
+          <div class="sym-card-head" @click="toggleCard('appearance')">
+            <span class="sym-card-title">外觀 / 識別</span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.appearance }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.appearance">
+          <div class="sym-appearance-row">
+            <div class="sym-swatch-preview"
+                 :class="{ 'has-img': !!form.image }"
+                 :style="form.image ? { backgroundImage: 'url(' + form.image + ')' } : swatchStyle(selected.id)">
+              <span v-if="!form.image">{{ initialOf(selected) }}</span>
+              <button v-if="form.image" class="sym-img-clear" @click.stop="clearImage" title="移除圖片,改回色票">✕</button>
+            </div>
+            <div class="sym-appearance-ctrls">
+              <div class="swatch-strip" style="display:grid; grid-template-columns:repeat(7, 23px); gap:5px; flex:none;">
+                <div v-for="(c, i) in SWATCH_COLORS" :key="i"
+                     class="swatch-cell"
+                     :class="{selected: isCurrentSwatch(i) && !form.image}"
+                     :style="{background: c[0]}"
+                     :title="c[0]"
+                     @click="pickSwatch(i)"></div>
+                <!-- #3:自訂色票 — 明確提示「自訂顏色」+ 滴管圖示 -->
+                <label class="swatch-cell swatch-custom"
+                       :class="{selected: isCustomSwatch && !form.image}"
+                       :style="{ background: (isCustomSwatch && !form.image) ? currentBg : 'transparent' }"
+                       title="自訂顏色 — 點此開啟調色盤選任意色">
+                  <input type="color" :value="currentBg"
+                         @input="pickCustom($event.target.value)"
+                         class="sym-color-input">
+                  <span class="swatch-custom-ico">🎨</span>
+                </label>
+              </div>
+              <!-- v7.9 #4:圖片 — 上傳檔案 / 貼上剪貼簿 -->
+              <div class="sym-img-actions">
+                <button class="btn-pill sym-img-btn" @click="triggerImageUpload" title="上傳圖片檔(僅存於本機,不進 A.xlsx)">🖼 上傳圖片</button>
+                <button class="btn-pill sym-img-btn" @click="pasteImage" title="從剪貼簿貼上圖片(需瀏覽器授權)">📋 貼上圖片</button>
+                <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="onImageFile">
+              </div>
+              <div class="sym-img-hint">色票或圖片擇一;圖片僅存本機,不會匯出到 A.xlsx。也可直接 Ctrl+V 貼上。</div>
             </div>
           </div>
           <div class="sym-id-grid">
@@ -183,12 +227,21 @@
                      placeholder="WILD / H1 / L2">
             </div>
           </div>
+          </div>
         </div>
-        <div class="sep"></div>
 
         <!-- 賠付表(#5:移到權重之上;#6:行格式改「N 連線」+ 明顯刪除鈕;#7:錯誤提示區) -->
-        <div class="sym-edit-section">
-          <div class="section-title">賠付表 <span class="section-subtitle">N 連線時的賠付倍數</span></div>
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.pay }">
+          <div class="sym-card-head" @click="toggleCard('pay')">
+            <span class="sym-card-title">賠付表</span>
+            <span v-if="cardOpen.pay" class="sym-card-sub">N 連線時的賠付倍數</span>
+            <span v-else class="sym-card-summary">
+              <span v-if="paySummary" class="sym-card-summary-chip cfg-mono">{{ paySummary }}</span>
+              <span v-else class="sym-card-summary-muted">未設定賠付</span>
+            </span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.pay }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.pay">
           <div class="sym-pay-dynamic">
             <div v-for="(row, i) in form.pay_rows" :key="i" class="sym-pay-drow"
                  style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
@@ -213,24 +266,137 @@
             <!-- #7:錯誤/警告提示區(取代原靜態說明文字) -->
             <div v-if="payRowIssues.length"
                  style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-              <div v-for="(msg, k) in payRowIssues" :key="k"
-                   style="font-size:12px; color:var(--danger, #c0392b); background:rgba(192,57,43,0.08); border:1px solid rgba(192,57,43,0.25); border-radius:6px; padding:4px 8px;">
+              <div v-for="(msg, k) in payRowIssues" :key="k" class="sym-pay-issue">
                 {{ msg }}
               </div>
             </div>
           </div>
-        </div>
-        <div class="sep"></div>
+          </div><!-- /sym-card-body -->
+        </div><!-- /賠付卡片 -->
+        </div><!-- /sym-edit-col-left -->
 
-        <!-- v6.3 / Q3:倍數(×N)/ 彩金倍數(N×)/ 金幣面額 -->
-        <div class="sym-edit-section">
-          <div class="section-title sym-mult-title">
-            <span>倍數 / 彩金</span>
-            <span class="section-subtitle">符號自帶倍數(×N)與彩金面額(N×)</span>
-            <button class="btn-pill sym-mult-refresh"
-                    @click="refreshMultRefs" title="重讀模式 / JP 選項">⟳ 重讀</button>
+        <div class="sym-edit-col sym-edit-col-right">
+
+        <!-- 出現限制 / 規則(v7.9.5:合併;出現限制=生成期約束,規則=唯讀引用)-->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.limit }">
+          <div class="sym-card-head" @click="toggleCard('limit')">
+            <span class="sym-card-title">出現限制 / 規則</span>
+            <span v-if="cardOpen.limit" class="sym-card-sub">出現輪 / 上限,以及引用此符號的規則</span>
+            <span v-else class="sym-card-summary">
+              <span class="sym-card-status" :class="{ on: hasLimit }">{{ hasLimit ? '✓' : '—' }}</span>
+              <span v-if="limitSummary">{{ limitSummary }}</span>
+              <span v-else class="sym-card-summary-muted">無限制</span>
+              <template v-if="rulesSummary">
+                <span class="sym-card-summary-sep">·</span>{{ rulesSummary }}
+              </template>
+            </span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.limit }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.limit">
+
+          <!-- ── 子區:出現限制 ── -->
+          <div class="sym-subsection-label">出現限制</div>
+          <div class="sym-limit-grid">
+            <div>
+              <div class="field-label-sm">出現輪限制 <span class="field-label-hint">主輪目前 {{ reelCount }} 輪</span></div>
+              <div class="reel-limits">
+                <label v-for="(b, i) in form.reel_limit" :key="i" class="chk">
+                  <input type="checkbox" v-model="form.reel_limit[i]" @change="onFieldEdit">
+                  <span class="box"></span>
+                  <span>輪 {{ i + 1 }}</span>
+                </label>
+              </div>
+              <!-- #8:副輪(連動盤面結構;預設不勾)。無副輪時不顯示 -->
+              <template v-if="spec.subReels.length">
+                <div class="field-label-sm" style="margin-top:8px;">副輪 <span class="field-label-hint">預設不勾</span></div>
+                <div class="reel-limits">
+                  <label v-for="s in spec.subReels" :key="s.key" class="chk">
+                    <input type="checkbox" :checked="!!form.subreel_limit[s.key]"
+                           @change="toggleSubLimit(s.key, $event.target.checked)">
+                    <span class="box"></span>
+                    <span>{{ s.label }}</span>
+                  </label>
+                </div>
+              </template>
+            </div>
+            <div>
+              <div class="field-label-sm">出現上限</div>
+              <div class="sym-max-row">
+                <label class="chk">
+                  <input type="checkbox" v-model="form.use_max" @change="onFieldEdit">
+                  <span class="box"></span>
+                  <span>啟用</span>
+                </label>
+                <input class="input input-sm input-center" style="width:64px;"
+                       type="number" min="0" max="999"
+                       v-model.number="form.max_count"
+                       :disabled="!form.use_max"
+                       @input="onFieldEdit">
+                <span class="sym-unit">顆</span>
+              </div>
+            </div>
           </div>
 
+          <!-- 預留:更細的生成期約束(指定 reel/主副盤/數量)— 規劃中,尚未接引擎 -->
+          <div class="sym-future-note">
+            <span class="sym-future-note-tag">規劃中</span>
+            <span>更細的「產牌限制」(指定符號於特定 reel / 主盤 / 副盤的出現數量上下限)為生成期約束,
+            將於後續版本接入產牌引擎,屆時會在此設定。</span>
+          </div>
+
+          <div class="sym-subsection-divider"></div>
+
+          <!-- ── 子區:規則(唯讀引用)── -->
+          <div class="sym-subsection-label">
+            規則
+            <button class="btn-pill" style="font-size:11px; padding:2px 8px; margin-left:auto;"
+                    @click.stop="refreshSymbolRefs" title="重新讀取">⟳</button>
+          </div>
+          <div v-if="!symbolRefs.constraints.length && !symbolRefs.rules.length && !symbolRefs.discards.length"
+               style="font-size:12px; color:var(--text-light); padding:4px 0;">
+            尚無約束 / 規則引用此符號。到「硬約束 / 規則」分頁設定後,這裡會自動顯示。
+          </div>
+          <template v-else>
+            <div v-for="c in symbolRefs.constraints" :key="'rc'+c.constraint_id"
+                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
+              🚫 <strong>{{ c.constraint_id }}</strong> · {{ c.ctype }}<span v-if="c.notes"> — {{ c.notes }}</span>
+            </div>
+            <div v-for="r in symbolRefs.rules" :key="'rr'+r.rule_id"
+                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
+              🧩 <strong>{{ r.rule_id }}</strong> · {{ r.description || r.condition || '(無描述)' }}
+            </div>
+            <div v-for="d in symbolRefs.discards" :key="'rd'+d.discard_id"
+                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
+              🗑 <strong>{{ d.discard_id }}</strong> · {{ d.notes || d.condition || '(棄牌)' }}
+            </div>
+          </template>
+          <button class="btn-pill add" style="margin-top:8px; font-size:12px;"
+                  :disabled="!selected" @click="addRelatedConstraint"
+                  title="跳到硬約束分頁,並預填此符號">
+            ＋ 新增與此符號相關的約束
+          </button>
+          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">
+            ※ 規則為唯讀總覽;按鈕會跳到硬約束分頁並預填此符號(規則 / 棄牌仍請至對應分頁設定)。
+          </div>
+
+          </div><!-- /sym-card-body -->
+        </div><!-- /出現限制+規則 合併卡片 -->
+
+        <!-- v6.3 / Q3:倍數(×N)/ 彩金倍數(N×)/ 金幣面額 -->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.mult }">
+          <div class="sym-card-head" @click="toggleCard('mult')">
+            <span class="sym-card-title">倍數 / 彩金</span>
+            <span v-if="cardOpen.mult" class="sym-card-sub">符號自帶倍數(×N)與彩金面額(N×)</span>
+            <span v-else class="sym-card-summary">
+              <span class="sym-card-status" :class="{ on: hasMult }">{{ hasMult ? '✓' : '—' }}</span>
+              <span v-if="multSummary">{{ multSummary }}</span>
+              <span v-else class="sym-card-summary-muted">未設定</span>
+            </span>
+            <button v-if="cardOpen.mult" class="btn-pill sym-mult-refresh"
+                    @click.stop="refreshMultRefs" title="重讀模式 / JP 選項">⟳ 重讀</button>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.mult }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.mult">
           <!-- 倍數 ×N(× 在數字前) -->
           <div class="sym-mult-grp">
             <div class="sym-mult-sublabel">
@@ -281,72 +447,18 @@
             </div>
             <button class="btn-pill add" @click="addPrizeValue">＋ 新增彩金倍數 / 面額</button>
           </div>
-        </div>
-        <div class="sep"></div>
-
-        <!-- 權重 -->
-        <div class="sym-edit-section">
-          <div class="section-title">權重</div>
-          <div class="weight-row">
-            <input type="range" class="weight-slider"
-                   min="0" max="1000" step="1"
-                   v-model.number="form.weight"
-                   :style="{'--val': (form.weight / 10) + '%'}"
-                   @input="onFieldEdit">
-            <div class="weight-val">{{ form.weight }}</div>
-          </div>
-        </div>
-        <div class="sep"></div>
-
-        <!-- 出現限制(輪 + 上限,#12:併兩欄省空間)-->
-        <div class="sym-edit-section">
-          <div class="section-title">出現限制</div>
-          <div class="sym-limit-grid">
-            <div>
-              <div class="field-label-sm">出現輪限制 <span class="field-label-hint">主輪目前 {{ reelCount }} 輪</span></div>
-              <div class="reel-limits">
-                <label v-for="(b, i) in form.reel_limit" :key="i" class="chk">
-                  <input type="checkbox" v-model="form.reel_limit[i]" @change="onFieldEdit">
-                  <span class="box"></span>
-                  <span>輪 {{ i + 1 }}</span>
-                </label>
-              </div>
-              <!-- #8:副輪(連動盤面結構;預設不勾)。無副輪時不顯示 -->
-              <template v-if="spec.subReels.length">
-                <div class="field-label-sm" style="margin-top:8px;">副輪 <span class="field-label-hint">預設不勾</span></div>
-                <div class="reel-limits">
-                  <label v-for="s in spec.subReels" :key="s.key" class="chk">
-                    <input type="checkbox" :checked="!!form.subreel_limit[s.key]"
-                           @change="toggleSubLimit(s.key, $event.target.checked)">
-                    <span class="box"></span>
-                    <span>{{ s.label }}</span>
-                  </label>
-                </div>
-              </template>
-            </div>
-            <div>
-              <div class="field-label-sm">出現上限</div>
-              <div class="sym-max-row">
-                <label class="chk">
-                  <input type="checkbox" v-model="form.use_max" @change="onFieldEdit">
-                  <span class="box"></span>
-                  <span>啟用</span>
-                </label>
-                <input class="input input-sm input-center" style="width:64px;"
-                       type="number" min="0" max="999"
-                       v-model.number="form.max_count"
-                       :disabled="!form.use_max"
-                       @input="onFieldEdit">
-                <span class="sym-unit">顆</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="sep"></div>
+          </div><!-- /sym-card-body -->
+        </div><!-- /倍數彩金卡片 -->
 
         <!-- 圖示尺寸 / Mega(#10:預設 1×1,點擊才展開設定)-->
-        <div class="sym-edit-section">
-          <div class="section-title">圖示尺寸</div>
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.size }">
+          <div class="sym-card-head" @click="toggleCard('size')">
+            <span class="sym-card-title">圖示尺寸</span>
+            <span v-if="cardOpen.size" class="sym-card-sub">一般 1×1 或 Mega 多格 / 可擴張</span>
+            <span v-else class="sym-card-summary"><span class="cfg-mono">{{ sizeSummary }}</span></span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.size }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.size">
 
           <!-- #10:可擴張標籤(預設關;實際擴張大小/條件於「規則」頁設定,此處僅開啟標籤) -->
           <label class="chk" style="margin-bottom:10px;">
@@ -412,42 +524,10 @@
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- v6.2 規則 #11:規則連結(唯讀反查;在硬約束/規則/棄牌分頁設定後這裡自動顯示) -->
-        <div class="sym-edit-section">
-          <div class="section-title">規則連結
-            <span class="section-subtitle">引用此符號的約束 / 規則 / 棄牌（唯讀）</span>
-            <button class="btn-pill" style="margin-left:8px; font-size:11px; padding:2px 8px;"
-                    @click="refreshSymbolRefs" title="重新讀取">⟳</button>
-          </div>
-          <div v-if="!symbolRefs.constraints.length && !symbolRefs.rules.length && !symbolRefs.discards.length"
-               style="font-size:12px; color:var(--text-light); padding:4px 0;">
-            尚無約束 / 規則引用此符號。到「硬約束 / 規則」分頁設定後,這裡會自動顯示。
-          </div>
-          <template v-else>
-            <div v-for="c in symbolRefs.constraints" :key="'rc'+c.constraint_id"
-                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
-              🚫 <strong>{{ c.constraint_id }}</strong> · {{ c.ctype }}<span v-if="c.notes"> — {{ c.notes }}</span>
-            </div>
-            <div v-for="r in symbolRefs.rules" :key="'rr'+r.rule_id"
-                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
-              🧩 <strong>{{ r.rule_id }}</strong> · {{ r.description || r.condition || '(無描述)' }}
-            </div>
-            <div v-for="d in symbolRefs.discards" :key="'rd'+d.discard_id"
-                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
-              🗑 <strong>{{ d.discard_id }}</strong> · {{ d.notes || d.condition || '(棄牌)' }}
-            </div>
-          </template>
-          <button class="btn-pill add" style="margin-top:8px; font-size:12px;"
-                  :disabled="!selected" @click="addRelatedConstraint"
-                  title="跳到硬約束分頁,並預填此符號">
-            ＋ 新增與此符號相關的約束
-          </button>
-          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">
-            ※ 上方為唯讀總覽;按鈕會跳到硬約束分頁並預填此符號(規則 / 棄牌仍請至對應分頁設定)。
-          </div>
-        </div>
+          </div><!-- /sym-card-body -->
+        </div><!-- /圖示尺寸卡片 -->
+        </div><!-- /sym-edit-col-right -->
+        </div><!-- /sym-edit-cols -->
 
       </div><!-- /sym-edit-body -->
     </div>
@@ -482,6 +562,30 @@
       // #10:Mega 尺寸區是否展開(預設折疊,只有 mega>1×1 才自動展開)
       const showMega = ref(false);
 
+      // ════════════════════════════════════════════════════════
+      //  v7.9 #6/#7 + v7.9.3:編輯面板卡片化 — 全部卡片可摺疊
+      //   純 UI 體驗,不影響資料/匯出。狀態持久化於 LS(跨 session 記住)。
+      //   key = 卡片 id;value = true(展開) / false(收合)。
+      //   收合時標頭右側顯示「選擇摘要」(見 cardSummary)。
+      // ════════════════════════════════════════════════════════
+      const CARD_LS_KEY = 'slotplanner.sym.cardOpen.v1';
+      // v7.9.3:權重併入 type 卡;移除獨立 weight;全部卡片可收合
+      // v7.9.5:出現限制與規則合併為一張卡(id=limit);移除 rules
+      const OPTIONAL_CARDS = ['type', 'appearance', 'pay', 'mult', 'limit', 'size'];
+      const _cardDefaults = { type: true, appearance: true, pay: true, mult: false, limit: true, size: false };
+      const cardOpen = reactive({ ..._cardDefaults });
+      try {
+        const saved = JSON.parse(localStorage.getItem(CARD_LS_KEY) || 'null');
+        if (saved && typeof saved === 'object') {
+          OPTIONAL_CARDS.forEach(k => { if (typeof saved[k] === 'boolean') cardOpen[k] = saved[k]; });
+        }
+      } catch (e) {}
+      function toggleCard(id) {
+        if (OPTIONAL_CARDS.indexOf(id) < 0) return;
+        cardOpen[id] = !cardOpen[id];
+        try { localStorage.setItem(CARD_LS_KEY, JSON.stringify({ ...cardOpen })); } catch (e) {}
+      }
+
       // ── 編輯表單 ──
       const form = reactive({
         number: '',
@@ -506,6 +610,7 @@
         can_expand: false,   // v6.2 #10:可擴張標籤
         is_wild: false,
         is_scatter: false,
+        image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
       });
 
       // Symbol Type 選項(v6.2 #2:移除 High/Low,改下列 7 類)
@@ -530,6 +635,7 @@
 
       // ── 檔案 input ref ──
       const importInput = ref(null);
+      const imageInput = ref(null);   // v7.9 #4:圖片上傳 input
 
       // ── 防止 commit 觸發 syncFromRegistry 自循環 ──
       let _committing = false;
@@ -596,6 +702,7 @@
         form.can_expand = !!s.can_expand;
         form.is_wild    = !!s.is_wild;
         form.is_scatter = !!s.is_scatter;
+        form.image      = (s.image != null && typeof s.image === 'string') ? s.image : null;  // v7.9 #4
         // #10:有 mega 才預設展開,否則折疊成 1×1 badge
         showMega.value  = (Number(form.mega_w) > 1 || Number(form.mega_h) > 1);
       }
@@ -701,6 +808,7 @@
           can_expand: !!form.can_expand,
           is_wild: !!form.is_wild,
           is_scatter: !!form.is_scatter,
+          image: (form.image != null && typeof form.image === 'string') ? form.image : null,  // v7.9 #4
         };
         // 替換陣列元素（用 splice 確保 Vue 偵測）
         symbols.value.splice(idx, 1, updated);
@@ -891,6 +999,63 @@
         return '';
       });
 
+      // ── v7.9.3:卡片收合摘要 ──
+      // 賠付表:目前有設定賠付(>0)的連線數,如 "3/4/5";皆未設定則回 ''
+      const paySummary = computed(() => {
+        const rows = (form.pay_rows || [])
+          .filter(r => Number(r.count) >= 2 && Number(r.pay) > 0)
+          .map(r => Number(r.count))
+          .sort((a, b) => a - b);
+        return rows.length ? rows.join('/') : '';
+      });
+      // 出現限制摘要:輪數/上限簡述
+      const limitSummary = computed(() => {
+        const parts = [];
+        const reels = (form.reel_limit || []).filter(Boolean).length;
+        const total = (form.reel_limit || []).length;
+        if (total && reels < total) parts.push(`輪 ${reels}/${total}`);
+        if (form.use_max && Number(form.max_count) > 0) parts.push(`上限 ${form.max_count}`);
+        return parts.join(' · ');
+      });
+      // 圖示尺寸摘要
+      const sizeSummary = computed(() => {
+        const w = Number(form.mega_w) || 1, h = Number(form.mega_h) || 1;
+        let s = `${w}×${h}`;
+        if (form.can_expand) s += ' · 可擴張';
+        return s;
+      });
+      // 倍數/彩金摘要
+      const multSummary = computed(() => {
+        const m = (form.mult_values || []).filter(v => Number(v.mult) > 0).length;
+        const p = (form.prize_values || []).filter(v => Number(v.value) > 0 || (v.link_jackpot || '')).length;
+        const parts = [];
+        if (m) parts.push(`倍數 ${m}`);
+        if (p) parts.push(`彩金 ${p}`);
+        return parts.join(' · ');
+      });
+      // 規則摘要(v7.9.4:改「有 N 條規則」)
+      const rulesSummary = computed(() => {
+        const r = symbolRefs.value;
+        const n = (r.constraints.length || 0) + (r.rules.length || 0) + (r.discards.length || 0);
+        return n ? `有 ${n} 條規則` : '';
+      });
+
+      // ── v7.9.4:狀態點(收合後顯示「有沒有資料」的唯讀指示;非開關)──
+      // 出現限制:reel_limit 非全選 或 use_max 開 → 視為「有設定」
+      const hasLimit = computed(() => {
+        const rl = form.reel_limit || [];
+        const reelRestricted = rl.length > 0 && rl.some(x => !x);
+        const subRestricted = Object.values(form.subreel_limit || {}).some(Boolean);
+        const maxOn = !!form.use_max && Number(form.max_count) > 0;
+        return reelRestricted || subRestricted || maxOn;
+      });
+      // 倍數/彩金:任一陣列有有效 entry → 「有設定」
+      const hasMult = computed(() => {
+        const m = (form.mult_values || []).some(v => Number(v.mult) > 0);
+        const p = (form.prize_values || []).some(v => Number(v.value) > 0 || (v.link_jackpot || ''));
+        return m || p;
+      });
+
       // #10:Mega 尺寸加減(1..10,防呆夾住範圍)
       function bumpMega(dim, delta) {
         const key = dim === 'w' ? 'mega_w' : 'mega_h';
@@ -910,6 +1075,7 @@
       // ════════════════════════════════════════════════════════
       const dragIdx = ref(-1);
       const dragOverIdx = ref(-1);
+      const dragHandleArmed = ref(false);   // v7.9 #3:只有從 ⠿ 把手按下才允許拖曳
 
       // 依「啟用中符號的上到下順序」自動指派編號 00,01,...;停用的不佔號(number='')
       function renumber() {
@@ -934,17 +1100,28 @@
       }
       function moveSymbol(i, dir) { moveSymbolTo(i, i + dir); }
 
-      // 原生拖曳排序
+      // 原生拖曳排序(v7.9 #3:只有從把手起拖才允許,避免與點選衝突)
       function onDragStart(i, e) {
+        if (!dragHandleArmed.value) {
+          if (e) e.preventDefault();   // 不是從把手起拖 → 取消
+          return;
+        }
         dragIdx.value = i;
-        if (e && e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; }
+        if (e && e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {}
+        }
       }
-      function onDragOver(i, e) { if (e) e.preventDefault(); dragOverIdx.value = i; }
+      function onDragOver(i, e) {
+        if (dragIdx.value < 0) return;   // 未在拖曳中
+        if (e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; }
+        dragOverIdx.value = i;
+      }
       function onDrop(i) {
         if (dragIdx.value >= 0 && dragIdx.value !== i) moveSymbolTo(dragIdx.value, i);
-        dragIdx.value = -1; dragOverIdx.value = -1;
+        dragIdx.value = -1; dragOverIdx.value = -1; dragHandleArmed.value = false;
       }
-      function onDragEnd() { dragIdx.value = -1; dragOverIdx.value = -1; }
+      function onDragEnd() { dragIdx.value = -1; dragOverIdx.value = -1; dragHandleArmed.value = false; }
 
       // ════════════════════════════════════════════════════════
       //  選取 / 新增 / 刪除
@@ -1063,6 +1240,120 @@
       function swatchStyle(sid) {
         const sw = swatchMap.value[sid] || ['#EDD9C0', '#7a5a3a'];
         return { background: sw[0], color: sw[1] };
+      }
+
+      // ════════════════════════════════════════════════════════
+      //  v7.9 #4:符號圖片 — 上傳檔 / 貼上剪貼簿 / 清除
+      //   圖片以 dataURL 存進 form.image → writeForm → registry(LS);
+      //   不進 A.xlsx 契約。為避免 LS 爆量,上傳時縮放到 ≤256px、轉 webp/png。
+      // ════════════════════════════════════════════════════════
+      const IMG_MAX = 256;          // 最長邊上限(px)
+      const IMG_BYTES_WARN = 600000; // 縮放後 dataURL 仍超過約 600KB → 警告
+
+      function _downscaleToDataURL(srcDataURL) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            let { width: w, height: h } = img;
+            if (w > IMG_MAX || h > IMG_MAX) {
+              const scale = IMG_MAX / Math.max(w, h);
+              w = Math.round(w * scale); h = Math.round(h * scale);
+            }
+            const cv = document.createElement('canvas');
+            cv.width = w; cv.height = h;
+            const ctx = cv.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            let out;
+            try { out = cv.toDataURL('image/webp', 0.85); }
+            catch (e) { out = cv.toDataURL('image/png'); }
+            if (!out || out.indexOf('data:image/webp') !== 0) out = cv.toDataURL('image/png');
+            resolve(out);
+          };
+          img.onerror = () => reject(new Error('圖片解析失敗'));
+          img.src = srcDataURL;
+        });
+      }
+
+      function _readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = () => reject(new Error('讀取檔案失敗'));
+          fr.readAsDataURL(file);
+        });
+      }
+
+      async function _applyImageFromFile(file) {
+        if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
+        if (!file || !/^image\//.test(file.type || '')) { emitStatus('err', '不是有效的圖片檔'); return; }
+        try {
+          const raw = await _readFileAsDataURL(file);
+          const small = await _downscaleToDataURL(raw);
+          if (small.length > IMG_BYTES_WARN) {
+            emitStatus('warn', '圖片較大,已縮放;若 localStorage 容量不足可能存不下');
+          }
+          flushWrite();
+          form.image = small;
+          writeForm();
+          emitStatus('ok', '已套用圖片(僅存本機,不匯出)');
+        } catch (err) {
+          emitStatus('err', '圖片處理失敗：' + err.message);
+        }
+      }
+
+      function triggerImageUpload() {
+        if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
+        imageInput.value?.click();
+      }
+      async function onImageFile(e) {
+        const file = e.target.files?.[0];
+        if (file) await _applyImageFromFile(file);
+        e.target.value = '';
+      }
+
+      async function pasteImage() {
+        if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+          emitStatus('err', '此瀏覽器不支援讀取剪貼簿,請改用「上傳圖片」或直接 Ctrl+V');
+          return;
+        }
+        try {
+          const items = await navigator.clipboard.read();
+          for (const it of items) {
+            const type = (it.types || []).find(t => t.startsWith('image/'));
+            if (type) {
+              const blob = await it.getType(type);
+              await _applyImageFromFile(new File([blob], 'pasted', { type }));
+              return;
+            }
+          }
+          emitStatus('err', '剪貼簿沒有圖片');
+        } catch (err) {
+          emitStatus('err', '讀取剪貼簿失敗(可能未授權)：' + err.message);
+        }
+      }
+
+      // 全域 Ctrl+V 貼上(僅在 symbols 頁、有選取、焦點不在輸入框時)
+      async function onGlobalPaste(e) {
+        if (selectedId.value === null) return;
+        const tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        for (const it of items) {
+          if (it.kind === 'file' && /^image\//.test(it.type)) {
+            const file = it.getAsFile();
+            if (file) { e.preventDefault(); await _applyImageFromFile(file); return; }
+          }
+        }
+      }
+
+      function clearImage() {
+        if (selectedId.value === null) return;
+        flushWrite();
+        form.image = null;
+        writeForm();
+        emitStatus('ok', '已移除圖片,改回色票顯示');
       }
 
       function initialOf(s) {
@@ -1277,6 +1568,7 @@
           select(symbols.value[0].id);
         }
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('paste', onGlobalPaste);   // v7.9 #4:Ctrl+V 貼上圖片
         // v7.6.1:行動版編輯抽屜 — 開=點符號;關=drag-follow(往右拖編輯面關閉,跟手)
         try {
           const _el = document.querySelector('.sym-right');
@@ -1298,6 +1590,7 @@
         if (unsubChanged) unsubChanged();
         if (unsubSpec) unsubSpec();
         document.removeEventListener('keydown', onKeyDown);
+        document.removeEventListener('paste', onGlobalPaste);
       });
 
       return {
@@ -1312,10 +1605,14 @@
         importInput,
         megaPreview,
         showMega, roleNote,
+        cardOpen, toggleCard,
+        paySummary, limitSummary, sizeSummary, multSummary, rulesSummary,
+        hasLimit, hasMult,
         select, toggleEnabled, addSymbol, deleteSelected,
-        moveSymbol, dragIdx, dragOverIdx, onDragStart, onDragOver, onDrop, onDragEnd,
+        moveSymbol, dragIdx, dragOverIdx, dragHandleArmed, onDragStart, onDragOver, onDrop, onDragEnd,
         pickSwatch, isCurrentSwatch, swatchStyle,
         currentBg, isCustomSwatch, pickCustom,
+        imageInput, triggerImageUpload, onImageFile, pasteImage, clearImage,
         initialOf, pctOf,
         onFieldEdit, setType, bumpMega, resetMega,
         addPayRow, removePayRow, bumpPayCount, toggleSubLimit,

@@ -1210,28 +1210,31 @@
 }
 
 .cfg-section {
-  background: var(--glass-1);
-  border: 1px solid var(--glass-brd);
-  border-radius: var(--r-card);
-  padding: 16px 18px;
-  margin-bottom: 14px;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
 }
 .cfg-section-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px dashed var(--divider);
+  border-bottom: 0.5px solid var(--glass-edge);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .cfg-section-title::before {
-  content: '◆';
-  color: var(--accent-text);
-  font-size: 10px;
+  content: '';
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--accent-hex);
+  flex-shrink: 0;
 }
 
 .cfg-field {
@@ -1471,8 +1474,8 @@
 
 .cfg-mode-card {
   background: var(--glass-2);
-  border: 1px solid var(--glass-brd);
-  border-radius: var(--r-card);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-sm);
   overflow: visible;      /* 讓卡片可依內容撐高，不截斷 */
   transition: border-color 0.15s, background 0.15s;
@@ -4472,10 +4475,10 @@
 /* ── #7 01_Global 可折疊 section ── */
 .cfg-section-collapsible {
   /* 繼承 .cfg-section 大部分樣式,但 details 元素需要重新宣告 */
-  background: var(--glass-1);
-  border: 1px solid var(--glass-brd);
-  border-radius: var(--r-card);
-  margin-bottom: 14px;
+  background: var(--glass-2);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -4501,7 +4504,7 @@
   transform: rotate(90deg);
 }
 .cfg-section-collapsible[open] .cfg-section-summary {
-  border-bottom: 1px dashed var(--divider);
+  border-bottom: 0.5px solid var(--glass-edge);
 }
 .cfg-section-summary:hover {
   background: var(--glass-1);
@@ -10146,11 +10149,11 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
    ============================================================ */
 .cfg-bonus-add-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .cfg-bonus-card {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   padding: 12px 14px;
-  border-radius: var(--r-card);
+  border-radius: var(--r-md);
   background: var(--glass-2);
-  border: 1px solid var(--glass-brd);
+  border: 0.5px solid var(--glass-edge);
   box-shadow: var(--shadow-sm);
 }
 .cfg-bonus-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -10520,3 +10523,151 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* 暗色:prize-row 邊框與既有 sym-edit-section 一致(glass-brd 已隨主題切換) */
 :root[data-theme="dark"] .sym-prize-row { background: rgba(255,255,255,0.02); }
+
+/* ============================================================
+   v7.9 — 桌面分頁列收合 / hover 浮層展開 / 釘選常駐
+   （行動版 ≤767 抽屜邏輯在 glass-overrides.css,不受此影響）
+   ============================================================ */
+@media (min-width: 768px) {
+  /* cfg-body 為 hover 浮層的定位錨點(本就 position:relative) */
+
+  /* 桌面收合態流佔位:固定 56px,撐住版面;hover 浮層 absolute 化時內容不位移 */
+  .cfg-tabs-spacer {
+    display: block;
+    flex-shrink: 0;
+    width: 56px;
+    align-self: stretch;
+  }
+  .cfg-tabs-spacer.cfg-rail-pinned { display: none; }   /* 釘選時不需佔位(rail 本身在流裡) */
+
+  /* 收合態(未釘選)= 永遠 absolute 浮層,寬 56px;不參與流(由 spacer 佔位)。
+     → hover-in/out 都只改 width,內容區完全不位移。 */
+  .cfg-tabs:not(.cfg-rail-pinned) {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 56px;
+    z-index: 40;
+    overflow: hidden;
+    transition: width 0.16s cubic-bezier(0.4,0,0.2,1), box-shadow 0.16s ease;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-text,
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group-label,
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group-icon,
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-sheet,
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tabrail-toggle-label {
+    opacity: 0;
+    width: 0;
+    pointer-events: none;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab {
+    justify-content: center;
+    padding: 8px 6px;
+  }
+  /* 收合態:群組標頭整列收成一條橫槓(不顯示「基礎設定 / 權重表」等文字) */
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group-header {
+    height: 1px;
+    min-height: 0;
+    padding: 0;
+    margin: 8px 8px;
+    background: var(--glass-edge);
+    overflow: hidden;
+  }
+  /* 第一個群組標頭不需上方橫槓(避免頂部多一條) */
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group:first-of-type .cfg-tab-group-header {
+    display: none;
+  }
+  /* 收合態徽章/小點不顯示(窄條塞不下) */
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group-dirty-count { display: none; }
+
+  /* hover → 浮層展開到 220px(仍 absolute、不影響流) */
+  .cfg-tabs:not(.cfg-rail-pinned):hover {
+    width: 220px;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg, 4px 0 24px rgba(20,28,46,0.18));
+    border-right: 1px solid var(--glass-edge);
+  }
+  /* 浮層展開時還原文字/標籤/群組標頭 */
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-text,
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-label,
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-icon,
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-sheet,
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tabrail-toggle-label {
+    opacity: 1;
+    width: auto;
+    pointer-events: auto;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-header {
+    height: auto;
+    min-height: 0;
+    padding: 0 4px;
+    margin: 0 0 4px;
+    background: transparent;
+    display: flex;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group:first-of-type .cfg-tab-group-header {
+    display: flex;
+  }
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-dirty-count { display: inline-flex; }
+
+  /* hover 浮層出現時,內容區蓋一層淡暗遮罩(僅視覺,不吃事件) */
+  .cfg-body::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(20,28,46,0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease;
+    z-index: 30;   /* 內容之上、浮層(z-index:40)之下 */
+  }
+  .cfg-body:has(.cfg-tabs:not(.cfg-rail-pinned):hover)::after {
+    opacity: 1;
+  }
+
+  /* 釘選態 = 常駐展開(正常流,推開內容 → 點擊跳板) */
+  .cfg-tabs.cfg-rail-pinned {
+    width: 220px;
+    transition: width 0.18s cubic-bezier(0.4,0,0.2,1);
+  }
+  @media (max-width: 1100px) {
+    .cfg-tabs.cfg-rail-pinned { width: 188px; }
+  }
+
+  /* ── 收合切換鈕(桌面樣式;原本只有行動版有樣式) ── */
+  .cfg-tabrail-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    border: 0.5px solid var(--glass-edge);
+    border-radius: 9px;
+    background: var(--glass-2);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  }
+  .cfg-tabrail-toggle:hover {
+    background: var(--input-focus);
+    border-color: var(--input-focus-brd);
+    color: var(--text);
+  }
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tabrail-toggle {
+    justify-content: center;
+    padding: 7px 6px;
+  }
+  .cfg-tabrail-toggle-icon { font-size: 14px; line-height: 1; flex-shrink: 0; }
+}
+/* 行動版/平板:spacer 不存在於流(行動版分頁列是抽屜) */
+@media (max-width: 767px) {
+  .cfg-tabs-spacer { display: none; }
+}
