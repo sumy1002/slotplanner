@@ -45,8 +45,8 @@
 }
 
 /* 暗色主題:覆寫 :root 變數
-   v4.2:霧藍×陶土橘 暗色版本
-   背景深藍灰底,Accent 提亮為淺陶土橘 */
+   v7.0 Clean(原 v4.2「霧藍×陶土橘」已於 v7.5-C2/C3 改版)
+   背景深石板灰底,Accent 對齊靛紫(降飽和提亮:色相 129,134,222 / fill #b4bcf2 / 文字 #c7d2fe) */
 :root[data-theme="dark"] {
   /* 主背景:深石板灰(v7.0 Clean)*/
   --bg: #0f1419;
@@ -149,7 +149,7 @@
   --divider: rgba(255,255,255,0.08);
 }
 
-/* 暗色背景漸層 — v4.2 深藍灰,帶霧藍+陶土橘光球 */
+/* 暗色背景 — v7.0 Clean:純深石板灰(原 v4.2 霧藍+陶土橘光球已取消,見 ::before background:none) */
 :root[data-theme="dark"] body {
   background: var(--bg) !important;
   color: var(--text);

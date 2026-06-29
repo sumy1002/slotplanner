@@ -1,14 +1,17 @@
 /* ============================================================
-   theme.css — v4.0 iOS Liquid Glass
-   全站樣式 + 設計 token (白灰玻璃 / 背景帶柔色光暈)
-   
-   重點變更 v4.0:
-   - 新增「玻璃層級系統」(--glass-1..5)
-   - 新增「模糊階梯」(--blur-thin/md/thick/overlay,含 saturate)
-   - 新增「iOS inset highlight」(--inset-glass)
-   - 圓角收斂為 5 階(--r-xs..xl)+ pill
-   - Motion token(--t-fast/base/slow,iOS spring 曲線)
-   - 舊 token 全部保留並 alias,既有頁面零 break
+   theme.css — v7.0 Clean(原 v4.0 iOS Liquid Glass 已改版)
+   全站樣式 + 設計 token (冷調白灰純色底 / 實色面板 / 單一靛紫主色)
+
+   歷史:本檔起於 v4.0 的「iOS Liquid Glass」(白灰玻璃 + 背景柔色光暈 +
+   模糊階梯 + inset 高光),自 v7.0 改為 Clean — 取消模糊/鏡面/inset 高光、
+   背景純色化、玻璃層級改實色中性面、主按鈕實色靛紫。
+   token 名稱保留並 alias(--glass-1..5 等),既有頁面零 break。
+
+   現況重點(v7.0 Clean):
+   - 表面層級(--glass-1..5)= 實色中性面,非半透明玻璃
+   - 背景純色(--bg 系全部同色),無漸層光球
+   - Accent = 靛紫(克制主色);圓角 5 階(--r-xs..xl)+ pill;Motion token 保留
+   - 舊 token 全部保留並 alias
    ============================================================ */
 
 :root {
