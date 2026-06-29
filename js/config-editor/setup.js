@@ -64,7 +64,7 @@
   //  setup function — 原 config-editor.js 內 setup(props, { emit }) 的內容
   // ──────────────────────────────────────────────────────────
   SP.ConfigEditor.setup = function (props, { emit }) {
-      const active   = ref('global');
+      const active   = ref('rules');  // v7.10:01_Global 已併入規則頁;落地改規則頁(模式子分頁)
       const g        = reactive(loadGlobal());
 
       // ──────────────────────────────────────────────────────────
@@ -166,6 +166,41 @@
       const selectedKind = ref('puzzle');  // 'puzzle' | 'discard'
       // 左欄過濾器:全部 / 拼圖 / HARD / SOFT
       const rulesListFilter = ref('all');  // 'all' | 'puzzle' | 'hard' | 'soft'
+      // v7.10:規則頁總入口四子分類(全域/模式/盤面圖示規則/通用規則)。純前端 UI 狀態,非持久化。
+      //   'global' = 賠付模型 + 全域參數(原 01_Global) / 'modes' = 模式定義 + 關聯 Bonus(原 11/17)
+      //   'board'  = 盤面/圖示相關 puzzle 規則 / 'general' = 通用 puzzle + 棄牌規則
+      const rulesSection = ref('modes');  // 進規則頁預設停在「模式」(先定義模式的流程優先)
+      function setRulesSection(s) { rulesSection.value = s; }
+      // v7.10:規則母項在分頁列的子項展開狀態。
+      //   預設行為:使用者目前在規則的某個子分頁時,每次「分頁列重新展開」(hover 浮出 / 釘選切換)
+      //   母項自動呈展開。使用者手動收合則覆寫,直到下次「重新展開」事件才重置(收合態 hover);
+      //   釘選態無自動重置事件,手動展開/收合持久,由使用者點母項控制。
+      const rulesNavExpanded = ref(true);
+      const rulesNavManual = ref(false);   // 使用者是否手動覆寫過(本次展開週期內)
+      const isOnRules = () => active.value === 'rules';
+      // 母項點擊:切到規則頁(預設模式子分頁)+ 切換子項展開(手動覆寫)
+      function onRulesParentClick() {
+        if (active.value !== 'rules') { active.value = 'rules'; rulesSection.value = 'modes'; }
+        rulesNavExpanded.value = !rulesNavExpanded.value;
+        rulesNavManual.value = true;        // 標記手動覆寫
+      }
+      // 點子項:切到規則頁對應子分頁
+      function gotoRulesSub(section) {
+        active.value = 'rules';
+        rulesSection.value = section;
+        cfgTabRailCollapsed.value = true;   // 與其他 tab 點擊一致:行動版點完收抽屜
+      }
+      // 「分頁列重新展開」事件(收合態 hover 浮出 / 釘選切換):重置手動覆寫,回預設(在規則子分頁就展開)
+      function onRailReopen() {
+        rulesNavManual.value = false;
+        rulesNavExpanded.value = isOnRules();
+      }
+      // v7.10:導覽相容墊片 — 舊程式碼會把 active 設成 'global'(01_Global 已併入規則頁)。
+      //   一律改導向規則頁的「模式」子分頁(賠付橫幅 + 模式定義都在那)。其餘 tab 原樣通過。
+      function navTo(tabId) {
+        if (tabId === 'global') { active.value = 'rules'; rulesSection.value = 'modes'; return; }
+        active.value = tabId;
+      }
       // 新增按鈕的下拉選單開關
       const rulesAddMenuOpen = ref(false);
       // 合併列表(供左欄渲染),含 puzzle + discard,套用 filter
@@ -5585,8 +5620,13 @@
         if (pinnedTest.value) return;  // 已 pinned 就不動
         const id = active.value;
         if (id === 'rules') {
-          // v3.1:合併 tab。根據當前 selectedKind 決定 pin 哪一種
-          if (selectedKind.value === 'discard' && discards.length > 0) {
+          // v7.10:規則頁子分頁。模式子分頁 → pin 模式條件;規則子分頁 → pin 規則/棄牌。
+          if (rulesSection.value === 'modes') {
+            if (modes.length > 0) {
+              const m = modes.find(x => x.trigger_condition) || modes[0];
+              if (m && m.mode) pinTest('mode', m.mode, m.mode, false);
+            }
+          } else if (selectedKind.value === 'discard' && discards.length > 0) {
             const d = discards[selectedDiscardIdx.value] || discards[0];
             if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
           } else if (rules.length > 0) {
@@ -5597,24 +5637,21 @@
             const d = discards[0];
             if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
           }
-        } else if (id === 'global' && modes.length > 0) {
-          // v3.1:模式定義已合進 global tab,在這裡 pin 模式條件
-          // 跳過 NG(通常無條件),pin 第一個有條件的模式
-          const m = modes.find(x => x.trigger_condition) || modes[0];
-          if (m && m.mode) pinTest('mode', m.mode, m.mode, false);
         }
       }
-      // 監看 active 切換,自動 pin
+      // 監看 active / 子分頁切換,自動 pin
       watch(active, () => {
-        // 切到「規則」tab 或 global tab(含模式定義)時自動 pin
-        if (active.value === 'rules' || active.value === 'global') {
+        // v7.10:規則頁(含模式子分頁)時自動 pin
+        if (active.value === 'rules') {
           _autoPinIfNeeded();
         }
       });
-      // 判斷目前 active 是否為 puzzle tab(含 global 因為內含模式定義、含合併後的 rules)
+      watch(rulesSection, () => {
+        if (active.value === 'rules') _autoPinIfNeeded();
+      });
+      // 判斷目前 active 是否為 puzzle tab(v7.10:global 已併入 rules)
       const isInPuzzleTab = computed(() =>
-        active.value === 'rules' ||
-        active.value === 'global'
+        active.value === 'rules'
       );
 
       // ──────────────────────────────────────────────────────
@@ -7129,7 +7166,7 @@
       function executeSearchResult(item) {
         if (!item) return;
         // 切到對應 tab
-        if (item.tab) active.value = item.tab;
+        if (item.tab) navTo(item.tab);
         closeSearch();
         emit('status', { type: 'ok', msg: `→ 跳至 ${item.categoryLabel}:${item.title}` });
       }
@@ -7203,8 +7240,8 @@
       const dirtyTabs = reactive({});  // { tabId: true }
       // label → tabId 對應(scheduleSave 的中文 label 對到 TABS id)
       const LABEL_TO_TAB = {
-        '全域設定':   'global',
-        '模式設定':   'global',           // v3.1:模式設定已合進 01_Global,共用同一個 dirty 旗標
+        '全域設定':   'rules',            // v7.10:01_Global 併入規則頁,dirty 旗標掛規則 tab
+        '模式設定':   'rules',            // v7.10:模式定義在規則頁「模式」子分頁
         '盤面結構':   'layout',
         '自由副盤':   'layout',           // v4.7:panel 歸 layout tab
         '符號集':     'layout',           // v4.7:符號集歸 layout tab
@@ -7218,7 +7255,7 @@
         '腳本規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '投注結構':   'bet_config',         // v5.3:14_Bet_Config 獨立分頁
         '真實輪帶':   'reel_strips',        // v6.0-b:04b_Reel_Strips
-        'Bonus 小遊戲': 'bonus_games',       // v6.0-c:17_Bonus_Games
+        'Bonus 小遊戲': 'rules',           // v7.10:bonus 入口關閉,dirty 暫掛規則 tab(後續移除)
         '倍數系統':   'multipliers',        // v5.4:15_Multipliers
         '金幣面額':   'coin_values',        // v5.4:16_Coin_Values
         'JP 定義':    'jackpots',         // v6.2 #0:JP 已獨立分頁
@@ -7587,10 +7624,10 @@
 
         // ─── 11_Mode_Config(現已合進 01_Global) ───
         if (validModeSet.size === 0) {
-          add('error', 'global', '尚未定義任何模式,04/05/08 權重表都無法使用');
+          add('error', 'rules', '尚未定義任何模式,04/05/08 權重表都無法使用');
         }
         for (const [nm, c] of Object.entries(modeCount)) {
-          if (c > 1) add('error', 'global', `模式名稱重複:${nm}(出現 ${c} 次)`);
+          if (c > 1) add('error', 'rules', `模式名稱重複:${nm}(出現 ${c} 次)`);
         }
 
         // ─── 04_Reel_Weights ───
@@ -7806,7 +7843,7 @@
         validationPanelOpen.value = !validationPanelOpen.value;
       }
       function goToTabFromValidation(tabId) {
-        active.value = tabId;
+        navTo(tabId);
         validationPanelOpen.value = false;
       }
 
@@ -7862,7 +7899,7 @@
         }
       }
       function goToTabFromChanges(tabId) {
-        active.value = tabId;
+        navTo(tabId);
         changesPanelOpen.value = false;
       }
       // 「將當前狀態定為新基準」— 給使用者清空變更列表的選項
@@ -7948,14 +7985,23 @@
           for (const m of modeNames.value) ensureComboWeightsForMode(m);
           emit('status', { type: 'ok', msg: '已重設連爆權重為均勻 100' });
         } else if (id === 'rules') {
-          // v3.1:09 + 10 已合併;rules 同時涵蓋拼圖規則與棄牌規則
-          if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${rules.length} 條拼圖規則(含拼圖建構器暫存與 raw/builder 切換狀態)\n· 目前 ${discards.length} 條棄牌規則(含拼圖暫存)\n\n所有規則會回到預設範本,此動作不可復原。`)) return;
-          Object.keys(builderRowsMap).forEach(k => delete builderRowsMap[k]);
-          Object.keys(ruleEditMode).forEach(k => delete ruleEditMode[k]);
-          Object.keys(ruleParseError).forEach(k => delete ruleParseError[k]);
-          rules.splice(0, rules.length, ...DEFAULT_RULES.map(r => ({ ...r })));
-          discards.splice(0, discards.length, ...DEFAULT_DISCARDS.map(d => ({ ...d })));
-          emit('status', { type: 'ok', msg: '已重設拼圖規則 + 棄牌規則為預設值' });
+          // v7.10:規則頁子分頁。模式子分頁 → 重設賠付模型 + 模式定義(原 global);
+          //   盤面/通用子分頁 → 重設拼圖 + 棄牌規則。
+          if (rulesSection.value === 'modes') {
+            if (!confirm(`重設「模式」子分頁?\n\n即將清除:\n· 賠付模型(pay_type、ways_direction、cluster_min_size)\n· 模式定義(目前 ${modes.length} 個模式:${modes.map(m => m.mode).filter(Boolean).join(', ') || '無'})\n· 各模式的 trigger_condition 拼圖暫存\n· 外部模擬器參數(已不在 UI,將一併回到預設值寫入匯出)\n\n所有欄位將回到預設值,此動作不可復原。`)) return;
+            Object.assign(g, DEFAULT_GLOBAL);
+            modes.splice(0, modes.length, ...DEFAULT_MODES.map(m => ({ ...m })));
+            emit('status', { type: 'ok', msg: '已重設賠付模型 + 模式定義為預設值' });
+          } else {
+            // v3.1:09 + 10 已合併;rules 同時涵蓋拼圖規則與棄牌規則
+            if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${rules.length} 條拼圖規則(含拼圖建構器暫存與 raw/builder 切換狀態)\n· 目前 ${discards.length} 條棄牌規則(含拼圖暫存)\n\n所有規則會回到預設範本,此動作不可復原。`)) return;
+            Object.keys(builderRowsMap).forEach(k => delete builderRowsMap[k]);
+            Object.keys(ruleEditMode).forEach(k => delete ruleEditMode[k]);
+            Object.keys(ruleParseError).forEach(k => delete ruleParseError[k]);
+            rules.splice(0, rules.length, ...DEFAULT_RULES.map(r => ({ ...r })));
+            discards.splice(0, discards.length, ...DEFAULT_DISCARDS.map(d => ({ ...d })));
+            emit('status', { type: 'ok', msg: '已重設拼圖規則 + 棄牌規則為預設值' });
+          }
         } else if (id === 'symbols') {
           emit('status', { type: 'wait', msg: '請使用上方「↺ 重設」按鈕(在符號清單卡片內)' });
         } else {
@@ -8459,6 +8505,8 @@
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用
         selectedKind, rulesListFilter, rulesAddMenuOpen,
+        rulesSection, setRulesSection,
+        rulesNavExpanded, onRulesParentClick, gotoRulesSub, onRailReopen,
         addRuleFromMenu,
         // ── #17 規則拖曳排序 ──
         rulesDragState, rulesAutoPriority,

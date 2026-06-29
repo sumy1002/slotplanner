@@ -340,10 +340,11 @@
     <!-- ── 左:分組分頁列 ── -->
     <!-- v7.9.2:桌面收合態的流佔位(56px),讓 hover 浮層 absolute 化時內容不位移 -->
     <div class="cfg-tabs-spacer" :class="{ 'cfg-rail-pinned': cfgRailPinned }"></div>
-    <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed, 'cfg-rail-pinned': cfgRailPinned }">
+    <div class="cfg-tabs" :class="{ 'cfg-tabs-collapsed': cfgTabRailCollapsed, 'cfg-rail-pinned': cfgRailPinned }"
+         @mouseenter="onRailReopen()">
       <!-- v6.1:收合切換 — 行動版開關抽屜;桌面切換常駐展開/收合(hover 浮層) -->
       <button class="cfg-tabrail-toggle"
-              @click="cfgTabRailCollapsed = !cfgTabRailCollapsed; toggleCfgRailPinned()"
+              @click="cfgTabRailCollapsed = !cfgTabRailCollapsed; toggleCfgRailPinned(); onRailReopen()"
               :title="cfgRailPinned ? '收合分頁列（移入時暫時展開）' : '釘選展開分頁列'">
         <span class="cfg-tabrail-toggle-icon">{{ cfgRailPinned ? '«' : '»' }}</span>
         <span class="cfg-tabrail-toggle-label">{{ cfgRailPinned ? '收合分頁列' : '釘選展開' }}</span>
@@ -356,14 +357,15 @@
                 class="cfg-tab-group-dirty-count"
                 :title="groupDirtyCount(grp) + ' 個分頁有未匯出的變動'">{{ groupDirtyCount(grp) }}</span>
         </div>
-        <div v-for="t in grp.tabs" :key="t.id"
-             class="cfg-tab"
-             :class="{ active: active === t.id, 'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
-             @click="active = t.id; cfgTabRailCollapsed = true"
+        <template v-for="t in grp.tabs" :key="t.id">
+        <div class="cfg-tab"
+             :class="{ active: active === t.id && !(t.id === 'rules'), 'cfg-tab-rules-parent': t.id === 'rules',
+                       'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
+             @click="t.id === 'rules' ? onRulesParentClick() : (active = t.id, cfgTabRailCollapsed = true)"
              :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + ' · ' + t.sheet)">
           <span class="cfg-tab-icon">{{ t.icon }}</span>
           <div class="cfg-tab-text">
-            <div class="cfg-tab-name">{{ t.name }}<span v-if="tabNotApplicable(t.id)" class="cfg-tab-na-lock" title="目前模式不適用">🔒</span></div>
+            <div class="cfg-tab-name">{{ t.name }}<span v-if="tabNotApplicable(t.id)" class="cfg-tab-na-lock" title="目前模式不適用">🔒</span><span v-if="t.id === 'rules'" class="cfg-tab-rules-caret">{{ rulesNavExpanded ? '▾' : '▸' }}</span></div>
             <div class="cfg-tab-sheet">{{ t.sheet }}</div>
           </div>
           <!-- v3.4 / B5:tab 上的問題徽章(err 紅 / warn 黃,優先 err)-->
@@ -375,6 +377,25 @@
                 :title="'此分頁有警告'">!</span>
           <span v-if="dirtyTabs[t.id]" class="cfg-tab-dirty-dot" title="此分頁有未匯出的變動"></span>
         </div>
+        <!-- v7.10:規則母項的子分頁(縮排掛在分頁列;常駐顯示,母項展開時可見)-->
+        <template v-if="t.id === 'rules' && rulesNavExpanded">
+          <div class="cfg-tab cfg-tab-sub" :class="{ active: active === 'rules' && rulesSection === 'modes' }"
+               @click="gotoRulesSub('modes')" title="模式定義 + 各模式玩法">
+            <span class="cfg-tab-icon">🎮</span>
+            <div class="cfg-tab-text"><div class="cfg-tab-name">模式</div></div>
+          </div>
+          <div class="cfg-tab cfg-tab-sub" :class="{ active: active === 'rules' && rulesSection === 'board' }"
+               @click="gotoRulesSub('board')" title="盤面 / 圖示相關規則">
+            <span class="cfg-tab-icon">🎰</span>
+            <div class="cfg-tab-text"><div class="cfg-tab-name">盤面 / 圖示規則</div></div>
+          </div>
+          <div class="cfg-tab cfg-tab-sub" :class="{ active: active === 'rules' && rulesSection === 'general' }"
+               @click="gotoRulesSub('general')" title="通用規則">
+            <span class="cfg-tab-icon">🧩</span>
+            <div class="cfg-tab-text"><div class="cfg-tab-name">通用規則</div></div>
+          </div>
+        </template>
+        </template>
       </div>
 
       <!-- 📄 文件群組（不在 TABS 內：跨分頁輸出步驟，不對應 A.xlsx sheet）-->
@@ -439,369 +460,8 @@
       </div>
 
       <!-- ═══════ 01_Global 全域設定(已實作)═══════ -->
-      <div v-if="active === 'global'" class="cfg-form">
-        <div class="cfg-form-header">
-          <div class="cfg-form-title">⚙️ 01_Global · 全域設定</div>
-          <div class="cfg-form-sub">控制整個模擬的核心參數;所有其他分頁的根。修改後自動儲存於本機。</div>
-        </div>
-
-        <div class="cfg-global-grid">
-        <div class="cfg-global-col cfg-global-col-main">
-
-
-        <!-- 區塊 2:賠付模型(可折疊,預設展開)-->
-        <details class="cfg-section cfg-section-collapsible" open>
-          <summary class="cfg-section-summary">
-            <span class="cfg-section-title cfg-section-title-inline">賠付模型</span>
-            <span class="cfg-section-summary-preview">{{ activePayModel }}<span v-if="scanDirApplicable"> · {{ scanDirLabel(curScanDir) }}</span><span v-if="g.pay_type==='CLUSTER'"> · min {{ g.cluster_min_size }}</span></span>
-          </summary>
-          <div class="cfg-section-body">
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              賠付類型 <span class="cfg-key">pay_type</span>
-            </label>
-            <div class="cfg-chip-row">
-              <button v-for="m in PAY_MODELS" :key="m.id"
-                      class="cfg-chip"
-                      :class="{ active: activePayModel === m.id }"
-                      :title="m.desc"
-                      @click="selectPayModel(m.id)">{{ m.label }}</button>
-            </div>
-            <div class="cfg-hint">Line = 中獎線 / WAYS = 全路徑 / MEGAWAYS = 全路徑 + 每輪列數可變 / Grid = 任意位置(散佈) / Cluster = 同符相鄰群</div>
-          </div>
-
-          <div class="cfg-field" v-if="scanDirApplicable">
-            <label class="cfg-label">
-              計分方向 <span class="cfg-key">direction</span>
-            </label>
-            <div class="cfg-chip-row">
-              <button v-for="d in WAYS_DIRS" :key="d"
-                      class="cfg-chip"
-                      :class="{ active: curScanDir === d }"
-                      @click="setScanDir(d)">{{ scanDirLabel(d) }}</button>
-            </div>
-            <div class="cfg-hint">L→R = 左到右 / L←R = 右到左 / 雙向 = 兩端都算。此為全域唯一的計分方向,同時套用到中獎線與全路徑(WAYS / Megaways)。</div>
-            <!-- #8:雙向計分時才出現「最長連線僅計分一次」 -->
-            <label class="cfg-checkbox-row" v-if="curScanDir === 'BOTH'" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-              <input type="checkbox" v-model="g.longest_line_once">
-              <span>最長連線僅計分一次 <span class="cfg-hint" style="display:inline;">（雙向時,同一條最長連線不重複左右各算一次）</span></span>
-            </label>
-          </div>
-
-          <div class="cfg-field" v-if="g.pay_type === 'CLUSTER'">
-            <label class="cfg-label">
-              Cluster 最小群組 <span class="cfg-key">cluster_min_size</span>
-            </label>
-            <div class="cfg-stepper">
-              <button class="cfg-stepper-btn"
-                      :disabled="(g.cluster_min_size || 0) <= 2"
-                      @click="g.cluster_min_size = Math.max(2, (g.cluster_min_size || 5) - 1)">−</button>
-              <span class="cfg-stepper-val">{{ g.cluster_min_size }}</span>
-              <button class="cfg-stepper-btn"
-                      :disabled="(g.cluster_min_size || 0) >= 20"
-                      @click="g.cluster_min_size = Math.min(20, (g.cluster_min_size || 5) + 1)">+</button>
-            </div>
-            <div class="cfg-hint">CLUSTER Pay 達多少個相連同符算中獎(2–20)</div>
-          </div>
-          </div>
-        </details>
-
-        <!-- v4.9-b:原「區塊 4 進階參數」與「區塊 5 模擬參數」已自 UI 移除 —
-             模擬改由外部程式執行(simulation_count / random_seed / output_prefix /
-             max_chain_depth / max_chain_per_rule / big_win_thresholds / dead_spin_buckets)。
-             LS 與 A.xlsx 匯出契約「不變」:aconfig-xlsx 仍照 LS 既有值(或預設值)寫入
-             01_Global,外部模擬器讀到的欄位與舊版完全一致。 -->
-        <div class="cfg-section cfg-section-extparams-note">
-          <div class="cfg-extparams-note">
-            <span class="cfg-extparams-note-icon">ℹ️</span>
-            <span>模擬執行參數(局數 / 種子 / 遞迴護欄 / 統計分桶)已改由<strong>外部模擬器</strong>管理;
-            匯出 A.xlsx 時仍會以既定值寫入 01_Global,設定檔契約不變。</span>
-          </div>
-        </div>
-
-        <!-- 區塊 6:JSON 預覽(除錯用) -->
-        <details class="cfg-debug" @toggle="dbgOpen.global = $event.target.open">
-          <summary>🔍 預覽目前 JSON</summary>
-          <pre v-if="dbgOpen.global" class="cfg-debug-pre">{{ debugJson }}</pre>
-        </details>
-        </div>
-
-        <div class="cfg-global-col cfg-global-col-modes">
-          <!-- 區塊 3:模式定義(v3.1 合併自 11_Mode_Config) -->
-        <div class="cfg-section">
-          <div class="cfg-section-title">模式定義</div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">
-              起始模式 <span class="cfg-key">starting_mode</span>
-            </label>
-            <div v-if="modeNames.length > 0" class="cfg-chip-row">
-              <button v-for="m in modeNames" :key="m"
-                      class="cfg-chip"
-                      :class="{ active: g.starting_mode === m }"
-                      @click="g.starting_mode = m">{{ m }}</button>
-            </div>
-            <input v-else class="input input-w-id" type="text" v-model.trim="g.starting_mode" placeholder="NG">
-            <div v-if="modeNames.length > 0 && !modeNames.includes(g.starting_mode)" class="cfg-warn">
-              ⚠ 「{{ g.starting_mode }}」不在下方模式清單中,模擬將會失敗
-            </div>
-            <div class="cfg-hint">
-              選擇模擬開局時的模式;從下方「模式清單」選一個
-            </div>
-          </div>
-
-          <!-- ── 模式清單(從 11_Mode_Config 整段搬過來)── -->
-          <div class="cfg-modes-inline-hint">
-            模式清單(對應 A.xlsx 的 11_Mode_Config 分頁,匯出時仍會獨立成一張分頁)
-          </div>
-          <div class="cfg-modes-list">
-            <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
-                 :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode,
-                           'is-collapsed': !isModeExpanded(m) }">
-
-              <!-- v5.0-d:摘要列(預設收合;點擊展開編輯)-->
-              <div class="cfg-mode-summary" @click="toggleModeExpanded(m)"
-                   :title="isModeExpanded(m) ? '點擊收合' : '點擊展開編輯'">
-                <span class="cfg-mode-summary-caret">{{ isModeExpanded(m) ? '▾' : '▸' }}</span>
-                <span class="cfg-mode-summary-name"
-                      :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }">
-                  {{ m.mode || '(未命名)' }}</span>
-                <span v-if="g.starting_mode === m.mode && m.mode" class="cfg-mode-summary-badge start" title="起始模式">起始</span>
-                <span class="cfg-mode-summary-meta">局數 {{ m.spin_count }}</span>
-                <span class="cfg-mode-summary-trigger" :title="m.trigger_condition || '無觸發條件'">
-                  {{ m.trigger_condition || '無條件' }}</span>
-                <span v-if="!m.mode.trim() || duplicateNames.has(m.mode)" class="cfg-mode-summary-warn" title="名稱為空或重複">⚠</span>
-                <span class="cfg-mode-summary-spacer"></span>
-                <button class="cfg-mode-delete-btn"
-                        @click.stop="removeMode(idx)"
-                        :disabled="modes.length <= 1"
-                        :title="modes.length <= 1 ? '至少需要保留一個模式' : '刪除此模式'">✕</button>
-              </div>
-
-              <div v-show="isModeExpanded(m)" class="cfg-mode-card-expand">
-
-              <!-- 卡片頂部:模式名稱 -->
-              <div class="cfg-mode-card-header">
-                <div class="cfg-mode-name-wrap">
-                  <label class="cfg-mode-name-label">模式名稱</label>
-                  <input class="input cfg-mode-name-input input-w-id"
-                         :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }"
-                         :value="m.mode"
-                         @focus="$event.target.dataset.oldName = m.mode"
-                         @change="renameMode(idx, $event.target.dataset.oldName, $event.target.value)"
-                         @keyup.enter="$event.target.blur()"
-                         placeholder="NG"
-                         maxlength="20">
-                </div>
-              </div>
-
-              <div v-if="!m.mode.trim()" class="cfg-warn cfg-warn-inline">⚠ 模式名稱不能為空</div>
-              <div v-else-if="duplicateNames.has(m.mode)" class="cfg-warn cfg-warn-inline">
-                ⚠ 模式名稱「{{ m.mode }}」與其他模式重複
-              </div>
-
-              <!-- 卡片內容：壓縮 3 欄 grid + 可折疊的觸發條件 -->
-              <div class="cfg-mode-card-body">
-
-                <div class="cfg-mode-grid3">
-                  <div class="cfg-field cfg-field-compact">
-                    <label class="cfg-label">
-                      局數 <span class="cfg-key">spin_count</span>
-                    </label>
-                    <input class="input input-center input-w-num" type="number" min="0" v-model.number="m.spin_count">
-                    <div class="cfg-hint">0 = 無限 / FG 通常 10–15</div>
-                  </div>
-
-                  <div class="cfg-field cfg-field-compact">
-                    <label class="cfg-label">
-                      繼承全域 <span class="cfg-key">inherit_globals</span>
-                    </label>
-                    <div class="cfg-chip-row">
-                      <button class="cfg-chip" :class="{ active: m.inherit_globals === false }"
-                              @click="m.inherit_globals = false">否</button>
-                      <button class="cfg-chip" :class="{ active: m.inherit_globals === true }"
-                              @click="m.inherit_globals = true">是</button>
-                    </div>
-                  </div>
-
-                  <div class="cfg-field cfg-field-compact">
-                    <label class="cfg-label">備註 <span class="cfg-key">notes</span></label>
-                    <input class="input" type="text" v-model.trim="m.notes" placeholder="10 局免費">
-                  </div>
-                </div>
-
-                <!-- trigger_condition：可折疊 -->
-                <details class="cfg-mode-trigger-details">
-                  <summary class="cfg-mode-trigger-summary">
-                    🧩 觸發條件 <span class="cfg-key">trigger_condition</span>
-                    <span class="cfg-mode-trigger-preview" v-if="m.trigger_condition">{{ m.trigger_condition }}</span>
-                    <span class="cfg-mode-trigger-empty" v-else>(空 = 無條件，NG 用)</span>
-                  </summary>
-                  <div class="cfg-puzzle-section" style="margin-top:8px;">
-                    <span style="display:none">{{ modeCond.ensure(m), '' }}</span>
-                    <div class="cfg-puzzle-header">
-                      <span class="cfg-puzzle-title">🧩 觸發條件 <span class="cfg-key">trigger_condition</span></span>
-                      <div class="cfg-puzzle-mode-toggle">
-                        <button class="cfg-chip cfg-chip-sm"
-                                :class="{ active: (condBuilderState.mode[modeCond.key(m)] || 'builder') !== 'raw' }"
-                                @click="modeCond.setMode(m, 'builder')">🧩 拼圖</button>
-                        <button class="cfg-chip cfg-chip-sm"
-                                :class="{ active: condBuilderState.mode[modeCond.key(m)] === 'raw' }"
-                                @click="modeCond.setMode(m, 'raw')">⌨ 原始</button>
-                      </div>
-                    </div>
-
-                    <!-- 拼圖模式 -->
-                    <div v-if="(condBuilderState.mode[modeCond.key(m)] || 'builder') !== 'raw'" class="cfg-puzzle-body">
-                      <div v-if="!condBuilderState.rows[modeCond.key(m)] || condBuilderState.rows[modeCond.key(m)].length === 0"
-                           class="cfg-puzzle-empty">尚無條件;按下方按鈕新增第一片(NG 模式可留空)</div>
-
-                      <div v-else class="cfg-puzzle-rows">
-                        <template v-for="(row, ri) in condBuilderState.rows[modeCond.key(m)]" :key="ri">
-                          <div v-if="ri > 0" class="cfg-puzzle-combinator">
-                            <button class="cfg-chip cfg-chip-sm"
-                                    :class="{ active: row.combinator === 'AND' }"
-                                    @click="row.combinator = 'AND'; modeCond.rebuild(m)">AND</button>
-                            <button class="cfg-chip cfg-chip-sm"
-                                    :class="{ active: row.combinator === 'OR' }"
-                                    @click="row.combinator = 'OR'; modeCond.rebuild(m)">OR</button>
-                          </div>
-
-                          <div class="cfg-puzzle-row">
-                            <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
-                              <label class="cfg-puzzle-piece-label">變數</label>
-                              <select class="cfg-puzzle-select"
-                                      :value="row.category"
-                                      @change="modeCond.changeCat(m, ri, $event.target.value)">
-                                <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
-                              </select>
-                            </div>
-
-                            <div v-if="rowCategoryMeta(row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
-                              <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(row).subkeyHint }}</label>
-                              <select v-if="rowCategoryMeta(row).subkeySource === 'symbols' && symbolNames.length > 0"
-                                      class="cfg-puzzle-select"
-                                      v-model="row.subkey"
-                                      @change="modeCond.rebuild(m)">
-                                <option value="">(選擇)</option>
-                                <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
-                              </select>
-                              <input v-else
-                                     class="cfg-puzzle-input cfg-mono"
-                                     type="text"
-                                     v-model.trim="row.subkey"
-                                     @input="modeCond.rebuild(m)"
-                                     :placeholder="rowCategoryMeta(row).subkeyHint">
-                            </div>
-
-                            <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
-                              <label class="cfg-puzzle-piece-label">運算</label>
-                              <select class="cfg-puzzle-select cfg-puzzle-op"
-                                      v-model="row.op"
-                                      @change="modeCond.rebuild(m)">
-                                <option v-for="o in OP_TYPES" :key="o" :value="o">{{ o }}</option>
-                              </select>
-                            </div>
-
-                            <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
-                              <label class="cfg-puzzle-piece-label">值</label>
-                              <select v-if="rowCategoryMeta(row).valueType === 'mode' && modeNames.length > 0"
-                                      class="cfg-puzzle-select"
-                                      v-model="row.value"
-                                      @change="modeCond.rebuild(m)">
-                                <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
-                              </select>
-                              <input v-else-if="rowCategoryMeta(row).valueType === 'number'"
-                                     class="cfg-puzzle-input cfg-mono"
-                                     type="number" step="any"
-                                     v-model="row.value"
-                                     @input="modeCond.rebuild(m)"
-                                     placeholder="0">
-                              <input v-else
-                                     class="cfg-puzzle-input cfg-mono"
-                                     type="text"
-                                     v-model.trim="row.value"
-                                     @input="modeCond.rebuild(m)"
-                                     placeholder="值">
-                            </div>
-
-                            <button class="cfg-puzzle-row-del"
-                                    @click="modeCond.removeRow(m, ri)"
-                                    title="移除此片拼圖">✕</button>
-                          </div>
-                        </template>
-                      </div>
-
-                      <div class="cfg-puzzle-add">
-                        <button v-if="!condBuilderState.rows[modeCond.key(m)] || condBuilderState.rows[modeCond.key(m)].length === 0"
-                                class="cfg-mode-add-btn cfg-puzzle-add-btn"
-                                @click="modeCond.addRow(m, 'AND')">
-                          <span style="font-size: 14px;">+</span>
-                          <span>新增第一片條件</span>
-                        </button>
-                        <template v-else>
-                          <button class="cfg-puzzle-add-and" @click="modeCond.addRow(m, 'AND')">+ AND 條件</button>
-                          <button class="cfg-puzzle-add-or" @click="modeCond.addRow(m, 'OR')">+ OR 條件</button>
-                        </template>
-                      </div>
-
-                      <div class="cfg-puzzle-dsl">
-                        <span class="cfg-puzzle-dsl-label">生成的 DSL:</span>
-                        <code class="cfg-puzzle-dsl-code">{{ m.trigger_condition || '(空 = NG 用,無條件進入)' }}</code>
-                      </div>
-                    </div>
-
-                    <!-- 原始模式 -->
-                    <div v-else class="cfg-puzzle-body">
-                      <input class="input cfg-mono cfg-puzzle-raw-input"
-                             type="text"
-                             v-model.trim="m.trigger_condition"
-                             placeholder="留空表示無觸發條件(NG 用)">
-                      <div v-if="condBuilderState.error[modeCond.key(m)]" class="cfg-warn cfg-warn-inline">
-                        ⚠ {{ condBuilderState.error[modeCond.key(m)] }}
-                      </div>
-                    </div>
-                    <!-- ── #5 釘到 inspector ── -->
-                    <div class="cfg-puzzle-pin">
-                      <button class="cfg-puzzle-pin-btn"
-                              :class="{ active: pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode }"
-                              @click="pinTest('mode', m.mode, m.mode)"
-                              :disabled="!m.mode"
-                              title="把這個模式的 trigger 條件釘到右下角的 Test Inspector,即時看評估結果">
-                        <span>🧪</span>
-                        <span v-if="pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode">已釘住 — 看右下 inspector</span>
-                        <span v-else>釘到 Test Inspector</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="cfg-field cfg-field-compact" style="margin-top:8px;">
-                    <label class="cfg-label">
-                      進入時重置變數 <span class="cfg-key">on_enter_reset_vars</span>
-                    </label>
-                    <input class="input" type="text"
-                           v-model.trim="m.on_enter_reset_vars"
-                           placeholder="逗號分隔,例:fg_combo_count">
-                    <div class="cfg-hint">進入此模式時要歸零的 spin_locals 變數名</div>
-                  </div>
-                </details><!-- /trigger_condition details -->
-
-              </div>
-              </div><!-- /cfg-mode-card-expand (v5.0-d) -->
-            </div>
-
-            <button class="cfg-mode-add-btn" @click="addMode">
-              <span style="font-size: 16px;">+</span>
-              <span>新增模式</span>
-            </button>
-          </div>
-        </div>
-
-          <!-- v6.2 #0:JP 定義已移到獨立分頁(active === 'jackpots'),見下方 13_Jackpots panel -->
-        </div>
-              </div><!-- /cfg-global-flow -->
-      </div>
+      <!-- v7.10:01_Global 全域設定已併入規則頁(賠付橫幅 + 模式子分頁);此面板保留為隱藏 v-if 鏈頭,永不渲染。markup/handler/匯出皆保留於規則頁。 -->
+      <div v-if="active === 'global'" class="cfg-form"></div>
 
       <!-- ═══════ 13_Jackpots JP 彩金(v6.2 #0 獨立分頁)═══════ -->
       <div v-else-if="active === 'jackpots'" class="cfg-form">
@@ -3654,7 +3314,17 @@
 
       <!-- ═══════ 09_Puzzle_Rules 腳本規則 + Condition 拼圖建構器 ═══════ -->
       <!-- ═══════ 規則 tab(v3.1 合併 09_Puzzle_Rules + 10_Discard_Rules)═══════ -->
-      <div v-else-if="active === 'rules'" class="cfg-form" style="display:flex;flex-direction:column;height:100%;">
+      <div v-else-if="active === 'rules'" class="cfg-form cfg-rules-host" style="display:flex;flex-direction:row;height:100%;">
+
+        <!-- v7.10:子分頁切換已移到左側分頁列(規則母項的縮排子項);此處直接渲染 section -->
+
+        <!-- 右側:隨子分類切換 -->
+        <div class="cfg-rules-sectionhost" style="flex:1;min-width:0;display:flex;flex-direction:column;height:100%;">
+
+        <!-- ═══ 子分類:盤面圖示規則 / 通用規則(共用既有 puzzle 編輯器)═══ -->
+        <div v-show="rulesSection === 'board' || rulesSection === 'general'"
+             class="cfg-rules-section cfg-rules-section-puzzle"
+             style="display:flex;flex-direction:column;height:100%;min-height:0;">
         <div class="cfg-form-header" style="flex-shrink:0;">
           <div class="cfg-form-title">
             🧩 規則 · 拼圖規則 + 棄牌規則
@@ -4600,6 +4270,347 @@
           </div>
 
         </div>
+        </div><!-- /cfg-rules-section-puzzle -->
+
+        <!-- ═══ 子分頁:模式(賠付橫幅 + 模式定義 + 玩法;原 01_Global 賠付/起始模式 + 11_Mode_Config)═══ -->
+        <div v-show="rulesSection === 'modes'" class="cfg-rules-section cfg-rules-section-modes">
+
+          <!-- 賠付橫幅(原 01_Global 賠付模型,做法丙:只在模式子分頁頂部出現)-->
+          <div class="cfg-rules-paybanner">
+        <!-- 區塊 2:賠付模型(可折疊,預設展開)-->
+        <details class="cfg-section cfg-section-collapsible" open>
+          <summary class="cfg-section-summary">
+            <span class="cfg-section-title cfg-section-title-inline">賠付模型</span>
+            <span class="cfg-section-summary-preview">{{ activePayModel }}<span v-if="scanDirApplicable"> · {{ scanDirLabel(curScanDir) }}</span><span v-if="g.pay_type==='CLUSTER'"> · min {{ g.cluster_min_size }}</span></span>
+          </summary>
+          <div class="cfg-section-body">
+
+          <div class="cfg-field">
+            <label class="cfg-label">
+              賠付類型 <span class="cfg-key">pay_type</span>
+            </label>
+            <div class="cfg-chip-row">
+              <button v-for="m in PAY_MODELS" :key="m.id"
+                      class="cfg-chip"
+                      :class="{ active: activePayModel === m.id }"
+                      :title="m.desc"
+                      @click="selectPayModel(m.id)">{{ m.label }}</button>
+            </div>
+            <div class="cfg-hint">Line = 中獎線 / WAYS = 全路徑 / MEGAWAYS = 全路徑 + 每輪列數可變 / Grid = 任意位置(散佈) / Cluster = 同符相鄰群</div>
+          </div>
+
+          <div class="cfg-field" v-if="scanDirApplicable">
+            <label class="cfg-label">
+              計分方向 <span class="cfg-key">direction</span>
+            </label>
+            <div class="cfg-chip-row">
+              <button v-for="d in WAYS_DIRS" :key="d"
+                      class="cfg-chip"
+                      :class="{ active: curScanDir === d }"
+                      @click="setScanDir(d)">{{ scanDirLabel(d) }}</button>
+            </div>
+            <div class="cfg-hint">L→R = 左到右 / L←R = 右到左 / 雙向 = 兩端都算。此為全域唯一的計分方向,同時套用到中獎線與全路徑(WAYS / Megaways)。</div>
+            <!-- #8:雙向計分時才出現「最長連線僅計分一次」 -->
+            <label class="cfg-checkbox-row" v-if="curScanDir === 'BOTH'" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+              <input type="checkbox" v-model="g.longest_line_once">
+              <span>最長連線僅計分一次 <span class="cfg-hint" style="display:inline;">（雙向時,同一條最長連線不重複左右各算一次）</span></span>
+            </label>
+          </div>
+
+          <div class="cfg-field" v-if="g.pay_type === 'CLUSTER'">
+            <label class="cfg-label">
+              Cluster 最小群組 <span class="cfg-key">cluster_min_size</span>
+            </label>
+            <div class="cfg-stepper">
+              <button class="cfg-stepper-btn"
+                      :disabled="(g.cluster_min_size || 0) <= 2"
+                      @click="g.cluster_min_size = Math.max(2, (g.cluster_min_size || 5) - 1)">−</button>
+              <span class="cfg-stepper-val">{{ g.cluster_min_size }}</span>
+              <button class="cfg-stepper-btn"
+                      :disabled="(g.cluster_min_size || 0) >= 20"
+                      @click="g.cluster_min_size = Math.min(20, (g.cluster_min_size || 5) + 1)">+</button>
+            </div>
+            <div class="cfg-hint">CLUSTER Pay 達多少個相連同符算中獎(2–20)</div>
+          </div>
+          </div>
+        </details>
+          </div>
+
+          <!-- 模式定義(原 01_Global col-modes / 11_Mode_Config)-->
+          <div class="cfg-rules-modes-body">
+          <!-- 區塊 3:模式定義(v3.1 合併自 11_Mode_Config) -->
+        <div class="cfg-section">
+          <div class="cfg-section-title">模式定義</div>
+
+          <div class="cfg-field">
+            <label class="cfg-label">
+              起始模式 <span class="cfg-key">starting_mode</span>
+            </label>
+            <div v-if="modeNames.length > 0" class="cfg-chip-row">
+              <button v-for="m in modeNames" :key="m"
+                      class="cfg-chip"
+                      :class="{ active: g.starting_mode === m }"
+                      @click="g.starting_mode = m">{{ m }}</button>
+            </div>
+            <input v-else class="input input-w-id" type="text" v-model.trim="g.starting_mode" placeholder="NG">
+            <div v-if="modeNames.length > 0 && !modeNames.includes(g.starting_mode)" class="cfg-warn">
+              ⚠ 「{{ g.starting_mode }}」不在下方模式清單中,模擬將會失敗
+            </div>
+            <div class="cfg-hint">
+              選擇模擬開局時的模式;從下方「模式清單」選一個
+            </div>
+          </div>
+
+          <!-- ── 模式清單(從 11_Mode_Config 整段搬過來)── -->
+          <div class="cfg-modes-inline-hint">
+            模式清單(對應 A.xlsx 的 11_Mode_Config 分頁,匯出時仍會獨立成一張分頁)
+          </div>
+          <div class="cfg-modes-list">
+            <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
+                 :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode,
+                           'is-collapsed': !isModeExpanded(m) }">
+
+              <!-- v5.0-d:摘要列(預設收合;點擊展開編輯)-->
+              <div class="cfg-mode-summary" @click="toggleModeExpanded(m)"
+                   :title="isModeExpanded(m) ? '點擊收合' : '點擊展開編輯'">
+                <span class="cfg-mode-summary-caret">{{ isModeExpanded(m) ? '▾' : '▸' }}</span>
+                <span class="cfg-mode-summary-name"
+                      :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }">
+                  {{ m.mode || '(未命名)' }}</span>
+                <span v-if="g.starting_mode === m.mode && m.mode" class="cfg-mode-summary-badge start" title="起始模式">起始</span>
+                <span class="cfg-mode-summary-meta">局數 {{ m.spin_count }}</span>
+                <span class="cfg-mode-summary-trigger" :title="m.trigger_condition || '無觸發條件'">
+                  {{ m.trigger_condition || '無條件' }}</span>
+                <span v-if="!m.mode.trim() || duplicateNames.has(m.mode)" class="cfg-mode-summary-warn" title="名稱為空或重複">⚠</span>
+                <span class="cfg-mode-summary-spacer"></span>
+                <button class="cfg-mode-delete-btn"
+                        @click.stop="removeMode(idx)"
+                        :disabled="modes.length <= 1"
+                        :title="modes.length <= 1 ? '至少需要保留一個模式' : '刪除此模式'">✕</button>
+              </div>
+
+              <div v-show="isModeExpanded(m)" class="cfg-mode-card-expand">
+
+              <!-- 卡片頂部:模式名稱 -->
+              <div class="cfg-mode-card-header">
+                <div class="cfg-mode-name-wrap">
+                  <label class="cfg-mode-name-label">模式名稱</label>
+                  <input class="input cfg-mode-name-input input-w-id"
+                         :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }"
+                         :value="m.mode"
+                         @focus="$event.target.dataset.oldName = m.mode"
+                         @change="renameMode(idx, $event.target.dataset.oldName, $event.target.value)"
+                         @keyup.enter="$event.target.blur()"
+                         placeholder="NG"
+                         maxlength="20">
+                </div>
+              </div>
+
+              <div v-if="!m.mode.trim()" class="cfg-warn cfg-warn-inline">⚠ 模式名稱不能為空</div>
+              <div v-else-if="duplicateNames.has(m.mode)" class="cfg-warn cfg-warn-inline">
+                ⚠ 模式名稱「{{ m.mode }}」與其他模式重複
+              </div>
+
+              <!-- 卡片內容：壓縮 3 欄 grid + 可折疊的觸發條件 -->
+              <div class="cfg-mode-card-body">
+
+                <div class="cfg-mode-grid3">
+                  <div class="cfg-field cfg-field-compact">
+                    <label class="cfg-label">
+                      局數 <span class="cfg-key">spin_count</span>
+                    </label>
+                    <input class="input input-center input-w-num" type="number" min="0" v-model.number="m.spin_count">
+                    <div class="cfg-hint">0 = 無限 / FG 通常 10–15</div>
+                  </div>
+
+                  <div class="cfg-field cfg-field-compact">
+                    <label class="cfg-label">
+                      繼承全域 <span class="cfg-key">inherit_globals</span>
+                    </label>
+                    <div class="cfg-chip-row">
+                      <button class="cfg-chip" :class="{ active: m.inherit_globals === false }"
+                              @click="m.inherit_globals = false">否</button>
+                      <button class="cfg-chip" :class="{ active: m.inherit_globals === true }"
+                              @click="m.inherit_globals = true">是</button>
+                    </div>
+                  </div>
+
+                  <div class="cfg-field cfg-field-compact">
+                    <label class="cfg-label">備註 <span class="cfg-key">notes</span></label>
+                    <input class="input" type="text" v-model.trim="m.notes" placeholder="10 局免費">
+                  </div>
+                </div>
+
+                <!-- trigger_condition：可折疊 -->
+                <details class="cfg-mode-trigger-details">
+                  <summary class="cfg-mode-trigger-summary">
+                    🧩 觸發條件 <span class="cfg-key">trigger_condition</span>
+                    <span class="cfg-mode-trigger-preview" v-if="m.trigger_condition">{{ m.trigger_condition }}</span>
+                    <span class="cfg-mode-trigger-empty" v-else>(空 = 無條件，NG 用)</span>
+                  </summary>
+                  <div class="cfg-puzzle-section" style="margin-top:8px;">
+                    <span style="display:none">{{ modeCond.ensure(m), '' }}</span>
+                    <div class="cfg-puzzle-header">
+                      <span class="cfg-puzzle-title">🧩 觸發條件 <span class="cfg-key">trigger_condition</span></span>
+                      <div class="cfg-puzzle-mode-toggle">
+                        <button class="cfg-chip cfg-chip-sm"
+                                :class="{ active: (condBuilderState.mode[modeCond.key(m)] || 'builder') !== 'raw' }"
+                                @click="modeCond.setMode(m, 'builder')">🧩 拼圖</button>
+                        <button class="cfg-chip cfg-chip-sm"
+                                :class="{ active: condBuilderState.mode[modeCond.key(m)] === 'raw' }"
+                                @click="modeCond.setMode(m, 'raw')">⌨ 原始</button>
+                      </div>
+                    </div>
+
+                    <!-- 拼圖模式 -->
+                    <div v-if="(condBuilderState.mode[modeCond.key(m)] || 'builder') !== 'raw'" class="cfg-puzzle-body">
+                      <div v-if="!condBuilderState.rows[modeCond.key(m)] || condBuilderState.rows[modeCond.key(m)].length === 0"
+                           class="cfg-puzzle-empty">尚無條件;按下方按鈕新增第一片(NG 模式可留空)</div>
+
+                      <div v-else class="cfg-puzzle-rows">
+                        <template v-for="(row, ri) in condBuilderState.rows[modeCond.key(m)]" :key="ri">
+                          <div v-if="ri > 0" class="cfg-puzzle-combinator">
+                            <button class="cfg-chip cfg-chip-sm"
+                                    :class="{ active: row.combinator === 'AND' }"
+                                    @click="row.combinator = 'AND'; modeCond.rebuild(m)">AND</button>
+                            <button class="cfg-chip cfg-chip-sm"
+                                    :class="{ active: row.combinator === 'OR' }"
+                                    @click="row.combinator = 'OR'; modeCond.rebuild(m)">OR</button>
+                          </div>
+
+                          <div class="cfg-puzzle-row">
+                            <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
+                              <label class="cfg-puzzle-piece-label">變數</label>
+                              <select class="cfg-puzzle-select"
+                                      :value="row.category"
+                                      @change="modeCond.changeCat(m, ri, $event.target.value)">
+                                <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
+                              </select>
+                            </div>
+
+                            <div v-if="rowCategoryMeta(row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
+                              <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(row).subkeyHint }}</label>
+                              <select v-if="rowCategoryMeta(row).subkeySource === 'symbols' && symbolNames.length > 0"
+                                      class="cfg-puzzle-select"
+                                      v-model="row.subkey"
+                                      @change="modeCond.rebuild(m)">
+                                <option value="">(選擇)</option>
+                                <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
+                              </select>
+                              <input v-else
+                                     class="cfg-puzzle-input cfg-mono"
+                                     type="text"
+                                     v-model.trim="row.subkey"
+                                     @input="modeCond.rebuild(m)"
+                                     :placeholder="rowCategoryMeta(row).subkeyHint">
+                            </div>
+
+                            <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
+                              <label class="cfg-puzzle-piece-label">運算</label>
+                              <select class="cfg-puzzle-select cfg-puzzle-op"
+                                      v-model="row.op"
+                                      @change="modeCond.rebuild(m)">
+                                <option v-for="o in OP_TYPES" :key="o" :value="o">{{ o }}</option>
+                              </select>
+                            </div>
+
+                            <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
+                              <label class="cfg-puzzle-piece-label">值</label>
+                              <select v-if="rowCategoryMeta(row).valueType === 'mode' && modeNames.length > 0"
+                                      class="cfg-puzzle-select"
+                                      v-model="row.value"
+                                      @change="modeCond.rebuild(m)">
+                                <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
+                              </select>
+                              <input v-else-if="rowCategoryMeta(row).valueType === 'number'"
+                                     class="cfg-puzzle-input cfg-mono"
+                                     type="number" step="any"
+                                     v-model="row.value"
+                                     @input="modeCond.rebuild(m)"
+                                     placeholder="0">
+                              <input v-else
+                                     class="cfg-puzzle-input cfg-mono"
+                                     type="text"
+                                     v-model.trim="row.value"
+                                     @input="modeCond.rebuild(m)"
+                                     placeholder="值">
+                            </div>
+
+                            <button class="cfg-puzzle-row-del"
+                                    @click="modeCond.removeRow(m, ri)"
+                                    title="移除此片拼圖">✕</button>
+                          </div>
+                        </template>
+                      </div>
+
+                      <div class="cfg-puzzle-add">
+                        <button v-if="!condBuilderState.rows[modeCond.key(m)] || condBuilderState.rows[modeCond.key(m)].length === 0"
+                                class="cfg-mode-add-btn cfg-puzzle-add-btn"
+                                @click="modeCond.addRow(m, 'AND')">
+                          <span style="font-size: 14px;">+</span>
+                          <span>新增第一片條件</span>
+                        </button>
+                        <template v-else>
+                          <button class="cfg-puzzle-add-and" @click="modeCond.addRow(m, 'AND')">+ AND 條件</button>
+                          <button class="cfg-puzzle-add-or" @click="modeCond.addRow(m, 'OR')">+ OR 條件</button>
+                        </template>
+                      </div>
+
+                      <div class="cfg-puzzle-dsl">
+                        <span class="cfg-puzzle-dsl-label">生成的 DSL:</span>
+                        <code class="cfg-puzzle-dsl-code">{{ m.trigger_condition || '(空 = NG 用,無條件進入)' }}</code>
+                      </div>
+                    </div>
+
+                    <!-- 原始模式 -->
+                    <div v-else class="cfg-puzzle-body">
+                      <input class="input cfg-mono cfg-puzzle-raw-input"
+                             type="text"
+                             v-model.trim="m.trigger_condition"
+                             placeholder="留空表示無觸發條件(NG 用)">
+                      <div v-if="condBuilderState.error[modeCond.key(m)]" class="cfg-warn cfg-warn-inline">
+                        ⚠ {{ condBuilderState.error[modeCond.key(m)] }}
+                      </div>
+                    </div>
+                    <!-- ── #5 釘到 inspector ── -->
+                    <div class="cfg-puzzle-pin">
+                      <button class="cfg-puzzle-pin-btn"
+                              :class="{ active: pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode }"
+                              @click="pinTest('mode', m.mode, m.mode)"
+                              :disabled="!m.mode"
+                              title="把這個模式的 trigger 條件釘到右下角的 Test Inspector,即時看評估結果">
+                        <span>🧪</span>
+                        <span v-if="pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode">已釘住 — 看右下 inspector</span>
+                        <span v-else>釘到 Test Inspector</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="cfg-field cfg-field-compact" style="margin-top:8px;">
+                    <label class="cfg-label">
+                      進入時重置變數 <span class="cfg-key">on_enter_reset_vars</span>
+                    </label>
+                    <input class="input" type="text"
+                           v-model.trim="m.on_enter_reset_vars"
+                           placeholder="逗號分隔,例:fg_combo_count">
+                    <div class="cfg-hint">進入此模式時要歸零的 spin_locals 變數名</div>
+                  </div>
+                </details><!-- /trigger_condition details -->
+
+              </div>
+              </div><!-- /cfg-mode-card-expand (v5.0-d) -->
+            </div>
+
+            <button class="cfg-mode-add-btn" @click="addMode">
+              <span style="font-size: 16px;">+</span>
+              <span>新增模式</span>
+            </button>
+          </div>
+        </div>
+          </div>
+        </div>
+
+        </div><!-- /cfg-rules-sectionhost -->
       </div>
 
       <!-- ═══════ 12_Distribution_Bins 分佈區間 ═══════ -->
@@ -4692,19 +4703,18 @@
       <div v-else-if="active === 'bet_config'" class="cfg-form cfg-betconfig-form">
 
         <div class="cfg-section">
-          <div class="cfg-section-title">Extra Bet <span class="cfg-key">加押</span></div>
-          <div class="cfg-hint">加押功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
-
-          <div class="cfg-field">
-            <label class="cfg-label">啟用 Extra Bet</label>
-            <label class="chk">
-              <input type="checkbox" v-model="betConfig.ante_bet_enabled">
-              <span class="box"></span>
-              <span>{{ betConfig.ante_bet_enabled ? '已啟用' : '關閉' }}</span>
-            </label>
+          <div class="cfg-section-title cfg-section-title-switch">
+            <span class="cfg-section-title-text">Extra Bet <span class="cfg-key">加押</span></span>
+            <button type="button" class="cfg-section-switch" :class="{ on: betConfig.ante_bet_enabled }"
+                    role="switch" :aria-checked="betConfig.ante_bet_enabled"
+                    @click="betConfig.ante_bet_enabled = !betConfig.ante_bet_enabled"
+                    :title="betConfig.ante_bet_enabled ? '已啟用（點擊關閉）' : '已關閉（點擊啟用）'">
+              <span class="cfg-section-switch-knob"></span>
+            </button>
           </div>
 
           <template v-if="betConfig.ante_bet_enabled">
+            <div class="cfg-hint">加押功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
             <div class="cfg-ante-grid">
               <div class="cfg-field">
                 <label class="cfg-label">成本倍數 <span class="cfg-key">×注額</span></label>
@@ -4725,23 +4735,22 @@
                      placeholder="啟用後 SCAT 觸發率提升 ×2，費用 ×1.25 注額">
             </div>
           </template>
+          <div v-else class="cfg-section-off-hint">加押功能未啟用 —— 玩家可支付額外成本換取更高特色觸發率。開啟開關以設定。</div>
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-section-title">Buy Feature <span class="cfg-key">購買</span></div>
-          <div class="cfg-hint">購買功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
-
-          <!-- #2:Buy Feature 主開關(先決定是否啟用,再顯示內容) -->
-          <div class="cfg-field">
-            <label class="cfg-label">啟用 Buy Feature</label>
-            <label class="chk">
-              <input type="checkbox" v-model="betConfig.buy_feature_enabled">
-              <span class="box"></span>
-              <span>{{ betConfig.buy_feature_enabled ? '已啟用' : '關閉' }}</span>
-            </label>
+          <div class="cfg-section-title cfg-section-title-switch">
+            <span class="cfg-section-title-text">Buy Feature <span class="cfg-key">購買</span></span>
+            <button type="button" class="cfg-section-switch" :class="{ on: betConfig.buy_feature_enabled }"
+                    role="switch" :aria-checked="betConfig.buy_feature_enabled"
+                    @click="betConfig.buy_feature_enabled = !betConfig.buy_feature_enabled"
+                    :title="betConfig.buy_feature_enabled ? '已啟用（點擊關閉）' : '已關閉（點擊啟用）'">
+              <span class="cfg-section-switch-knob"></span>
+            </button>
           </div>
 
           <template v-if="betConfig.buy_feature_enabled">
+            <div class="cfg-hint">購買功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
             <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
               尚未設定購買項目；點下方「新增 Buy Feature」開始定義各模式的購買成本與 RTP 目標。
             </div>
@@ -4790,6 +4799,7 @@
               <span>新增 Buy Feature</span>
             </button>
           </template>
+          <div v-else class="cfg-section-off-hint">購買功能未啟用 —— 玩家可付費直接進入指定模式。開啟開關以定義各模式的購買成本與 RTP 目標。</div>
         </div>
 
       </div><!-- /bet_config -->

@@ -1236,6 +1236,43 @@
   background: var(--accent-hex);
   flex-shrink: 0;
 }
+/* v7.9.6:標題列含啟用開關(加押/購買等) */
+.cfg-section-title-switch {
+  justify-content: flex-start;
+}
+.cfg-section-title-text {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-width: 0;
+}
+.cfg-section-switch {
+  position: relative;
+  width: 40px; height: 22px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0; border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(120,120,140,0.30);
+  cursor: pointer;
+  transition: background var(--t-fast, 0.15s);
+}
+.cfg-section-switch.on { background: var(--accent-hex); }
+.cfg-section-switch-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: transform var(--t-pop, 0.18s);
+}
+.cfg-section-switch.on .cfg-section-switch-knob { transform: translateX(18px); }
+/* v7.9.6:功能關閉時的灰字說明(做法 B,保留可發現性) */
+.cfg-section-off-hint {
+  font-size: 12px; line-height: 1.5;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+/* v7.9.6:加押/購買內容收窄,避免全螢幕時卡片過寬留白 */
+.cfg-betconfig-form { max-width: 960px; }
 
 .cfg-field {
   margin-bottom: 14px;
@@ -10671,3 +10708,44 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 @media (max-width: 767px) {
   .cfg-tabs-spacer { display: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   v7.10:規則頁總入口 IA — 分頁列子項 + 模式子分頁賠付橫幅
+   「規則」母項在左側分頁列縮排出三個子項(模式 / 盤面圖示規則 / 通用規則)。
+   規則頁本身只剩 section-host(右側內容隨 rulesSection 切換)。
+   全沿用既有 token,暗色自動跟隨(守則 #75)。
+   ════════════════════════════════════════════════════════════════ */
+.cfg-rules-host { gap: 0; }
+.cfg-rules-sectionhost { overflow: hidden; }
+.cfg-rules-section {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+.cfg-rules-section-puzzle {
+  padding: 0;
+  overflow: hidden;
+}
+/* 模式子分頁:賠付橫幅(原 01_Global 賠付模型,做法丙僅此處出現)*/
+.cfg-rules-paybanner {
+  margin: 12px 0;
+  padding: 4px 12px 8px;
+  border: 0.5px solid var(--glass-brd);
+  border-left: 3px solid var(--accent-hex);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--glass-1);
+}
+.cfg-rules-modes-body { padding-bottom: 24px; }
+
+/* ── 分頁列:規則母項 caret + 子項縮排 ── */
+.cfg-tab-rules-caret {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-light);
+}
+/* #app 前綴提升特異度,確保縮排勝過 .cfg-tab 基礎 padding(承守則 #101)*/
+#app .cfg-tab-sub {
+  padding-left: 30px;   /* 縮排,表示掛在規則母項底下 */
+}
+#app .cfg-tab-sub .cfg-tab-icon { font-size: 13px; }
+#app .cfg-tab-sub .cfg-tab-name { font-size: 12px; }
