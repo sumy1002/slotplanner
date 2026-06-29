@@ -585,7 +585,10 @@
                   <label class="cfg-mode-name-label">模式名稱</label>
                   <input class="input cfg-mode-name-input input-w-id"
                          :class="{ err: !m.mode.trim() || (duplicateNames.has(m.mode) && m.mode) }"
-                         v-model.trim="m.mode"
+                         :value="m.mode"
+                         @focus="$event.target.dataset.oldName = m.mode"
+                         @change="renameMode(idx, $event.target.dataset.oldName, $event.target.value)"
+                         @keyup.enter="$event.target.blur()"
                          placeholder="NG"
                          maxlength="20">
                 </div>

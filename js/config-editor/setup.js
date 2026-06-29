@@ -1023,6 +1023,63 @@
         modes.splice(idx, 1);
         emit('status', { type: 'ok', msg: `已刪除模式「${m.mode}」` });
       }
+      // ── 模式改名:把所有以「模式名稱」為 key 的 per-mode 資料一起搬移,避免改名即丟設定 ──
+      //   與 renamePanel 同精神。由模式名稱輸入框 @change(失焦/Enter)觸發,oldName 在 @focus 記住。
+      //   執行期才存取後方宣告的容器(bins/reelWeights/.../jackpots),靠 closure + 失焦才呼叫,
+      //   故在此宣告位置(容器尚未初始化處)安全;不動 A.xlsx 契約 / LS key / 型別。
+      function renameMode(idx, oldName, rawNew) {
+        if (idx < 0 || idx >= modes.length) return;
+        const m = modes[idx];
+        const newName = String(rawNew == null ? m.mode : rawNew).trim();
+        const old = String(oldName || '').trim();
+        // 寫回(input 已 v-model 或在此統一寫;確保 m.mode 為清乾淨的 newName)
+        m.mode = newName;
+        if (!newName || newName === old) return;            // 空名或沒變:交給既有空名警告處理,不遷移
+        if (modes.some((x, i) => i !== idx && (x.mode || '').trim() === newName)) {
+          // 撞名:還原,讓既有 duplicateNames 警告生效而非靜默蓋掉別人的資料
+          emit('status', { type: 'err', msg: `模式名稱「${newName}」重複,改名取消` });
+          m.mode = old;
+          return;
+        }
+        // 1) 直接以名稱為 key 的 plain object 容器:搬 key
+        const _moveKey = (obj) => {
+          if (obj && Object.prototype.hasOwnProperty.call(obj, old)) {
+            if (!Object.prototype.hasOwnProperty.call(obj, newName)) obj[newName] = obj[old];
+            delete obj[old];
+          }
+        };
+        _moveKey(bins);
+        _moveKey(reelWeights);
+        _moveKey(gridWeights);
+        _moveKey(comboWeights);
+        _moveKey(reelStrips.strips);
+        _moveKey(stripStr);
+        _moveKey(multipliers.progress_ladders);
+        _moveKey(progressLadderStr);
+        // 2) 巢狀於每筆面額的 weight_by_mode
+        for (const dn of coinValues.denominations) {
+          if (dn.weight_by_mode && Object.prototype.hasOwnProperty.call(dn.weight_by_mode, old)) {
+            if (!(newName in dn.weight_by_mode)) dn.weight_by_mode[newName] = dn.weight_by_mode[old];
+            delete dn.weight_by_mode[old];
+          }
+        }
+        // 3) JP 的 mode_scope 逗號名單字串
+        for (const j of jackpots) {
+          if (j.mode_scope && j.mode_scope !== 'ALL') {
+            const parts = j.mode_scope.split(',').map(s => s.trim()).filter(Boolean);
+            let changed = false;
+            const next = parts.map(p => (p === old ? (changed = true, newName) : p));
+            if (changed) j.mode_scope = Array.from(new Set(next)).join(',');
+          }
+        }
+        // 4) 起始模式字串
+        if (g.starting_mode === old) g.starting_mode = newName;
+        // 5) 各分頁 sticky active mode ref
+        for (const r of [reelActiveMode, gridActiveMode, comboActiveModeBar, stripActiveMode]) {
+          if (r && r.value === old) r.value = newName;
+        }
+        emit('status', { type: 'ok', msg: `模式「${old}」已改名為「${newName}」,相關設定一併搬移` });
+      }
 
       // ── 02_Layout 狀態 ──
       const layout = reactive(loadLayout());
@@ -8196,7 +8253,7 @@
         g, PAY_TYPES, WAYS_DIRS,
         registry, symbolList, symbolNames, allModeScopes,
         modes, modeNames, duplicateNames, modesDebugJson,
-        addMode, removeMode, modeCardKey, passStatus,
+        addMode, removeMode, renameMode, modeCardKey, passStatus,
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
         addReel, removeReel, swapReels,
