@@ -38,6 +38,8 @@ from core.schemas import (
     PuzzleRule, TriggerType,
     DiscardRule, DiscardType,
     ModeConfig, DistributionBin,
+    ResetScope, TriggerPay, MultStackMode,
+    GenLimit,
     PayType, WaysDirection,
     ConfigValidationError,
 )
@@ -83,6 +85,7 @@ def load_a_config(path: str | Path) -> AConfig:
     puzzle_rules = _parse_puzzle_rules(sheets["09_Puzzle_Rules"])
     discard_rules = _parse_discard_rules(sheets["10_Discard_Rules"])
     modes = _parse_modes(sheets["11_Mode_Config"])
+    _parse_mode_trigger_pays(sheets.get("11b_Mode_TriggerPays"), modes)   # v7.10 additive
     distribution_bins = _parse_distribution_bins(sheets["12_Distribution_Bins"])
 
     cfg = AConfig(
@@ -135,6 +138,9 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # v6.0-c:17_Bonus_Games
     cfg.bonus_games = _parse_bonus_games(sheets.get('17_Bonus_Games'))
+
+    # v7.11:07b_Gen_Limits（產牌限制 / 生成期約束;選用,舊檔無 sheet → 空）
+    cfg.gen_limits = _parse_gen_limits(sheets.get('07b_Gen_Limits'), symbols, layout)
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -868,6 +874,92 @@ def _parse_constraints(
     return out
 
 
+def _parse_gen_limits(
+    df, symbols: dict[str, SymbolDef], layout: LayoutConfig
+) -> list:
+    """v7.11:07b_Gen_Limits(產牌限制 / 生成期約束)。
+
+    additive 契約:sheet 不存在(df is None)→ 回空 list(舊檔安全降級)。
+    長格式:一條 = 一個符號 × 一個 zone × (min, max) × mode_scope。
+    zone 交叉驗證:
+      MAIN              恆合法
+      SUB:<reel_id>     reel_id 須存在且該 reel has_subreel
+      PANEL:<panel_id>  panel_id 須存在於 02b_Panels
+    驗證:min<=max(兩者皆給時);min/max 至少一個 > 0(否則此條無意義 → 仍載入,前端標 warn)。
+    注意:本工具不執行此約束;僅載入供下游模擬工具消費。
+    """
+    sheet = "07b_Gen_Limits"
+    if df is None:
+        return []
+    valid_reels = {r.reel_id for r in layout.reels}
+    sub_reels = {r.reel_id for r in layout.reels if r.has_subreel}
+    valid_panels = {p.panel_id for p in layout.panels}
+    out = []
+    for idx, r in df.iterrows():
+        if pd.isna(r.get("Limit_ID")):
+            continue
+        try:
+            lid = _to_str(r.get("Limit_ID"))
+            if not lid:
+                continue
+            sid = _to_str(r.get("Symbol_ID"))
+            if sid and sid not in symbols:
+                raise ConfigValidationError(
+                    sheet, f"Symbol_ID {sid} 不存在", row=idx + 2)
+
+            zone = _to_str(r.get("Zone"), "MAIN") or "MAIN"
+            zu = zone.upper()
+            if zu == "MAIN":
+                zone = "MAIN"
+            elif zu.startswith("SUB:"):
+                rid_str = zone.split(":", 1)[1].strip()
+                if not rid_str.isdigit() or int(rid_str) not in valid_reels:
+                    raise ConfigValidationError(
+                        sheet, f"Zone '{zone}' 指向不存在的 Reel", row=idx + 2)
+                if int(rid_str) not in sub_reels:
+                    raise ConfigValidationError(
+                        sheet, f"Zone '{zone}' 的 Reel {rid_str} 沒有副輪", row=idx + 2)
+                zone = f"SUB:{int(rid_str)}"
+            elif zu.startswith("PANEL:"):
+                pid = zone.split(":", 1)[1].strip()
+                if pid not in valid_panels:
+                    raise ConfigValidationError(
+                        sheet, f"Zone '{zone}' 指向不存在的 Panel", row=idx + 2)
+                zone = f"PANEL:{pid}"
+            else:
+                raise ConfigValidationError(
+                    sheet, f"Zone '{zone}' 格式不合法(應為 MAIN / SUB:<id> / PANEL:<id>)",
+                    row=idx + 2)
+
+            vmin = r.get("Min_Count")
+            min_count = int(vmin) if pd.notna(vmin) and str(vmin).strip() != "" else 0
+            vmax = r.get("Max_Count")
+            max_count = (int(vmax) if pd.notna(vmax) and str(vmax).strip() != ""
+                         else None)
+            if min_count < 0 or (max_count is not None and max_count < 0):
+                raise ConfigValidationError(
+                    sheet, "Min_Count / Max_Count 不可為負", row=idx + 2)
+            if max_count is not None and min_count > max_count:
+                raise ConfigValidationError(
+                    sheet, f"Min_Count({min_count}) 不可大於 Max_Count({max_count})",
+                    row=idx + 2)
+
+            out.append(GenLimit(
+                limit_id=lid,
+                symbol_id=sid,
+                zone=zone,
+                min_count=min_count,
+                max_count=max_count,
+                mode_scope=_to_str(r.get("Mode_Scope"), "ALL") or "ALL",
+                notes=_to_str(r.get("Notes")),
+            ))
+        except ConfigValidationError:
+            raise
+        except (ValueError, KeyError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+    return out
+
+
 def _parse_combo_weights(
     df: pd.DataFrame | None, symbols: dict[str, SymbolDef], layout: LayoutConfig
 ) -> list[ComboWeightOverride]:
@@ -982,6 +1074,26 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
             cond = parse_condition(_to_str(r.get("Trigger_Condition")))
             reset_str = _to_str(r.get("On_Enter_Reset_Vars"))
             reset_vars = [s.strip() for s in reset_str.split(",") if s.strip()]
+            # v7.10 additive:Reset_Scope(尾端新欄;缺欄/空 → None = 繼承全域)
+            rs_raw = _to_str(r.get("Reset_Scope")).strip().upper()
+            reset_scope = None
+            if rs_raw:
+                try:
+                    reset_scope = ResetScope(rs_raw)
+                except ValueError:
+                    raise ConfigValidationError(
+                        sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE 或留空)", row=idx + 2)
+            # v7.11 additive:Cap_Enabled / Cap_Value / Stack_Mode(尾端新欄;缺欄/空 → 預設)
+            cap_enabled = _to_str(r.get("Cap_Enabled")).strip()
+            cap_value = _to_str(r.get("Cap_Value")).strip()
+            sm_raw = _to_str(r.get("Stack_Mode")).strip().upper()
+            stack_mode = None
+            if sm_raw:
+                try:
+                    stack_mode = MultStackMode(sm_raw)
+                except ValueError:
+                    raise ConfigValidationError(
+                        sheet, f"Stack_Mode '{sm_raw}' 非合法值(MUL/ADD 或留空)", row=idx + 2)
             out[mode] = ModeConfig(
                 mode=mode,
                 trigger_condition=cond,
@@ -989,6 +1101,10 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 inherit_globals=_to_bool(r.get("Inherit_Globals")),
                 on_enter_reset_vars=reset_vars,
                 notes=_to_str(r.get("Notes")),
+                reset_scope=reset_scope,
+                cap_enabled=cap_enabled,
+                cap_value=cap_value,
+                stack_mode=stack_mode,
             )
         except ConfigValidationError:
             raise
@@ -997,6 +1113,36 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
     if not out:
         raise ConfigValidationError(sheet, "至少需定義 1 個模式")
     return out
+
+
+def _parse_mode_trigger_pays(df, modes: dict) -> None:
+    """v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付)。
+
+    additive 契約:sheet 不存在(df is None)→ 整段跳過,各 mode.trigger_pays 維持空。
+    一個 mode 多列;依 Mode 欄分組塞回對應 ModeConfig.trigger_pays。
+    引用不存在的 Mode → 報錯(交叉驗證,比照 reel_weights 的「Mode 未定義」)。
+    注意:引擎目前尚未消費此欄(Stage 3 才執行);此處僅資料載入。
+    """
+    sheet = "11b_Mode_TriggerPays"
+    if df is None:
+        return
+    for idx, r in df.iterrows():
+        if pd.isna(r.get("Mode")):
+            continue
+        mode = str(r["Mode"]).strip()
+        if not mode:
+            continue
+        if mode not in modes:
+            raise ConfigValidationError(
+                sheet, f"Mode '{mode}' 未在 11_Mode_Config 定義", row=idx + 2)
+        try:
+            modes[mode].trigger_pays.append(TriggerPay(
+                scatter_count=int(r.get("Scatter_Count", 0) or 0),
+                pay=float(r.get("Pay", 0) or 0),
+                grants_spins=int(r.get("Grants_Spins", 0) or 0),
+            ))
+        except (ValueError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
 
 
 def _parse_distribution_bins(df: pd.DataFrame) -> dict[str, DistributionBin]:

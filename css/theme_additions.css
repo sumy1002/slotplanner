@@ -10749,3 +10749,123 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-tab-sub .cfg-tab-icon { font-size: 13px; }
 #app .cfg-tab-sub .cfg-tab-name { font-size: 12px; }
+
+/* ── v7.10:模式卡內「關聯 Bonus」子區(做法甲)── */
+.cfg-mode-bonus { margin-top: 10px; }
+.cfg-mode-bonus-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  font-size: 11px;
+  text-align: center;
+  border-radius: 9px;
+  background: rgb(var(--tint-2) / 0.16);
+  color: var(--accent-text);
+}
+.cfg-mode-bonus-shared {
+  margin: 4px 0 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: var(--glass-1);
+  border-radius: var(--r-sm, 6px);
+}
+
+/* ── v7.10:模式卡「玩法設定」子區(reset_scope + trigger_pays;引擎尚未接,amber 預留)── */
+.cfg-mode-gameplay { margin-top: 10px; }
+.cfg-mode-future-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-brd);
+  border-radius: var(--r-sm, 6px);
+}
+.cfg-mode-future-tag {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 9px;
+  color: var(--warn-text);
+  border: 1px solid var(--warn-brd);
+}
+.cfg-mode-tp { margin-top: 10px; }
+.cfg-mode-tp-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.cfg-mode-tp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cfg-mode-tp-lbl {
+  font-size: 11px;
+  color: var(--text-light);
+}
+@media (max-width: 767px) {
+  #app .cfg-mode-tp-row { gap: 6px; }
+  #app .cfg-mode-tp-cell { flex: 1 1 30%; min-width: 0; }
+}
+/* ════════════════════════════════════════════════════════════
+   v7.11:產牌限制 / 生成期約束(規則頁子分頁,入口 B)
+   ════════════════════════════════════════════════════════════ */
+.cfg-rules-section-genlimits { padding: 0 2px; }
+.cfg-genlimits { margin-top: 8px; }
+.cfg-genlimits-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.cfg-genlimits-count { font-size: 12px; color: var(--text-light); }
+.cfg-genlimits-toolbar .btn-pill { margin-left: auto; }
+.cfg-genlimits-empty {
+  padding: 14px;
+  font-size: 13px; color: var(--text-light);
+  background: var(--glass-1);
+  border: 0.5px dashed var(--glass-edge);
+  border-radius: var(--r-md, 8px);
+}
+.cfg-genlimits-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px;
+}
+.cfg-genlimits-table th {
+  text-align: left; font-weight: 700;
+  color: var(--text-light);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--glass-edge);
+  white-space: nowrap;
+}
+.cfg-genlimits-table td {
+  padding: 5px 8px;
+  border-bottom: 0.5px solid var(--glass-edge);
+  vertical-align: middle;
+}
+.cfg-genlimits-table tr.is-warn td { background: var(--warn-bg); }
+.cfg-genlimits-table tr.is-err  td { background: var(--danger-bg, rgba(231,76,60,0.10)); }
+@media (max-width: 767px) {
+  #app .cfg-genlimits-table,
+  #app .cfg-genlimits-table thead,
+  #app .cfg-genlimits-table tbody,
+  #app .cfg-genlimits-table tr { display: block; }
+  #app .cfg-genlimits-table thead { display: none; }
+  #app .cfg-genlimits-table tr {
+    margin-bottom: 10px; padding: 8px;
+    border: 0.5px solid var(--glass-edge); border-radius: var(--r-sm, 6px);
+  }
+  #app .cfg-genlimits-table td {
+    display: flex; align-items: center; gap: 8px;
+    border: none; padding: 3px 0;
+  }
+  #app .cfg-genlimits-table td .input { flex: 1 1 auto; min-width: 0; }
+}

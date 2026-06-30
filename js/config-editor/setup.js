@@ -45,6 +45,7 @@
     savePaylines, parsePathString, validatePayline, generatePaylinePoints, LS_CONSTRAINTS_KEY,
     CONSTRAINT_TYPES, makeConstraint, DEFAULT_CONSTRAINTS, loadConstraints,
     saveConstraints, LS_REELW_KEY, loadReelWeights, saveReelWeights,
+    makeGenLimit, loadGenLimits, saveGenLimits, genLimitZones, genLimitZoneLabel, genLimitStatus, humanizeGenLimit,
     LS_GRIDW_KEY, DEFAULT_GRID_SIZES, loadGridWeights, saveGridWeights,
     parseGridSizes, LS_COMBO_KEY, loadComboWeights, saveComboWeights,
     LS_DISCARD_KEY, DISCARD_KINDS, makeDiscard, DEFAULT_DISCARDS,
@@ -166,6 +167,21 @@
       const selectedKind = ref('puzzle');  // 'puzzle' | 'discard'
       // 左欄過濾器:全部 / 拼圖 / HARD / SOFT
       const rulesListFilter = ref('all');  // 'all' | 'puzzle' | 'hard' | 'soft'
+      // v7.10:盤面規則 vs 通用規則分流(選項 A,依 action type 黑白判定)。
+      //   規則只要含任一「盤面/符號幾何」action → 盤面規則;完全不含 → 通用規則。一條規則唯一歸屬。
+      const BOARD_ACTION_TYPES = new Set([
+        'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY', 'MOVE', 'SWAP', 'STICKY', 'LOCK_REEL'
+      ]);
+      function isBoardRule(r) {
+        if (!r || !Array.isArray(r.actions)) return false;
+        return r.actions.some(a => a && BOARD_ACTION_TYPES.has(a.atype));
+      }
+      // 給目前子分頁(board/general)決定某 puzzle 規則是否顯示
+      function ruleInSection(r) {
+        if (rulesSection.value === 'board')   return isBoardRule(r);
+        if (rulesSection.value === 'general') return !isBoardRule(r);
+        return true;  // 其他情況(理論上不會,因 puzzle section 只在 board/general 顯示)
+      }
       // v7.10:規則頁總入口四子分類(全域/模式/盤面圖示規則/通用規則)。純前端 UI 狀態,非持久化。
       //   'global' = 賠付模型 + 全域參數(原 01_Global) / 'modes' = 模式定義 + 關聯 Bonus(原 11/17)
       //   'board'  = 盤面/圖示相關 puzzle 規則 / 'general' = 通用 puzzle + 棄牌規則
@@ -188,6 +204,14 @@
       function gotoRulesSub(section) {
         active.value = 'rules';
         rulesSection.value = section;
+        // v7.10:棄牌子分頁 → 右側詳情切棄牌;盤面/通用 → 切拼圖
+        if (section === 'discard') {
+          selectedKind.value = 'discard';
+          if (rulesListFilter.value === 'puzzle') rulesListFilter.value = 'all';
+        } else if (section === 'board' || section === 'general') {
+          selectedKind.value = 'puzzle';
+          if (rulesListFilter.value === 'hard' || rulesListFilter.value === 'soft') rulesListFilter.value = 'all';
+        }
         cfgTabRailCollapsed.value = true;   // 與其他 tab 點擊一致:行動版點完收抽屜
       }
       // 「分頁列重新展開」事件(收合態 hover 浮出 / 釘選切換):重置手動覆寫,回預設(在規則子分頁就展開)
@@ -215,9 +239,14 @@
       function addRuleFromMenu(kind) {
         rulesAddMenuOpen.value = false;
         if (kind === 'puzzle') {
+          // v7.10:若目前在棄牌子分頁,先切到通用(addRule 會依 section 決定是否帶盤面 action)
+          if (rulesSection.value === 'discard') rulesSection.value = 'general';
           addRule();
           // addRule 已內部設 selectedRuleIdx,這裡只要切 kind
           selectedKind.value = 'puzzle';
+          // 新規則依其 action 歸屬,切到對應子分頁確保可見
+          const nr = rules[rules.length - 1];
+          if (nr) rulesSection.value = isBoardRule(nr) ? 'board' : 'general';
         } else if (kind === 'hard' || kind === 'soft') {
           addDiscard();
           // addDiscard 預設 discard_kind = 'HARD',若使用者選 SOFT 就改
@@ -227,6 +256,7 @@
           }
           selectedKind.value = 'discard';
           selectedDiscardIdx.value = discards.length - 1;
+          rulesSection.value = 'discard';   // v7.10:切到棄牌子分頁確保新棄牌可見
         }
       }
       // 點擊文件其他地方時關閉 add menu
@@ -985,6 +1015,39 @@
 
       // ── 11_Mode_Config 狀態 ──
       const modes = reactive(loadModes());
+      // v7.10:additive 欄位正規化(makeMode/loadModes 在 helpers,不在 scope;此處補預設,
+      //   舊資料載入即為預設,向後相容)。reset_scope:'' = 繼承全域;trigger_pays:[] = 無。
+      function _ensureModeGameplayFields(m) {
+        if (m.reset_scope == null) m.reset_scope = '';     // '' | 'CASCADE' | 'SPIN' | 'FEATURE' | 'NEVER'
+        if (!Array.isArray(m.trigger_pays)) m.trigger_pays = [];
+        // v7.11:additive 封頂 + mode 層 stack_mode(makeMode/loadModes 在 helpers,不在 scope;
+        //   此處補預設,舊資料載入即預設,向後相容)。
+        if (m.cap_enabled == null) m.cap_enabled = '';     // '' = 不封頂 | 'Y' = 有封頂
+        if (m.cap_value == null) m.cap_value = '';         // 封頂值(字串,可含區間)
+        if (m.stack_mode == null) m.stack_mode = '';       // '' = 繼承全域 | 'MUL' | 'ADD'
+      }
+      modes.forEach(_ensureModeGameplayFields);
+      // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
+      function addTriggerPay(m) {
+        _ensureModeGameplayFields(m);
+        m.trigger_pays.push({ scatter_count: 0, pay: 0, grants_spins: 0 });
+      }
+      function removeTriggerPay(m, idx) {
+        if (Array.isArray(m.trigger_pays)) m.trigger_pays.splice(idx, 1);
+      }
+      // reset_scope 下拉選項(空=繼承全域)
+      const RESET_SCOPE_OPTIONS = [
+        { v: '',         label: '(繼承全域)' },
+        { v: 'CASCADE',  label: 'CASCADE — 每次連線中斷即重置' },
+        { v: 'SPIN',     label: 'SPIN — 每一局重置' },
+        { v: 'FEATURE',  label: 'FEATURE — 整個 feature 全程不重置' },
+      ];
+      // v7.11:mode 層 stack_mode 下拉(空=繼承全域 Multipliers.stack_mode)
+      const STACK_MODE_OPTIONS = [
+        { v: '',     label: '(繼承全域)' },
+        { v: 'MUL',  label: 'MUL — 相乘' },
+        { v: 'ADD',  label: 'ADD — 相加' },
+      ];
       const modeNames = computed(() =>
         modes.map(m => (m.mode || '').trim()).filter(n => n.length > 0)
       );
@@ -1037,6 +1100,7 @@
         let i = 1;
         while (taken.has(`${base}${i}`)) i++;
         modes.push(makeMode(`${base}${i}`));
+        _ensureModeGameplayFields(modes[modes.length - 1]);   // v7.10:補 reset_scope/trigger_pays
         modeExpandedKey.value = modeCardKey(modes[modes.length - 1]);   // v5.0-d:新卡自動展開
         emit('status', { type: 'ok', msg: `已新增模式 ${base}${i}` });
         // 流程優化:捲動到新卡片並聚焦名稱欄(找不到則 no-op,不影響功能)
@@ -2941,6 +3005,32 @@
         bonusGames.games.push(makeBonusGame(`BG${i}`, type || 'WHEEL'));
       }
       function removeBonusGame(idx) { bonusGames.games.splice(idx, 1); }
+      // v7.10:模式子分頁「關聯 Bonus」(做法甲)— 依 mode_scope 過濾出適用某 mode 的 bonus。
+      //   mode_scope='ALL'/空 或 含此 mode → 顯示。同一 bonus 可出現在多張卡(共用同一物件,
+      //   編輯任一處即改該物件,單一真相由 Vue reactivity 保證)。
+      function bonusesForMode(modeName) {
+        return bonusGames.games
+          .map((g, gi) => ({ g, gi }))
+          .filter(({ g }) => {
+            const s = (g.mode_scope || '').trim();
+            if (!s || s === 'ALL') return true;
+            return s.split(',').map(x => x.trim()).includes(modeName);
+          });
+      }
+      // 從某 mode 卡新增 bonus:預設 mode_scope = 該 mode(而非 ALL)
+      function addBonusForMode(type, modeName) {
+        const taken = new Set(bonusGames.games.map(g => g.bonus_id));
+        let i = 1; while (taken.has(`BG${i}`)) i++;
+        const g = makeBonusGame(`BG${i}`, type || 'WHEEL');
+        g.mode_scope = modeName || 'ALL';
+        bonusGames.games.push(g);
+      }
+      // 此 bonus 除了 modeName 外還適用哪些 mode(給「也適用於」提示用)
+      function bonusOtherModes(g, modeName) {
+        const s = (g.mode_scope || '').trim();
+        if (!s || s === 'ALL') return ['(全部模式)'];
+        return s.split(',').map(x => x.trim()).filter(x => x && x !== modeName);
+      }
       // v6.2 Bonus #3:適用模式改 chip 多選(mode_scope = 'ALL' 或逗號分隔)
       function toggleBonusMode(g, modeName) {
         if (modeName === 'ALL') { g.mode_scope = 'ALL'; return; }
@@ -3774,6 +3864,56 @@
       // ── 07_Constraints 狀態 ──
       const constraints = reactive(loadConstraints());
       const constraintsDebugJson = computed(() => JSON.stringify(constraints, null, 2));
+
+      // ── 07b_Gen_Limits 產牌限制 / 生成期約束(v7.11)──
+      //   單一真相:genLimits reactive 陣列 + LS slotplanner.aconfig.genLimits.v1。
+      //   兩入口共用(規則頁「產牌限制」子分頁 + 符號卡);掛 window.SlotPlanner.genLimits 供 symbol.js 讀寫同一份。
+      const genLimits = reactive(loadGenLimits());
+      // 掛上共享參考(symbol.js 透過 SP.genLimits 讀寫同一陣列;reactivity 跨元件同步)
+      SP.genLimits = genLimits;
+      function _nextGenLimitId() {
+        const taken = new Set(genLimits.map(g => g.limit_id).filter(Boolean));
+        let i = genLimits.length + 1;
+        let id = `GL${String(i).padStart(3, '0')}`;
+        while (taken.has(id)) { i++; id = `GL${String(i).padStart(3, '0')}`; }
+        return id;
+      }
+      const genLimitDuplicateIds = computed(() => {
+        const seen = new Set(); const dup = new Set();
+        for (const g of genLimits) {
+          const id = (g.limit_id || '').trim();
+          if (!id) continue;
+          if (seen.has(id)) dup.add(id);
+          seen.add(id);
+        }
+        return dup;
+      });
+      // 動態 zone 選項:由目前 layout(含副輪)+ panels 產生
+      const genLimitZoneOptions = computed(() => genLimitZones(layout, panels));
+      SP.genLimitZoneOptions = genLimitZoneOptions;  // 供 symbol.js 共用
+      // 符號下拉選項(啟用符號的 symbol_id / name)
+      const genLimitSymbolOptions = computed(() =>
+        (symbolList.value || [])
+          .filter(x => x && x.enabled !== false)
+          .map(x => (x.symbol_id && String(x.symbol_id).trim()) || x.name)
+          .filter(Boolean)
+      );
+      function genLimitStatusOf(gl) { return genLimitStatus(gl, genLimitDuplicateIds.value); }
+      function addGenLimit(symbolId) {
+        const gl = makeGenLimit(_nextGenLimitId());
+        if (symbolId) gl.symbol_id = symbolId;
+        genLimits.push(gl);
+        return gl;
+      }
+      function removeGenLimit(idx) {
+        if (idx >= 0 && idx < genLimits.length) genLimits.splice(idx, 1);
+      }
+      // 供 symbol.js 入口 A 用:從某符號卡新增/移除(預帶該符號)
+      SP.addGenLimit = addGenLimit;
+      SP.removeGenLimitByRef = (gl) => {
+        const i = genLimits.indexOf(gl);
+        if (i >= 0) genLimits.splice(i, 1);
+      };
 
       const constraintDuplicateIds = computed(() => {
         const seen = new Set();
@@ -5330,7 +5470,14 @@
         let i = rules.length + 1;
         while (taken.has(`P${String(i).padStart(3, '0')}`)) i++;
         const newId = `P${String(i).padStart(3, '0')}`;
-        rules.push(makeRule(newId));
+        const r = makeRule(newId);
+        // v7.10:在「盤面/圖示規則」子分頁新增時,預帶一個盤面 action(BOARD_TRANSFORM),
+        //   讓新規則留在目前清單(否則 actions=[] 會被歸到通用、當場從畫面消失)。
+        //   使用者仍可自由改 action 類型;改成非盤面類後它會自然移到通用清單。
+        if (rulesSection.value === 'board' && typeof makeAction === 'function') {
+          r.actions = [makeAction('BOARD_TRANSFORM')];
+        }
+        rules.push(r);
         builderRowsMap[newId] = [];
         ruleEditMode[newId] = 'builder';
         ruleParseError[newId] = null;
@@ -5620,22 +5767,22 @@
         if (pinnedTest.value) return;  // 已 pinned 就不動
         const id = active.value;
         if (id === 'rules') {
-          // v7.10:規則頁子分頁。模式子分頁 → pin 模式條件;規則子分頁 → pin 規則/棄牌。
+          // v7.10:規則頁子分頁。模式 → pin 模式條件;棄牌 → pin 棄牌;盤面/通用 → pin 拼圖規則。
           if (rulesSection.value === 'modes') {
             if (modes.length > 0) {
               const m = modes.find(x => x.trigger_condition) || modes[0];
               if (m && m.mode) pinTest('mode', m.mode, m.mode, false);
             }
-          } else if (selectedKind.value === 'discard' && discards.length > 0) {
-            const d = discards[selectedDiscardIdx.value] || discards[0];
-            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
+          } else if (rulesSection.value === 'discard') {
+            if (discards.length > 0) {
+              const d = discards[selectedDiscardIdx.value] || discards[0];
+              if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
+            }
           } else if (rules.length > 0) {
-            const r = rules[selectedRuleIdx.value] || rules[0];
-            if (r.rule_id) pinTest('rule', r.rule_id, r.rule_id, false);
-          } else if (discards.length > 0) {
-            // 沒拼圖規則就退而求其次 pin 棄牌
-            const d = discards[0];
-            if (d.discard_id) pinTest('discard', d.discard_id, d.discard_id, false);
+            // 盤面/通用:pin 目前子分頁可見的第一條規則
+            const visible = rules.filter(ruleInSection);
+            const r = visible[0] || rules[selectedRuleIdx.value] || rules[0];
+            if (r && r.rule_id) pinTest('rule', r.rule_id, r.rule_id, false);
           }
         }
       }
@@ -6157,10 +6304,38 @@
                 inherit_globals: asBool(row.getCell(4).value),
                 on_enter_reset_vars: asStr(row.getCell(5).value),
                 notes: asStr(row.getCell(6).value),
+                // v7.10 additive:Reset_Scope 為尾端第 7 欄;舊檔無此欄 → 空字串(繼承全域)
+                reset_scope: asStr(row.getCell(7).value).trim(),
+                // v7.11 additive:Cap_Enabled(8)/Cap_Value(9)/Stack_Mode(10);舊檔無 → 空(不封頂/繼承)
+                cap_enabled: asStr(row.getCell(8).value).trim(),
+                cap_value:   asStr(row.getCell(9).value).trim(),
+                stack_mode:  asStr(row.getCell(10).value).trim(),
+                trigger_pays: [],   // 由 11b sheet 補(見下)
               });
             });
             if (nm.length > 0) modes.splice(0, modes.length, ...nm);
           } else warnings.push('找不到 11_Mode_Config');
+
+          // ── 11b_Mode_TriggerPays(v7.10 additive;舊檔無此 sheet → 跳過,trigger_pays 維持空)──
+          const ws11b = wb.getWorksheet('11b_Mode_TriggerPays');
+          if (ws11b) {
+            const byMode = {};
+            ws11b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(row.getCell(1).value).trim();
+              if (!mode) return;
+              (byMode[mode] = byMode[mode] || []).push({
+                scatter_count: asNum(row.getCell(2).value, 0),
+                pay:           asNum(row.getCell(3).value, 0),
+                grants_spins:  asNum(row.getCell(4).value, 0),
+              });
+            });
+            for (const m of modes) {
+              if (byMode[m.mode]) m.trigger_pays = byMode[m.mode];
+            }
+          }
+          // 確保匯入後每個 mode 都有 additive 欄位(舊檔安全)
+          modes.forEach(_ensureModeGameplayFields);
 
           // ── 12_Distribution_Bins ──
           const ws12 = wb.getWorksheet('12_Distribution_Bins');
@@ -6214,6 +6389,30 @@
               });
             });
             if (nc.length > 0) constraints.splice(0, constraints.length, ...nc);
+          }
+
+          // ── 07b_Gen_Limits ── 產牌限制(v7.11 additive;舊檔無此 sheet → 跳過,genLimits 維持)
+          const ws7b = wb.getWorksheet('07b_Gen_Limits');
+          if (ws7b) {
+            const ngl = [];
+            ws7b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const lid = asStr(row.getCell(1).value).trim();
+              if (!lid) return;
+              const maxRaw = row.getCell(5).value;
+              const maxStr = asStr(maxRaw).trim();
+              ngl.push({
+                limit_id: lid,
+                symbol_id: asStr(row.getCell(2).value),
+                zone: asStr(row.getCell(3).value) || 'MAIN',
+                min_count: asNum(row.getCell(4).value, 0),
+                max_count: (maxStr === '' ? null : asNum(maxRaw, null)),
+                mode_scope: asStr(row.getCell(6).value) || 'ALL',
+                notes: asStr(row.getCell(7).value),
+              });
+            });
+            // additive:有 sheet 就以匯入內容覆蓋(空 sheet → 清空,語義正確)
+            genLimits.splice(0, genLimits.length, ...ngl);
           }
 
           // ── 10_Discard_Rules ──
@@ -7248,6 +7447,7 @@
         '分佈區間':   'distribution_bins',
         '中獎線':     'paylines',
         '硬約束':     'constraints',
+        '產牌限制':   'rules',            // v7.11:產牌限制為規則頁子分頁,dirty 掛規則 tab
         'Reel 權重':  'reel_weights',
         '格數權重':   'grid_size_weights',
         '連爆權重':   'combo_weights',
@@ -7291,6 +7491,7 @@
           case '分佈區間': return () => saveBins(JSON.parse(JSON.stringify(bins)));
           case '中獎線':   return () => savePaylines(paylines.map(p => ({ ...p })));
           case '硬約束':   return () => saveConstraints(constraints.map(c => ({ ...c })));
+          case '產牌限制': return () => saveGenLimits(genLimits.map(g => ({ ...g })));
           case 'Reel 權重': return () => saveReelWeights(JSON.parse(JSON.stringify(reelWeights)));
           case '格數權重': return () => saveGridWeights(JSON.parse(JSON.stringify(gridWeights)));
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
@@ -7339,6 +7540,7 @@
       watch(bins,         () => scheduleSave('分佈區間'), { deep: true });
       watch(paylines,     () => scheduleSave('中獎線'),   { deep: true });
       watch(constraints,  () => scheduleSave('硬約束'),   { deep: true });
+      watch(genLimits,    () => scheduleSave('產牌限制'), { deep: true });
       watch(reelWeights,  () => scheduleSave('Reel 權重'), { deep: true });
       watch(gridWeights,  () => scheduleSave('格數權重'), { deep: true });
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
@@ -7992,15 +8194,18 @@
             Object.assign(g, DEFAULT_GLOBAL);
             modes.splice(0, modes.length, ...DEFAULT_MODES.map(m => ({ ...m })));
             emit('status', { type: 'ok', msg: '已重設賠付模型 + 模式定義為預設值' });
+          } else if (rulesSection.value === 'discard') {
+            if (!confirm(`重設「棄牌規則」子分頁?\n\n即將清除目前 ${discards.length} 條棄牌規則(含拼圖暫存),回到預設範本。此動作不可復原。`)) return;
+            discards.splice(0, discards.length, ...DEFAULT_DISCARDS.map(d => ({ ...d })));
+            emit('status', { type: 'ok', msg: '已重設棄牌規則為預設值' });
           } else {
-            // v3.1:09 + 10 已合併;rules 同時涵蓋拼圖規則與棄牌規則
-            if (!confirm(`重設 ${tabLabel}?\n\n即將清除:\n· 目前 ${rules.length} 條拼圖規則(含拼圖建構器暫存與 raw/builder 切換狀態)\n· 目前 ${discards.length} 條棄牌規則(含拼圖暫存)\n\n所有規則會回到預設範本,此動作不可復原。`)) return;
+            // 盤面/通用:只重設拼圖規則(棄牌已獨立子分頁)
+            if (!confirm(`重設拼圖規則(${rulesSection.value === 'board' ? '盤面/圖示' : '通用'}子分頁所屬)?\n\n即將清除目前 ${rules.length} 條拼圖規則(含拼圖建構器暫存與 raw/builder 切換狀態),回到預設範本。\n注意:此動作會重設「全部」拼圖規則(不分盤面/通用)。此動作不可復原。`)) return;
             Object.keys(builderRowsMap).forEach(k => delete builderRowsMap[k]);
             Object.keys(ruleEditMode).forEach(k => delete ruleEditMode[k]);
             Object.keys(ruleParseError).forEach(k => delete ruleParseError[k]);
             rules.splice(0, rules.length, ...DEFAULT_RULES.map(r => ({ ...r })));
-            discards.splice(0, discards.length, ...DEFAULT_DISCARDS.map(d => ({ ...d })));
-            emit('status', { type: 'ok', msg: '已重設拼圖規則 + 棄牌規則為預設值' });
+            emit('status', { type: 'ok', msg: '已重設拼圖規則為預設值' });
           }
         } else if (id === 'symbols') {
           emit('status', { type: 'wait', msg: '請使用上方「↺ 重設」按鈕(在符號清單卡片內)' });
@@ -8348,6 +8553,10 @@
         paylineMiniSvg,
         constraints, constraintsDebugJson, constraintDuplicateIds, CONSTRAINT_TYPES,
         addConstraint, removeConstraint, toggleConstraintMode, constraintHasMode,
+        // v7.11:產牌限制 / 生成期約束
+        genLimits, genLimitDuplicateIds, genLimitZoneOptions, genLimitStatusOf,
+        genLimitSymbolOptions,
+        addGenLimit, removeGenLimit, genLimitZoneLabel, humanizeGenLimit,
         reelWeights, reelWeightsDebugJson,
         reelW, reelSymbolIdsStr, setReelSymbolIdsStr,
         reelMaxWeight, reelHeatColor, reelTotalForRow,
@@ -8456,6 +8665,8 @@
         stripGenLen, stripGenStacked,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
         bonusGames, addBonusGame, removeBonusGame, addBonusItem, removeBonusItem,
+        bonusesForMode, addBonusForMode, bonusOtherModes,
+        addTriggerPay, removeTriggerPay, RESET_SCOPE_OPTIONS, STACK_MODE_OPTIONS,
         toggleBonusMode, bonusHasMode, bonusJpOptions,
         bonusItemPct, bonusExpected, BONUS_TYPE_LABEL,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
@@ -8505,6 +8716,7 @@
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用
         selectedKind, rulesListFilter, rulesAddMenuOpen,
+        isBoardRule, ruleInSection,
         rulesSection, setRulesSection,
         rulesNavExpanded, onRulesParentClick, gotoRulesSub, onRailReopen,
         addRuleFromMenu,

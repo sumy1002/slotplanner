@@ -337,11 +337,40 @@
             </div>
           </div>
 
-          <!-- 預留:更細的生成期約束(指定 reel/主副盤/數量)— 規劃中,尚未接引擎 -->
-          <div class="sym-future-note">
-            <span class="sym-future-note-tag">規劃中</span>
-            <span>更細的「產牌限制」(指定符號於特定 reel / 主盤 / 副盤的出現數量上下限)為生成期約束,
-            將於後續版本接入產牌引擎,屆時會在此設定。</span>
+          <!-- v7.11:產牌限制 / 生成期約束(取代原「規劃中」預留)。共用規則頁「產牌限制」子分頁同一份資料。 -->
+          <div class="sym-genlimit-block">
+            <div class="sym-subsection-label">
+              產牌限制
+              <span class="field-label-hint">每個區域的出現數量上下限</span>
+              <button class="btn-pill add" style="font-size:11px; padding:2px 8px; margin-left:auto;"
+                      :disabled="!selected" @click.stop="addSymbolGenLimit" title="為此符號新增一條產牌限制">＋ 新增</button>
+            </div>
+            <div v-if="!symbolGenLimits.length"
+                 style="font-size:12px; color:var(--text-light); padding:4px 0;">
+              尚未設定。可在此或「規則 → 產牌限制」子分頁新增（兩處同步）。
+            </div>
+            <div v-for="(gl, gi) in symbolGenLimits" :key="'sgl'+gi" class="sym-genlimit-row"
+                 :class="{ 'is-warn': genLimitRowStatus(gl).kind === 'warn', 'is-err': genLimitRowStatus(gl).kind === 'err' }">
+              <select class="input input-sm sym-genlimit-zone" v-model="gl.zone" title="區域">
+                <option v-for="z in genLimitZoneOpts" :key="z.value" :value="z.value">{{ z.label }}</option>
+              </select>
+              <label class="sym-genlimit-mm">下限
+                <input class="input input-sm input-center" type="number" min="0" max="999"
+                       v-model.number="gl.min_count" style="width:52px;" title="該區域內至少幾顆（0=無下限）">
+              </label>
+              <label class="sym-genlimit-mm">上限
+                <input class="input input-sm input-center" type="number" min="0" max="999"
+                       v-model.number="gl.max_count" style="width:52px;" placeholder="∞" title="該區域內至多幾顆（空=無上限）">
+              </label>
+              <button class="btn-pill del sym-genlimit-del" @click.stop="removeSymbolGenLimit(gl)"
+                      title="刪除此條">🗑</button>
+              <div v-if="genLimitRowStatus(gl).kind !== 'ok'" class="sym-genlimit-msg">
+                {{ genLimitRowStatus(gl).msg }}
+              </div>
+            </div>
+            <div style="font-size:11px; color:var(--text-light); margin-top:6px;">
+              ※ 生成期約束（產牌條件）：描述「某符號在某區域內的出現數量」。本工具負責格式書 / 企劃書，數值模擬由另一工具執行。
+            </div>
           </div>
 
           <div class="sym-subsection-divider"></div>
@@ -744,6 +773,62 @@
       }
       const symbolRefs = computed(() => { _refsTick.value; return scanSymbolRefs(selected.value); });
       function refreshSymbolRefs() { _refsTick.value++; }
+
+      // ── v7.11:產牌限制 / 生成期約束(入口 A:符號卡)──
+      //   共用 setup.js 的 SP.genLimits / SP.genLimitZoneOptions(單一真相,跨元件同步)。
+      const _genLimitHelpers = {
+        zoneLabel: (SP.ConfigEditor && SP.ConfigEditor.Helpers && SP.ConfigEditor.Helpers.genLimitZoneLabel) || null,
+        status:    (SP.ConfigEditor && SP.ConfigEditor.Helpers && SP.ConfigEditor.Helpers.genLimitStatus) || null,
+      };
+      function _symKeyOf(s) {
+        if (!s) return '';
+        return (s.symbol_id && String(s.symbol_id).trim()) || s.name || ('#' + s.number);
+      }
+      // 此符號的產牌限制(依 symbol_id 過濾共享陣列)
+      const symbolGenLimits = computed(() => {
+        const list = (SP.genLimits && Array.isArray(SP.genLimits)) ? SP.genLimits : [];
+        const key = _symKeyOf(selected.value);
+        if (!key) return [];
+        return list.filter(g => g && (g.symbol_id === key));
+      });
+      // zone 選項(由 setup 動態提供;退化為僅主盤)
+      const genLimitZoneOpts = computed(() => {
+        const opt = SP.genLimitZoneOptions;
+        const v = opt && (opt.value || (typeof opt === 'object' && opt.__v_isRef ? opt.value : null));
+        if (Array.isArray(v)) return v;
+        if (opt && Array.isArray(opt.value)) return opt.value;
+        return [{ value: 'MAIN', label: '主盤整體' }];
+      });
+      function addSymbolGenLimit() {
+        const s = selected.value;
+        if (!s) return;
+        flushWrite();
+        const key = _symKeyOf(s);
+        if (typeof SP.addGenLimit === 'function') {
+          SP.addGenLimit(key);
+        } else if (SP.genLimits && Array.isArray(SP.genLimits)) {
+          // 保底:setup 尚未掛載時直接 push(極少發生)
+          SP.genLimits.push({ limit_id: 'GL' + (SP.genLimits.length + 1), symbol_id: key,
+                              zone: 'MAIN', min_count: 0, max_count: null, mode_scope: 'ALL', notes: '' });
+        }
+      }
+      function removeSymbolGenLimit(gl) {
+        if (typeof SP.removeGenLimitByRef === 'function') {
+          SP.removeGenLimitByRef(gl);
+        } else if (SP.genLimits && Array.isArray(SP.genLimits)) {
+          const i = SP.genLimits.indexOf(gl);
+          if (i >= 0) SP.genLimits.splice(i, 1);
+        }
+      }
+      function genLimitRowStatus(gl) {
+        if (!_genLimitHelpers.status) return { kind: 'ok', msg: '' };
+        const dup = new Set();   // 符號卡內不做全域重複檢查(總表負責);只看單條合法性
+        return _genLimitHelpers.status(gl, dup);
+      }
+      function genLimitOtherZonesHint(gl) {
+        // 若此符號在多個 zone 有限制,提示一下(輔助理解,非必要)
+        return '';
+      }
       // v6.2 規則#11 正向:跳到硬約束分頁並預填此符號(輕量雙向)
       function addRelatedConstraint() {
         const s = selected.value;
@@ -1599,6 +1684,7 @@
         symbols, swatchMap, reelCount,
         spec, maxPayCount, payRowIssues,
         symbolRefs, refreshSymbolRefs, addRelatedConstraint,
+        symbolGenLimits, genLimitZoneOpts, addSymbolGenLimit, removeSymbolGenLimit, genLimitRowStatus,
         selectedId, selected, form,
         numErr, nameErr,
         totalWeight,

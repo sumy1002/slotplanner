@@ -165,6 +165,7 @@
     const multipliers = readLS('slotplanner.aconfig.multipliers.v1', {});  // v5.4
     const coinValues  = readLS('slotplanner.aconfig.coinvalues.v1',  {});  // v5.4
     const bonusGames  = readLS('slotplanner.aconfig.bonusgames.v1',  {});  // v6.0-c
+    const genLimits   = readLS('slotplanner.aconfig.genLimits.v1',   []);  // v7.11
     const registryRaw = readLS('slotplanner.registry.v1',             { symbols: [] });
 
     const modeNames = modes.map(m => m.mode).filter(Boolean);
@@ -196,10 +197,12 @@
       ['05_Grid_Size_Weights', '格數權重'],
       ['06_Paylines', '中獎線'],
       ['07_Constraints', '硬約束'],
+      ['07b_Gen_Limits', '產牌限制 / 生成期約束(v7.11;選用;長格式 符號×zone×min/max;供下游模擬工具,本工具不執行)'],
       ['08_Combo_Weights', '連爆權重'],
       ['09_Puzzle_Rules', '腳本規則'],
       ['10_Discard_Rules', '棄牌規則'],
       ['11_Mode_Config', '模式設定'],
+      ['11b_Mode_TriggerPays', '各模式 scatter-pay 觸發給付(v7.10;選用;引擎尚未消費,Stage 3 接)'],
       ['12_Distribution_Bins', '分佈區間'],
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
       ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
@@ -417,6 +420,25 @@
     }
     boldHdr(wsC); setCols(wsC, [14, 16, 13, 16, 18, 13, 28]);
 
+    // 07b_Gen_Limits(v7.11:產牌限制 / 生成期約束;長格式;additive)
+    //   一列 = 一個符號 × 一個 zone × (min, max) × mode_scope。
+    //   Zone:MAIN / SUB:<reel_id> / PANEL:<panel_id>。空 Max → 無上限;0 Min → 無下限。
+    const wsGL = wb.addWorksheet('07b_Gen_Limits');
+    wsGL.addRow(['Limit_ID', 'Symbol_ID', 'Zone', 'Min_Count', 'Max_Count', 'Mode_Scope', 'Notes']);
+    for (const gl of (Array.isArray(genLimits) ? genLimits : [])) {
+      if (!gl || !gl.limit_id) continue;
+      wsGL.addRow([
+        gl.limit_id,
+        gl.symbol_id || '',
+        gl.zone || 'MAIN',
+        (gl.min_count != null && gl.min_count !== '') ? gl.min_count : 0,
+        (gl.max_count != null && gl.max_count !== '') ? gl.max_count : '',
+        gl.mode_scope || 'ALL',
+        gl.notes || '',
+      ]);
+    }
+    boldHdr(wsGL); setCols(wsGL, [14, 14, 16, 11, 11, 13, 28]);
+
     // 08_Combo_Weights(扁平化)
     const wsCW = wb.addWorksheet('08_Combo_Weights');
     wsCW.addRow(['Mode_Scope', 'Combo_Step', 'Reel_ID', 'Symbol_ID', 'Weight', 'Notes']);
@@ -472,13 +494,25 @@
 
     // 11_Mode_Config
     const wsM = wb.addWorksheet('11_Mode_Config');
+    // v7.10:尾端 additive 新增 Reset_Scope(既有 6 欄順序/內容不動)
     wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
-                'On_Enter_Reset_Vars', 'Notes']);
+                'On_Enter_Reset_Vars', 'Notes', 'Reset_Scope']);
     for (const m of modes) {
       wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
-                  m.on_enter_reset_vars, m.notes]);
+                  m.on_enter_reset_vars, m.notes, m.reset_scope || '']);
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14]);
+
+    // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
+    //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
+    const wsTP = wb.addWorksheet('11b_Mode_TriggerPays');
+    wsTP.addRow(['Mode', 'Scatter_Count', 'Pay', 'Grants_Spins']);
+    for (const m of modes) {
+      for (const tp of (m.trigger_pays || [])) {
+        wsTP.addRow([m.mode, tp.scatter_count || 0, tp.pay || 0, tp.grants_spins || 0]);
+      }
+    }
+    boldHdr(wsTP); setCols(wsTP, [14, 14, 12, 14]);
 
     // 12_Distribution_Bins
     const wsB = wb.addWorksheet('12_Distribution_Bins');
@@ -729,6 +763,7 @@
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
       bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
+      genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
       registry:     'slotplanner.registry.v1',
     };
     const out = {};
@@ -765,6 +800,7 @@
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
       bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
+      genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
       registry:     'slotplanner.registry.v1',
     };
     for (const [k, lsKey] of Object.entries(keys)) {

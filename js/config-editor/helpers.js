@@ -1562,6 +1562,114 @@
   }
 
   // ──────────────────────────────────────────────────────────
+  //  07b_Gen_Limits 產牌限制 / 生成期約束(v7.11)
+  //   長格式:一條 = 一個符號 × 一個 zone × (min, max) × mode_scope。
+  //   zone:'MAIN' / 'SUB:<reel_id>' / 'PANEL:<panel_id>'(單一真相,對齊 02_Layout/02b_Panels)。
+  //   本工具僅描述 + 帶資料 + 文件輸出,不執行(供下游模擬工具消費)。
+  // ──────────────────────────────────────────────────────────
+  const LS_GENLIMITS_KEY = 'slotplanner.aconfig.genLimits.v1';
+
+  function makeGenLimit(id) {
+    return {
+      limit_id: id || '',
+      symbol_id: '',
+      zone: 'MAIN',
+      min_count: 0,           // 0 = 無下限
+      max_count: null,        // null/'' = 無上限
+      mode_scope: 'ALL',
+      notes: '',
+    };
+  }
+
+  function loadGenLimits() {
+    // 舊檔無此 key → 空陣列(向後相容);本功能無預設範例資料。
+    try {
+      const raw = localStorage.getItem(LS_GENLIMITS_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(g => ({ ...makeGenLimit(''), ...g }));
+    } catch (e) {
+      console.warn('[config-editor] loadGenLimits failed:', e);
+      return [];
+    }
+  }
+
+  function saveGenLimits(arr) {
+    try {
+      localStorage.setItem(LS_GENLIMITS_KEY, JSON.stringify(arr));
+      return true;
+    } catch (e) {
+      console.warn('[config-editor] saveGenLimits failed:', e);
+      return false;
+    }
+  }
+
+  // 由 layout(主輪含副輪旗標)+ panels 動態產生可用 zone 選項。
+  //   layoutRows:[{reel_id, has_subreel, ...}];panelRows:[{panel_id, ...}]。
+  //   回傳 [{value, label}],供前端 zone 下拉使用(單一真相,避免填到不存在的 zone)。
+  function genLimitZones(layoutRows, panelRows) {
+    const out = [{ value: 'MAIN', label: '主盤整體' }];
+    for (const r of (Array.isArray(layoutRows) ? layoutRows : [])) {
+      if (!r) continue;
+      const hasSub = r.has_subreel === true || r.has_subreel === 'true' || r.has_subreel === 1;
+      const rid = r.reel_id != null ? r.reel_id : r.reelId;
+      if (hasSub && rid != null) {
+        out.push({ value: `SUB:${rid}`, label: `R${rid} 副輪` });
+      }
+    }
+    for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
+      if (!p) continue;
+      const pid = p.panel_id != null ? p.panel_id : p.panelId;
+      if (pid) out.push({ value: `PANEL:${pid}`, label: `副盤 ${pid}` });
+    }
+    return out;
+  }
+
+  // 把 zone 字串轉成人話(供 docgen / UI 摘要)。layout/panel 不在手邊時退化為原字串解碼。
+  function genLimitZoneLabel(zone) {
+    const z = String(zone || 'MAIN');
+    if (z === 'MAIN') return '主盤整體';
+    if (z.startsWith('SUB:'))   return `R${z.slice(4)} 副輪`;
+    if (z.startsWith('PANEL:')) return `副盤 ${z.slice(6)}`;
+    return z;
+  }
+
+  // 驗證單條 gen-limit:回 {kind:'ok'|'warn'|'err', msg}。
+  //   err:limit_id 空 / 重複、min>max。warn:未指定符號、min&max 皆空(此條無意義)。
+  function genLimitStatus(gl, dupIds) {
+    if (!gl) return { kind: 'err', msg: '空白' };
+    const id = (gl.limit_id || '').trim();
+    if (!id) return { kind: 'err', msg: 'Limit_ID 為空' };
+    if (dupIds && dupIds.has && dupIds.has(id)) return { kind: 'err', msg: `編號「${id}」重複` };
+    const hasMin = gl.min_count != null && gl.min_count !== '' && Number(gl.min_count) > 0;
+    const hasMax = gl.max_count != null && gl.max_count !== '';
+    if (hasMin && hasMax && Number(gl.min_count) > Number(gl.max_count)) {
+      return { kind: 'err', msg: `下限(${gl.min_count}) 不可大於上限(${gl.max_count})` };
+    }
+    if (!gl.symbol_id || !String(gl.symbol_id).trim()) return { kind: 'warn', msg: '未指定符號' };
+    if (!hasMin && !hasMax) return { kind: 'warn', msg: '未設定上下限(此條無作用)' };
+    return { kind: 'ok', msg: '' };
+  }
+
+  // 把一條 gen-limit 轉白話(供列表 title / docgen)。
+  function humanizeGenLimit(gl) {
+    if (!gl) return '';
+    const sid = gl.symbol_id || '?';
+    const zone = genLimitZoneLabel(gl.zone);
+    const scope = (gl.mode_scope && gl.mode_scope !== 'ALL') ? `(僅 ${gl.mode_scope} 模式)` : '';
+    const hasMin = gl.min_count != null && gl.min_count !== '' && Number(gl.min_count) > 0;
+    const hasMax = gl.max_count != null && gl.max_count !== '';
+    let range;
+    if (hasMin && hasMax) range = `${gl.min_count}~${gl.max_count} 個`;
+    else if (hasMin)      range = `至少 ${gl.min_count} 個`;
+    else if (hasMax)      range = `至多 ${gl.max_count} 個`;
+    else                  range = '(未設定數量)';
+    return `${scope}「${sid}」在 ${zone} 內 ${range}`;
+  }
+
+
+  // ──────────────────────────────────────────────────────────
   //  04_Reel_Weights 預設值與儲存(Mode × Reel × Symbol → weight)
   // ──────────────────────────────────────────────────────────
   const LS_REELW_KEY = 'slotplanner.aconfig.reelweights.v1';
@@ -2749,6 +2857,8 @@
     savePaylines, parsePathString, validatePayline, generatePaylinePoints, LS_CONSTRAINTS_KEY,
     CONSTRAINT_TYPES, makeConstraint, DEFAULT_CONSTRAINTS, loadConstraints,
     saveConstraints, LS_REELW_KEY, loadReelWeights, saveReelWeights,
+    LS_GENLIMITS_KEY, makeGenLimit, loadGenLimits, saveGenLimits,
+    genLimitZones, genLimitZoneLabel, genLimitStatus, humanizeGenLimit,
     LS_GRIDW_KEY, DEFAULT_GRID_SIZES, loadGridWeights, saveGridWeights,
     parseGridSizes, LS_COMBO_KEY, loadComboWeights, saveComboWeights,
     LS_DISCARD_KEY, DISCARD_KINDS, makeDiscard, DEFAULT_DISCARDS,

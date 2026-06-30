@@ -1263,6 +1263,28 @@ code {
   border-radius: var(--r-pill);
   padding: 1px 8px;
 }
+/* v7.11:產牌限制 / 生成期約束(符號卡入口 A)*/
+.sym-genlimit-block { margin-top: 4px; }
+.sym-genlimit-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 8px; margin-bottom: 6px;
+  background: var(--glass-1);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+}
+.sym-genlimit-row.is-warn { border-color: var(--warn-brd); }
+.sym-genlimit-row.is-err  { border-color: var(--danger-brd); }
+.sym-genlimit-zone { flex: 1 1 120px; min-width: 0; }
+.sym-genlimit-mm {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-light);
+}
+.sym-genlimit-del { margin-left: auto; }
+.sym-genlimit-msg {
+  flex: 1 1 100%;
+  font-size: 11px; color: var(--warn-text);
+}
+.sym-genlimit-row.is-err .sym-genlimit-msg { color: var(--danger-text); }
 .sym-card-summary-chip {
   font-size: 11px; font-weight: 700;
   color: var(--accent-text);

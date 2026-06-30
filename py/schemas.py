@@ -477,7 +477,24 @@ class Constraint:
 
 
 # ============================================================
-# 腳本引擎 (對應 09_Puzzle_Rules) — 條件樹
+# 產牌限制 / 生成期約束 (對應 07b_Gen_Limits, v7.11)
+#   長格式(tidy):一條 = 一個符號 × 一個 zone × (min, max) × mode_scope。
+#   zone 字串(單一真相):
+#     MAIN              主盤整體(所有主輪格總和)
+#     SUB:<reel_id>     某主輪附掛的副輪(例 SUB:3)
+#     PANEL:<panel_id>  某自由副盤(例 PANEL:BONUS)
+#   注意:max_count 為「該 zone 內」上限,與 SymbolDef/03_Symbols 的全盤 max_count 是不同概念。
+#   本工具不執行此約束;僅描述 + 帶給下游模擬工具。
+# ============================================================
+@dataclass
+class GenLimit:
+    limit_id: str
+    symbol_id: str
+    zone: str = "MAIN"
+    min_count: int = 0                       # 0 = 無下限
+    max_count: Optional[int] = None          # None = 無上限
+    mode_scope: str = "ALL"
+    notes: str = ""
 # ============================================================
 @dataclass
 class ConditionLeaf:
@@ -552,6 +569,13 @@ class ModeConfig:
     # v6.4 / 缺漏#4:scatter-pay 觸發給付(觸發即付,非連線賠付)。
     #   例:Buffalo 4/5/6 SCATTER → 5x/20x/100x;Gates 4/5/6 → 3x/5x/100x。
     trigger_pays: list["TriggerPay"] = field(default_factory=list)
+    # v7.11 additive:此模式的封頂/上限(規格書描述用;引擎不消費)。
+    #   cap_enabled='' / 'Y';cap_value 字串(可含區間)。
+    cap_enabled: str = ""
+    cap_value: str = ""
+    # v7.11 additive:此模式的倍數疊加方式;None = 繼承 Multipliers.stack_mode。
+    #   三層優先序(docgen 描述):符號 mult_stack_mode → mode stack_mode → 全域。
+    stack_mode: Optional[MultStackMode] = None
 
 
 # ============================================================
@@ -605,6 +629,9 @@ class AConfig:
     reel_strips: dict = field(default_factory=dict)
     # v6.0-c:Bonus 小遊戲（選用）
     bonus_games: list = field(default_factory=list)
+    # v7.11:產牌限制 / 生成期約束（選用;對應 07b_Gen_Limits）
+    #   本工具僅描述 + 帶資料 + 文件輸出,不在本引擎執行;供下游數據模擬工具消費。
+    gen_limits: list["GenLimit"] = field(default_factory=list)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

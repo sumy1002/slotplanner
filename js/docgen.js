@@ -117,6 +117,7 @@
     const multipliers = _readLS('slotplanner.aconfig.multipliers.v1', {});
     const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
     const bonusGames  = _readLS('slotplanner.aconfig.bonusgames.v1', {});   // v6.0-c
+    const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
 
     const allSyms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     const syms = allSyms.filter(s => s.enabled !== false);
@@ -162,6 +163,7 @@
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
       coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
       bonusGames: (bonusGames && Array.isArray(bonusGames.games)) ? bonusGames.games : [],   // v6.0-c
+      genLimits: Array.isArray(genLimits) ? genLimits : [],   // v7.11
       derived: {
         gridStr,
         waysCount,
@@ -729,6 +731,34 @@
       XR++;
     }
 
+    // v7.11:產牌限制 / 生成期約束(有資料才建表)
+    if (Array.isArray(cfg.genLimits) && cfg.genLimits.length) {
+      const _zl = (z) => {
+        const zs = String(z || 'MAIN');
+        if (zs === 'MAIN') return '主盤整體';
+        if (zs.startsWith('SUB:'))   return 'R' + zs.slice(4) + ' 副輪';
+        if (zs.startsWith('PANEL:')) return '副盤 ' + zs.slice(6);
+        return zs;
+      };
+      XR++;
+      xBand('產牌限制 / 生成期約束');
+      ['ID', '符號', '區域', '下限', '上限', '模式', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+      XR++;
+      cfg.genLimits.forEach(gl => {
+        if (!gl || !gl.limit_id) return;
+        const minV = (gl.min_count != null && gl.min_count !== '' && Number(gl.min_count) > 0) ? gl.min_count : '—';
+        const maxV = (gl.max_count != null && gl.max_count !== '') ? gl.max_count : '—';
+        _cell(wsX, XR, 1, gl.limit_id, { h: 'center' });
+        _cell(wsX, XR, 2, gl.symbol_id || '', { h: 'center' });
+        _cell(wsX, XR, 3, _zl(gl.zone), { h: 'center' });
+        _cell(wsX, XR, 4, minV, { h: 'center' });
+        _cell(wsX, XR, 5, maxV, { h: 'center' });
+        _cell(wsX, XR, 6, (gl.mode_scope && gl.mode_scope !== 'ALL') ? gl.mode_scope : '全部', { h: 'center' });
+        _cell(wsX, XR, 7, gl.notes || '');
+        XR++;
+      });
+    }
+
     // ── Sheet 5：數值機制（v5.6:投注結構 / 倍數系統 / 金幣面額）──
     //   僅在有對應設定時才建表，避免空白頁
     const bc = cfg.betConfig || {};
@@ -1069,6 +1099,32 @@
         L.push(beh || '_（待填）_');
         L.push('');
       });
+    }
+
+    // v7.11:產牌限制 / 生成期約束(有資料才輸出)
+    if (Array.isArray(cfg.genLimits) && cfg.genLimits.length) {
+      const _zoneLabel = (z) => {
+        const zs = String(z || 'MAIN');
+        if (zs === 'MAIN') return '主盤整體';
+        if (zs.startsWith('SUB:'))   return `R${zs.slice(4)} 副輪`;
+        if (zs.startsWith('PANEL:')) return `副盤 ${zs.slice(6)}`;
+        return zs;
+      };
+      L.push('## 產牌限制 / 生成期約束');
+      L.push('');
+      L.push('| 符號 | 區域 | 下限 | 上限 | 適用模式 | 備註 |');
+      L.push('| --- | --- | --- | --- | --- | --- |');
+      cfg.genLimits.forEach(gl => {
+        if (!gl || !gl.limit_id) return;
+        const minV = (gl.min_count != null && gl.min_count !== '' && Number(gl.min_count) > 0) ? gl.min_count : '—';
+        const maxV = (gl.max_count != null && gl.max_count !== '') ? gl.max_count : '—';
+        const scope = (gl.mode_scope && gl.mode_scope !== 'ALL') ? gl.mode_scope : '全部';
+        const notes = String(gl.notes || '').replace(/\|/g, '\\|');
+        L.push(`| ${gl.symbol_id || '?'} | ${_zoneLabel(gl.zone)} | ${minV} | ${maxV} | ${scope} | ${notes} |`);
+      });
+      L.push('');
+      L.push('> 生成期約束（產牌條件）：描述各區域內符號出現數量的上下限，供數值組 / 模擬工具落盤時遵循。');
+      L.push('');
     }
 
     // v6.4 / 缺漏#9+#10:合規數值披露(任一欄有值才輸出)
