@@ -140,8 +140,6 @@
   max-width: 100%;
   max-height: 90vh;
   background: var(--glass-5);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-card);
   box-shadow:
@@ -4233,8 +4231,6 @@
   top: 0;
   z-index: 20;
   background: var(--glass-4);
-  backdrop-filter: var(--blur-thin);
-  -webkit-backdrop-filter: var(--blur-thin);
   border-bottom: 1px solid var(--glass-brd);
   padding: 8px 14px;
   display: flex;
@@ -4622,8 +4618,6 @@
   border: 1px solid var(--glass-brd);
   border-radius: 12px;
   box-shadow: var(--shadow-lg, 0 10px 30px rgb(var(--tint-deep) / 0.18));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   animation: matrixMenuIn 0.12s ease-out;
 }
 @keyframes matrixMenuIn {
@@ -4860,8 +4854,6 @@
   border: 1px solid var(--glass-brd);
   border-radius: 14px;
   box-shadow: var(--shadow-lg, 0 12px 36px rgb(var(--tint-deep) / 0.22));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   animation: matrixMenuIn 0.14s ease-out;
   overflow: hidden;
 }
@@ -5100,8 +5092,6 @@
   border: 1px solid var(--glass-brd);
   border-radius: 14px;
   box-shadow: var(--shadow-lg, 0 12px 36px rgb(var(--tint-deep) / 0.22));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   animation: matrixMenuIn 0.14s ease-out;
   overflow: hidden;
 }
@@ -5379,8 +5369,6 @@
   border: 1px solid var(--glass-brd);
   border-radius: 14px;
   box-shadow: 0 14px 40px rgb(var(--tint-deep) / 0.28);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   overflow: hidden;
   animation: matrixMenuIn 0.18s ease-out;
 }
@@ -6399,8 +6387,6 @@
   border: 1px solid var(--glass-brd);
   border-radius: 12px;
   box-shadow: var(--shadow-lg, 0 10px 30px rgb(var(--tint-deep) / 0.18));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 .cfg-rules-add-menu-item {
   display: grid;
@@ -6728,8 +6714,6 @@
   left: 8px;
   right: 8px;
   background: var(--glass-5);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-lg);
@@ -7823,8 +7807,6 @@
   right: 0;
   min-width: 180px;
   background: var(--glass-5);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-lg);
@@ -7944,7 +7926,6 @@
   background: var(--glass-2);
   border: 1px dashed var(--glass-edge);
   border-radius: var(--r-lg);
-  box-shadow: var(--inset-glass);
 }
 .cfg-tab-na-notice-icon { font-size: 2rem; opacity: 0.7; }
 .cfg-tab-na-notice-title {
@@ -7978,9 +7959,6 @@
   background: var(--glass-2);
   border: 0.5px solid var(--glass-edge);
   border-radius: var(--r-md);
-  box-shadow: var(--inset-glass);
-  backdrop-filter: var(--blur-md);
-  -webkit-backdrop-filter: var(--blur-md);
 }
 .cfg-mqb-group { display: flex; align-items: center; gap: 6px; }
 .cfg-mqb-label { font-size: 11px; font-weight: 700; color: var(--text-light); }
@@ -8034,7 +8012,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: rgb(var(--tint-accent) / 0.08);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-md);
-  box-shadow: var(--inset-glass);
 }
 .cfg-layout-group-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cfg-layout-group-bar-title { font-size: 12px; font-weight: 700; color: var(--accent-text); }
@@ -8077,9 +8054,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: var(--glass-1);
   border: 0.5px solid var(--glass-edge);
   border-radius: var(--r-md);
-  box-shadow: var(--inset-glass);
-  -webkit-backdrop-filter: var(--blur-thin);
-  backdrop-filter: var(--blur-thin);
 }
 .data-tab {
   display: inline-flex;
@@ -8207,8 +8181,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   flex-wrap: wrap;
   padding: 12px 16px;
   background: var(--glass-4);
-  backdrop-filter: var(--blur-md);
-  -webkit-backdrop-filter: var(--blur-md);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
@@ -8697,8 +8669,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   justify-content: center;
   padding: 24px;
   background: rgba(40,36,32,0.38);
-  backdrop-filter: var(--blur-overlay);
-  -webkit-backdrop-filter: var(--blur-overlay);
 }
 .cfg-diff-modal {
   width: min(720px, 100%);
@@ -9309,8 +9279,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: var(--glass-2, rgba(255,255,255,0.5));
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-lg);
-  backdrop-filter: var(--blur-md);
-  -webkit-backdrop-filter: var(--blur-md);
 }
 .bcmp-card-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
 .bcmp-card-details > summary { cursor: pointer; list-style: none; }
@@ -10376,8 +10344,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   left: 8px;
   right: 8px;
   background: var(--glass-5);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-lg);
