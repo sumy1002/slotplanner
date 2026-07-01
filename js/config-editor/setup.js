@@ -1093,6 +1093,44 @@
         modeExpandedKey.value = (modeExpandedKey.value === k) ? null : k;
       }
 
+      // ── v7.12:模式卡內「玩法設定 / 關聯 Bonus」子卡收合(runtime-only,不存 LS)──
+      // 預設展開(true);以 modeCardKey 為索引,避免不同模式共用狀態。
+      const modeGpOpen = reactive({});     // 玩法設定
+      const modeBnOpen = reactive({});     // 關聯 Bonus
+      function isModeGpOpen(m) { const k = modeCardKey(m); return modeGpOpen[k] !== false; }
+      function isModeBnOpen(m) { const k = modeCardKey(m); return modeBnOpen[k] !== false; }
+      function toggleModeGp(m) { const k = modeCardKey(m); modeGpOpen[k] = (modeGpOpen[k] === false); }
+      function toggleModeBn(m) { const k = modeCardKey(m); modeBnOpen[k] = (modeBnOpen[k] === false); }
+      // 玩法設定:有無任何實質設定(reset_scope / stack_mode / cap / trigger_pays)
+      function modeGpHasContent(m) {
+        if (!m) return false;
+        if ((m.reset_scope || '') || (m.stack_mode || '')) return true;
+        if (m.cap_enabled === 'Y' && (m.cap_value || '')) return true;
+        if ((m.trigger_pays || []).length > 0) return true;
+        return false;
+      }
+      // 玩法設定收合摘要:精要描述
+      function modeGpSummary(m) {
+        if (!m) return '';
+        const parts = [];
+        if (m.reset_scope) parts.push('重置 ' + m.reset_scope);
+        if (m.stack_mode) parts.push('疊加 ' + m.stack_mode);
+        if (m.cap_enabled === 'Y' && (m.cap_value || '')) parts.push('封頂');
+        const tp = (m.trigger_pays || []).length;
+        if (tp) parts.push(tp + ' 條觸發給付');
+        return parts.join(' · ');
+      }
+      // 關聯 Bonus:適用此模式的 bonus 數
+      function modeBnCount(m) {
+        if (!m) return 0;
+        try { return bonusesForMode(m.mode).length; } catch (e) { return 0; }
+      }
+      function modeBnHasContent(m) { return modeBnCount(m) > 0; }
+      function modeBnSummary(m) {
+        const n = modeBnCount(m);
+        return n ? (n + ' 個 Bonus') : '';
+      }
+
       function addMode() {
         // 自動產生不衝突的新名稱
         const taken = new Set(modes.map(m => m.mode));
@@ -2970,6 +3008,32 @@
         betConfig.buy_features.push(makeBuyFeature(unusedMode ? unusedMode.mode : ''));
       }
       function removeBuyFeature(idx) { betConfig.buy_features.splice(idx, 1); }
+
+      // ── UI 卡片收合(runtime-only,不存 LS)──
+      // 收合摘要 + 標題反灰:沿用 03_Symbols 卡片語彙,推廣到 bet_config 兩卡。
+      const betCardOpen = reactive({ ante: true, buy: true });
+      function toggleBetCard(id) {
+        if (id !== 'ante' && id !== 'buy') return;
+        // 未啟用時鎖定收合:標題列只顯示灰字說明,不可折疊
+        if (id === 'ante' && !betConfig.ante_bet_enabled) return;
+        if (id === 'buy' && !betConfig.buy_feature_enabled) return;
+        betCardOpen[id] = !betCardOpen[id];
+      }
+      // 收合摘要:啟用時顯示精要,未啟用則回 ''(改由標題反灰 + off-hint 表達)
+      const anteBetSummary = computed(() => {
+        if (!betConfig.ante_bet_enabled) return '';
+        const parts = [];
+        const cm = Number(betConfig.ante_bet_mult);
+        if (cm > 0) parts.push('成本 ×' + cm);
+        const tm = Number(betConfig.ante_bet_trigger_mult);
+        if (tm > 0) parts.push('觸發 ×' + tm);
+        return parts.join(' · ');
+      });
+      const buyFeatureSummary = computed(() => {
+        if (!betConfig.buy_feature_enabled) return '';
+        const n = (betConfig.buy_features || []).length;
+        return n ? (n + ' 個購買項目') : '尚未設定項目';
+      });
 
       // ── v5.4:倍數系統(15_Multipliers)資料層 ──
       // v6.4 死碼移除:multipliers 分頁的編輯器函式(addWildMultValue/removeWildMultValue/
@@ -8309,6 +8373,16 @@
         emit('status', { type: 'ok', msg: `賠付模型已設為 ${id}` });
       }
 
+      // ── v7.12:賠付模型卡收合(runtime-only,不存 LS)──
+      const payModelOpen = ref(true);
+      function togglePayModel() { payModelOpen.value = !payModelOpen.value; }
+      const payModelSummary = computed(() => {
+        const parts = [activePayModel.value];
+        if (scanDirApplicable.value) parts.push(scanDirLabel(curScanDir.value));
+        if (g.pay_type === 'CLUSTER') parts.push('min ' + g.cluster_min_size);
+        return parts.join(' · ');
+      });
+
       // ── 計分方向(全域單一控制,同時套用 ways_direction 與 payline_direction)──
       const scanDirApplicable = computed(() => {
         const m = activePayModel.value;
@@ -8489,6 +8563,7 @@
       return {
         // ── v4.1 補回(賠付模型 / 計分方向 / 分頁適用性)──
         PAY_MODELS, activePayModel, selectPayModel,
+        payModelOpen, togglePayModel, payModelSummary,
         scanDirApplicable, curScanDir, setScanDir, scanDirLabel,
         tabNotApplicable, tabNAReason,
         gridHeatColor,
@@ -8655,9 +8730,12 @@
         reelCellDiff, gridCellDiff, cellDiffLabel,
         // v3.4 / B6:範本載入 diff preview
         modeExpandedKey, isModeExpanded, toggleModeExpanded,
+        isModeGpOpen, isModeBnOpen, toggleModeGp, toggleModeBn,
+        modeGpHasContent, modeGpSummary, modeBnHasContent, modeBnSummary,
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
         betConfig, addBuyFeature, removeBuyFeature,
+        betCardOpen, toggleBetCard, anteBetSummary, buyFeatureSummary,
         // v6.4 死碼移除:multipliers/coin_values 編輯器函式不再導出(對應 template 區塊已移除)。
         //   multipliers/coinValues 物件本身內部仍由存檔 watch / 驗證 / 遷移使用,無需導出至模板。
         rtpResult, rtpPct, rtpVsTarget,

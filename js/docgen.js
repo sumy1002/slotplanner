@@ -220,6 +220,21 @@
   const _SCOPE_LABEL = { CASCADE: '每次連線中斷重置（per-cascade）', SPIN: '每局重置（per-spin）', FEATURE: '整個 feature 全程不重置（per-feature）' };
   function _stackModeLabel(v) { return _STACK_LABEL[String(v || '').toUpperCase()] || ''; }
   function _resetScopeLabel(v) { return _SCOPE_LABEL[String(v || '').toUpperCase()] || ''; }
+  // v7.12:mode 玩法欄位(reset_scope / stack_mode / 封頂)→ 人話字串。
+  //   規格書描述用;本工具不執行、不算 RTP(由數值模擬工具落盤)。空欄一律回 '' / '繼承全域'。
+  function _modeResetDesc(md) {
+    const s = String((md && md.reset_scope) || '').toUpperCase();
+    return s ? (_resetScopeLabel(s) || s) : '繼承全域';
+  }
+  function _modeStackDesc(md) {
+    const s = String((md && md.stack_mode) || '').toUpperCase();
+    return s ? (_stackModeLabel(s) + '（' + s + '）') : '繼承全域';
+  }
+  function _modeCapDesc(md) {
+    if (!md || md.cap_enabled !== 'Y') return '不封頂';
+    const v = String(md.cap_value || '').trim();
+    return v ? ('有（' + v + '）') : '有（未填上限值）';
+  }
   // 某符號的「有效」倍數疊加方式:符號自帶 mult_stack_mode 優先,否則用文件層 meta.mult_stack_mode。
   function _symStackMode(s, meta) {
     const sm = (s && s.mult_stack_mode) || (meta && meta.mult_stack_mode) || '';
@@ -667,8 +682,9 @@
 
     // ── Sheet 3：模式明細 ──
     const wsM = wb.addWorksheet('模式明細');
-    wsM.columns = [{ width: 10 }, { width: 32 }, { width: 10 }, { width: 12 }, { width: 30 }];
-    ['模式', '觸發條件', '局數', '繼承全域', '說明'].forEach((h, i) =>
+    wsM.columns = [{ width: 10 }, { width: 32 }, { width: 10 }, { width: 12 }, { width: 30 },
+                   { width: 22 }, { width: 16 }, { width: 18 }];
+    ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限'].forEach((h, i) =>
       _cell(wsM, 1, i + 1, h, { bold: true, bg: C.band, fg: C.bandFg, h: 'center' }));
     cfg.modes.forEach((md, idx) => {
       const r = idx + 2;
@@ -677,6 +693,10 @@
       _cell(wsM, r, 3, md.spin_count || 0, { h: 'center' });
       _cell(wsM, r, 4, md.inherit_globals ? '是' : '否', { h: 'center' });
       _cell(wsM, r, 5, m.mode_desc[md.mode] || md.notes || '');
+      // v7.12:玩法設定(規格描述;本工具不執行、不算 RTP)
+      _cell(wsM, r, 6, _modeResetDesc(md), { h: 'center' });
+      _cell(wsM, r, 7, _modeStackDesc(md), { h: 'center' });
+      _cell(wsM, r, 8, _modeCapDesc(md), { h: 'center' });
     });
 
     // ── Sheet 4：機制備註 ──
@@ -976,6 +996,23 @@
       });
     } else { L.push('（無模式資料）'); }
     L.push('');
+
+    // v7.12:各模式玩法設定（倍數重置範圍 / 疊加方式 / 封頂）
+    //   規格書描述用;本工具不執行、不算 RTP，數值由另一數值模擬工具落盤遵循。
+    if (cfg.modes.length) {
+      L.push('## 各模式玩法設定');
+      L.push('');
+      L.push('> 以下為規格描述，供數值 / 模擬工具落盤遵循；本工具不執行、不計算 RTP。');
+      L.push('');
+      L.push('| 模式 | 倍數重置範圍 | 倍數疊加方式 | 封頂 / 上限 |');
+      L.push('| --- | --- | --- | --- |');
+      cfg.modes.forEach(md => {
+        L.push(`| ${md.mode} | ${_modeResetDesc(md).replace(/\|/g, '\\|')} | ${_modeStackDesc(md).replace(/\|/g, '\\|')} | ${_modeCapDesc(md).replace(/\|/g, '\\|')} |`);
+      });
+      L.push('');
+      L.push('- 倍數疊加優先序：符號層 `mult_stack_mode` > 模式層 `stack_mode` > 全域 `Multipliers.stack_mode`；「繼承全域」表示未於本層覆寫。');
+      L.push('');
+    }
 
     // 圖示定義
     L.push('## 圖示定義');

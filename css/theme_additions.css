@@ -1269,6 +1269,54 @@
   color: var(--text-muted);
   padding: 2px 0;
 }
+/* ── v7.12:卡片收合摘要 + 標題反灰(沿用 03_Symbols 卡片語彙,推廣到設定分頁)── */
+.cfg-section-card.is-closed { box-shadow: none; }
+.cfg-card-head {
+  cursor: pointer; user-select: none;
+  margin-bottom: 0;               /* 收合時標題無下方內容,底線由展開內容補 */
+}
+.cfg-section-card:not(.is-closed) .cfg-card-head { margin-bottom: 12px; }
+.cfg-card-head:hover { background: var(--glass-1); border-radius: var(--r-sm); }
+/* 未啟用鎖定:標題列不可收合(不顯示可點樣式)*/
+.cfg-section-card.is-locked .cfg-card-head { cursor: default; }
+.cfg-section-card.is-locked .cfg-card-head:hover { background: transparent; }
+/* 無內容 / 未啟用 → 標題反灰(唯讀提示,非開關)*/
+.cfg-section-card.is-empty .cfg-section-title-text,
+.cfg-section-card.is-empty .cfg-section-title::before { opacity: 0.5; }
+.cfg-section-card.is-empty .cfg-section-title-text { color: var(--text-muted); }
+/* 收合摘要(靠左,緊鄰標題)*/
+.cfg-card-summary {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 10px;
+  font-size: 11.5px; color: var(--text-light);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cfg-card-summary-chip {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 0.5px solid var(--accent-brd);
+  border-radius: var(--r-pill);
+  padding: 1px 9px;
+}
+.cfg-card-summary-muted { color: var(--text-muted); font-style: italic; }
+/* 收合 / 展開箭頭(› 旋轉;無開關的卡片由 caret 靠右)*/
+.cfg-card-caret {
+  flex-shrink: 0;
+  margin-left: auto;               /* 把 caret 推到最右;有開關者開關已 auto,caret 緊接其後 */
+  padding-left: 8px;
+  font-size: 16px; line-height: 1;
+  color: var(--text-muted);
+  transform: rotate(90deg);
+  transition: transform 0.18s ease;
+}
+.cfg-card-caret.open { transform: rotate(-90deg); }
+.cfg-card-caret.is-hidden { visibility: hidden; }
+/* 開關卡:開關靠右,caret 緊接其後(不再另佔 auto)*/
+.cfg-section-title-switch .cfg-card-caret { margin-left: 8px; }
+/* 展開時 bonus 數字 badge 靠右 */
+.cfg-card-head .cfg-mode-bonus-count { margin-left: auto; }
+.cfg-card-body { /* 內容容器;padding 由 .cfg-section 提供 */ }
 /* v7.9.6:加押/購買內容收窄,避免全螢幕時卡片過寬留白 */
 .cfg-betconfig-form { max-width: 960px; }
 
@@ -10695,11 +10743,6 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* 模式子分頁:賠付橫幅(原 01_Global 賠付模型,做法丙僅此處出現)*/
 .cfg-rules-paybanner {
   margin: 12px 0;
-  padding: 4px 12px 8px;
-  border: 0.5px solid var(--glass-brd);
-  border-left: 3px solid var(--accent-hex);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
-  background: var(--glass-1);
 }
 .cfg-rules-modes-body { padding-bottom: 24px; }
 

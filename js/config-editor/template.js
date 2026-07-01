@@ -4290,12 +4290,15 @@
           <!-- 賠付橫幅(原 01_Global 賠付模型,做法丙:只在模式子分頁頂部出現)-->
           <div class="cfg-rules-paybanner">
         <!-- 區塊 2:賠付模型(可折疊,預設展開)-->
-        <details class="cfg-section cfg-section-collapsible" open>
-          <summary class="cfg-section-summary">
-            <span class="cfg-section-title cfg-section-title-inline">賠付模型</span>
-            <span class="cfg-section-summary-preview">{{ activePayModel }}<span v-if="scanDirApplicable"> · {{ scanDirLabel(curScanDir) }}</span><span v-if="g.pay_type==='CLUSTER'"> · min {{ g.cluster_min_size }}</span></span>
-          </summary>
-          <div class="cfg-section-body">
+        <div class="cfg-section cfg-section-card" :class="{ 'is-closed': !payModelOpen }">
+          <div class="cfg-section-title cfg-card-head" @click="togglePayModel">
+            <span class="cfg-section-title-text">賠付模型</span>
+            <span v-if="!payModelOpen" class="cfg-card-summary">
+              <span class="cfg-card-summary-chip">{{ payModelSummary }}</span>
+            </span>
+            <span class="cfg-card-caret" :class="{ open: payModelOpen }" title="展開 / 收合">›</span>
+          </div>
+          <div v-show="payModelOpen" class="cfg-card-body">
 
           <div class="cfg-field">
             <label class="cfg-label">
@@ -4344,8 +4347,8 @@
             </div>
             <div class="cfg-hint">CLUSTER Pay 達多少個相連同符算中獎(2–20)</div>
           </div>
-          </div>
-        </details>
+          </div><!-- /cfg-card-body -->
+        </div><!-- /賠付模型 -->
           </div>
 
           <!-- 模式定義(原 01_Global col-modes / 11_Mode_Config)-->
@@ -4610,8 +4613,17 @@
                 </details><!-- /trigger_condition details -->
 
                 <!-- v7.10:玩法設定(reset_scope + trigger_pays;additive 接線,引擎尚未消費)-->
-                <details class="cfg-section cfg-section-collapsible cfg-mode-gameplay" open>
-                  <summary class="cfg-section-title">玩法設定 <span class="cfg-key">11_Mode_Config</span></summary>
+                <div class="cfg-section cfg-section-card cfg-mode-gameplay"
+                     :class="{ 'is-empty': !modeGpHasContent(m), 'is-closed': !isModeGpOpen(m) }">
+                  <div class="cfg-section-title cfg-card-head" @click="toggleModeGp(m)">
+                    <span class="cfg-section-title-text">玩法設定 <span class="cfg-key">11_Mode_Config</span></span>
+                    <span v-if="!isModeGpOpen(m)" class="cfg-card-summary">
+                      <span v-if="modeGpSummary(m)" class="cfg-card-summary-chip">{{ modeGpSummary(m) }}</span>
+                      <span v-else class="cfg-card-summary-muted">未設定</span>
+                    </span>
+                    <span class="cfg-card-caret" :class="{ open: isModeGpOpen(m) }" title="展開 / 收合">›</span>
+                  </div>
+                  <div v-show="isModeGpOpen(m)" class="cfg-card-body">
                   <div class="cfg-mode-future-note">
                     <span class="cfg-mode-future-tag">規劃中</span>
                     以下欄位已可設定並寫入 A.xlsx,但模擬引擎<strong>尚未接上執行</strong>(Stage 3 才會生效)。先設定不影響目前模擬結果。
@@ -4672,14 +4684,22 @@
                       <span style="font-size:14px">+</span> 新增觸發給付
                     </button>
                   </div>
-                </details><!-- /cfg-mode-gameplay -->
+                  </div><!-- /cfg-card-body -->
+                </div><!-- /cfg-mode-gameplay -->
 
                 <!-- v7.10:關聯 Bonus 小遊戲(做法甲;依 mode_scope 過濾,原 17_Bonus_Games 入口已關)-->
-                <details class="cfg-section cfg-section-collapsible cfg-mode-bonus" open>
-                  <summary class="cfg-section-title">
-                    關聯 Bonus 小遊戲 <span class="cfg-key">17_Bonus_Games</span>
-                    <span class="cfg-mode-bonus-count">{{ bonusesForMode(m.mode).length }}</span>
-                  </summary>
+                <div class="cfg-section cfg-section-card cfg-mode-bonus"
+                     :class="{ 'is-empty': !modeBnHasContent(m), 'is-closed': !isModeBnOpen(m) }">
+                  <div class="cfg-section-title cfg-card-head" @click="toggleModeBn(m)">
+                    <span class="cfg-section-title-text">關聯 Bonus 小遊戲 <span class="cfg-key">17_Bonus_Games</span></span>
+                    <span v-if="!isModeBnOpen(m)" class="cfg-card-summary">
+                      <span v-if="modeBnSummary(m)" class="cfg-card-summary-chip">{{ modeBnSummary(m) }}</span>
+                      <span v-else class="cfg-card-summary-muted">無</span>
+                    </span>
+                    <span v-else class="cfg-mode-bonus-count">{{ bonusesForMode(m.mode).length }}</span>
+                    <span class="cfg-card-caret" :class="{ open: isModeBnOpen(m) }" title="展開 / 收合">›</span>
+                  </div>
+                  <div v-show="isModeBnOpen(m)" class="cfg-card-body">
                   <div class="cfg-hint" style="margin:4px 0 8px;">
                     此處列出 <strong>適用於「{{ m.mode || '此模式' }}」</strong>的 Bonus(mode_scope 為 ALL 或含此模式)。
                     新增的 Bonus 預設只適用此模式;可在卡片內用「適用模式」chip 改成多模式或全部。
@@ -4773,7 +4793,8 @@
                       </button>
                     </div>
                   </div>
-                </details><!-- /cfg-mode-bonus -->
+                  </div><!-- /cfg-card-body -->
+                </div><!-- /cfg-mode-bonus -->
 
               </div>
               </div><!-- /cfg-mode-card-expand (v5.0-d) -->
@@ -4935,17 +4956,22 @@
       <!-- ─── 14:加押 / 購買(v6.2:Extra Bet + Buy Feature,皆開關前置)─── -->
       <div v-else-if="active === 'bet_config'" class="cfg-form cfg-betconfig-form">
 
-        <div class="cfg-section">
-          <div class="cfg-section-title cfg-section-title-switch">
+        <div class="cfg-section cfg-section-card" :class="{ 'is-empty': !betConfig.ante_bet_enabled, 'is-closed': betConfig.ante_bet_enabled && !betCardOpen.ante, 'is-locked': !betConfig.ante_bet_enabled }">
+          <div class="cfg-section-title cfg-section-title-switch cfg-card-head" @click="toggleBetCard('ante')">
             <span class="cfg-section-title-text">Extra Bet <span class="cfg-key">加押</span></span>
+            <span v-if="betConfig.ante_bet_enabled && !betCardOpen.ante" class="cfg-card-summary">
+              <span class="cfg-card-summary-chip cfg-mono">{{ anteBetSummary }}</span>
+            </span>
             <button type="button" class="cfg-section-switch" :class="{ on: betConfig.ante_bet_enabled }"
                     role="switch" :aria-checked="betConfig.ante_bet_enabled"
-                    @click="betConfig.ante_bet_enabled = !betConfig.ante_bet_enabled"
+                    @click.stop="betConfig.ante_bet_enabled = !betConfig.ante_bet_enabled"
                     :title="betConfig.ante_bet_enabled ? '已啟用（點擊關閉）' : '已關閉（點擊啟用）'">
               <span class="cfg-section-switch-knob"></span>
             </button>
+            <span class="cfg-card-caret" :class="{ open: betCardOpen.ante, 'is-hidden': !betConfig.ante_bet_enabled }" title="展開 / 收合">›</span>
           </div>
 
+          <div v-show="!betConfig.ante_bet_enabled || betCardOpen.ante" class="cfg-card-body">
           <template v-if="betConfig.ante_bet_enabled">
             <div class="cfg-hint">加押功能：玩家選擇支付額外成本（通常 ×1.25），換取更高的特色觸發機率。</div>
             <div class="cfg-ante-grid">
@@ -4969,19 +4995,25 @@
             </div>
           </template>
           <div v-else class="cfg-section-off-hint">加押功能未啟用 —— 玩家可支付額外成本換取更高特色觸發率。開啟開關以設定。</div>
+          </div><!-- /cfg-card-body -->
         </div>
 
-        <div class="cfg-section">
-          <div class="cfg-section-title cfg-section-title-switch">
+        <div class="cfg-section cfg-section-card" :class="{ 'is-empty': !betConfig.buy_feature_enabled, 'is-closed': betConfig.buy_feature_enabled && !betCardOpen.buy, 'is-locked': !betConfig.buy_feature_enabled }">
+          <div class="cfg-section-title cfg-section-title-switch cfg-card-head" @click="toggleBetCard('buy')">
             <span class="cfg-section-title-text">Buy Feature <span class="cfg-key">購買</span></span>
+            <span v-if="betConfig.buy_feature_enabled && !betCardOpen.buy" class="cfg-card-summary">
+              <span class="cfg-card-summary-chip">{{ buyFeatureSummary }}</span>
+            </span>
             <button type="button" class="cfg-section-switch" :class="{ on: betConfig.buy_feature_enabled }"
                     role="switch" :aria-checked="betConfig.buy_feature_enabled"
-                    @click="betConfig.buy_feature_enabled = !betConfig.buy_feature_enabled"
+                    @click.stop="betConfig.buy_feature_enabled = !betConfig.buy_feature_enabled"
                     :title="betConfig.buy_feature_enabled ? '已啟用（點擊關閉）' : '已關閉（點擊啟用）'">
               <span class="cfg-section-switch-knob"></span>
             </button>
+            <span class="cfg-card-caret" :class="{ open: betCardOpen.buy, 'is-hidden': !betConfig.buy_feature_enabled }" title="展開 / 收合">›</span>
           </div>
 
+          <div v-show="!betConfig.buy_feature_enabled || betCardOpen.buy" class="cfg-card-body">
           <template v-if="betConfig.buy_feature_enabled">
             <div class="cfg-hint">購買功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
             <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
@@ -5033,6 +5065,7 @@
             </button>
           </template>
           <div v-else class="cfg-section-off-hint">購買功能未啟用 —— 玩家可付費直接進入指定模式。開啟開關以定義各模式的購買成本與 RTP 目標。</div>
+          </div><!-- /cfg-card-body -->
         </div>
 
       </div><!-- /bet_config -->

@@ -1192,6 +1192,15 @@ code {
 .sym-card-title {
   font-size: 13px; font-weight: 700; color: var(--text);
   flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+/* v7.12.2:靛紫直條,與 cfg-section-title 統一卡片標題語彙 */
+.sym-card-title::before {
+  content: '';
+  width: 3px; height: 13px;
+  border-radius: 2px;
+  background: var(--accent-hex);
+  flex-shrink: 0;
 }
 .sym-card-sub {
   font-size: 11px; color: var(--text-light);
