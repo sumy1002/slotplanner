@@ -36,7 +36,9 @@
     makePayRow, migratePayRows,
     LS_REEL_STRIPS_KEY, defaultReelStrips, loadReelStrips, saveReelStrips,
     parseStripStr, stripToStr, stripToWeights, weightsToStrip,
-    LS_BONUS_GAMES_KEY, defaultBonusGames, makeBonusItem, makeBonusGame, loadBonusGames, saveBonusGames,
+    makeBonusItem,
+    // v8.0:bonus 小遊戲已併入 mode 玩法種類(mode_kind);移除 LS_BONUS_GAMES_KEY/defaultBonusGames/
+    //   makeBonusGame/loadBonusGames/saveBonusGames 匯入。makeBonusItem 保留(ModeConfig.items 用)。
     LS_COIN_VALUES_KEY, defaultCoinValues, makeCoinDenom, loadCoinValues, saveCoinValues,
     LS_BET_CONFIG_KEY, defaultBetConfig, makeBuyFeature, loadBetConfig, saveBetConfig,
     saveLayout, LS_BINS_KEY, DEFAULT_BINS, DEFAULT_BIN_EDGES,
@@ -1025,6 +1027,12 @@
         if (m.cap_enabled == null) m.cap_enabled = '';     // '' = 不封頂 | 'Y' = 有封頂
         if (m.cap_value == null) m.cap_value = '';         // 封頂值(字串,可含區間)
         if (m.stack_mode == null) m.stack_mode = '';       // '' = 繼承全域 | 'MUL' | 'ADD'
+        // v7.14:additive 玩法種類 + bonus 小遊戲欄位(makeMode 在 helpers,不在 scope;此處補預設)。
+        if (m.mode_kind == null || m.mode_kind === '') m.mode_kind = 'SPIN';  // SPIN/WHEEL/PICK/COLLECTION
+        if (m.wheel_upgrade_to == null) m.wheel_upgrade_to = '';
+        if (m.pick_count == null) m.pick_count = 0;
+        if (m.collect_target == null) m.collect_target = 0;
+        if (!Array.isArray(m.items)) m.items = [];         // 獎項表(mode_kind != SPIN)
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1096,14 +1104,13 @@
       // ── v7.12:模式卡內「玩法設定 / 關聯 Bonus」子卡收合(runtime-only,不存 LS)──
       // 預設展開(true);以 modeCardKey 為索引,避免不同模式共用狀態。
       const modeGpOpen = reactive({});     // 玩法設定
-      const modeBnOpen = reactive({});     // 關聯 Bonus
       function isModeGpOpen(m) { const k = modeCardKey(m); return modeGpOpen[k] !== false; }
-      function isModeBnOpen(m) { const k = modeCardKey(m); return modeBnOpen[k] !== false; }
       function toggleModeGp(m) { const k = modeCardKey(m); modeGpOpen[k] = (modeGpOpen[k] === false); }
-      function toggleModeBn(m) { const k = modeCardKey(m); modeBnOpen[k] = (modeBnOpen[k] === false); }
       // 玩法設定:有無任何實質設定(reset_scope / stack_mode / cap / trigger_pays)
       function modeGpHasContent(m) {
         if (!m) return false;
+        // v7.14:非 SPIN 玩法(bonus 小遊戲)本身即有內容
+        if (m.mode_kind && m.mode_kind !== 'SPIN') return true;
         if ((m.reset_scope || '') || (m.stack_mode || '')) return true;
         if (m.cap_enabled === 'Y' && (m.cap_value || '')) return true;
         if ((m.trigger_pays || []).length > 0) return true;
@@ -1112,6 +1119,8 @@
       // 玩法設定收合摘要:精要描述
       function modeGpSummary(m) {
         if (!m) return '';
+        // v7.14:非 SPIN 玩法優先顯示玩法種類摘要
+        if (m.mode_kind && m.mode_kind !== 'SPIN') return modeKindSummary(m);
         const parts = [];
         if (m.reset_scope) parts.push('重置 ' + m.reset_scope);
         if (m.stack_mode) parts.push('疊加 ' + m.stack_mode);
@@ -1120,16 +1129,7 @@
         if (tp) parts.push(tp + ' 條觸發給付');
         return parts.join(' · ');
       }
-      // 關聯 Bonus:適用此模式的 bonus 數
-      function modeBnCount(m) {
-        if (!m) return 0;
-        try { return bonusesForMode(m.mode).length; } catch (e) { return 0; }
-      }
-      function modeBnHasContent(m) { return modeBnCount(m) > 0; }
-      function modeBnSummary(m) {
-        const n = modeBnCount(m);
-        return n ? (n + ' 個 Bonus') : '';
-      }
+      // v8.0:關聯 Bonus 子卡已移除(bonus 併入 mode 玩法種類);modeBn* helpers 一併移除。
 
       function addMode() {
         // 自動產生不衝突的新名稱
@@ -3061,81 +3061,103 @@
       //   只服務已不可達的 coin_values 分頁,已移除。coinValues 物件本身仍供遷移/存檔/驗證使用。
       const coinValues = reactive(loadCoinValues());
 
-      // ── v6.0-c:Bonus 小遊戲(17_Bonus_Games)──
-      const bonusGames = reactive(loadBonusGames());
-      function addBonusGame(type) {
-        const taken = new Set(bonusGames.games.map(g => g.bonus_id));
-        let i = 1; while (taken.has(`BG${i}`)) i++;
-        bonusGames.games.push(makeBonusGame(`BG${i}`, type || 'WHEEL'));
+
+      // ════════════════════════════════════════════════════════════
+      // v7.14:mode-owned bonus 小遊戲(mode_kind != SPIN 時,mode 攜帶獎項表)
+      //   沿用 makeBonusItem / jackpots;handler 皆函式(render 時求值,前向引用安全)。
+      // ════════════════════════════════════════════════════════════
+      const MODE_KIND_OPTIONS = [
+        { v: 'SPIN',       label: 'SPIN — 旋轉模式' },
+        { v: 'WHEEL',      label: 'WHEEL — 輪盤 bonus' },
+        { v: 'PICK',       label: 'PICK — 選獎 bonus' },
+        { v: 'COLLECTION', label: 'COLLECTION — 收集 bonus' },
+      ];
+      const MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+      function isBonusKind(m) { return !!(m && m.mode_kind && m.mode_kind !== 'SPIN'); }
+      function addModeItem(m) {
+        _ensureModeGameplayFields(m);
+        m.items.push(makeBonusItem('', m.mode_kind === 'COLLECTION' ? 0 : 10, 100));
       }
-      function removeBonusGame(idx) { bonusGames.games.splice(idx, 1); }
-      // v7.10:模式子分頁「關聯 Bonus」(做法甲)— 依 mode_scope 過濾出適用某 mode 的 bonus。
-      //   mode_scope='ALL'/空 或 含此 mode → 顯示。同一 bonus 可出現在多張卡(共用同一物件,
-      //   編輯任一處即改該物件,單一真相由 Vue reactivity 保證)。
-      function bonusesForMode(modeName) {
-        return bonusGames.games
-          .map((g, gi) => ({ g, gi }))
-          .filter(({ g }) => {
-            const s = (g.mode_scope || '').trim();
-            if (!s || s === 'ALL') return true;
-            return s.split(',').map(x => x.trim()).includes(modeName);
-          });
-      }
-      // 從某 mode 卡新增 bonus:預設 mode_scope = 該 mode(而非 ALL)
-      function addBonusForMode(type, modeName) {
-        const taken = new Set(bonusGames.games.map(g => g.bonus_id));
-        let i = 1; while (taken.has(`BG${i}`)) i++;
-        const g = makeBonusGame(`BG${i}`, type || 'WHEEL');
-        g.mode_scope = modeName || 'ALL';
-        bonusGames.games.push(g);
-      }
-      // 此 bonus 除了 modeName 外還適用哪些 mode(給「也適用於」提示用)
-      function bonusOtherModes(g, modeName) {
-        const s = (g.mode_scope || '').trim();
-        if (!s || s === 'ALL') return ['(全部模式)'];
-        return s.split(',').map(x => x.trim()).filter(x => x && x !== modeName);
-      }
-      // v6.2 Bonus #3:適用模式改 chip 多選(mode_scope = 'ALL' 或逗號分隔)
-      function toggleBonusMode(g, modeName) {
-        if (modeName === 'ALL') { g.mode_scope = 'ALL'; return; }
-        let cur = (g.mode_scope === 'ALL' || !g.mode_scope)
-          ? [] : g.mode_scope.split(',').map(x => x.trim()).filter(Boolean);
-        if (cur.includes(modeName)) cur = cur.filter(x => x !== modeName);
-        else cur.push(modeName);
-        g.mode_scope = cur.length ? cur.join(',') : 'ALL';
-      }
-      function bonusHasMode(g, modeName) {
-        if (modeName === 'ALL') return g.mode_scope === 'ALL' || !g.mode_scope;
-        if (g.mode_scope === 'ALL' || !g.mode_scope) return false;
-        return g.mode_scope.split(',').map(x => x.trim()).includes(modeName);
-      }
-      // v6.2 Bonus #2:JP 連結防重複 — 下拉只列「未被同關卡其他項目佔用」的 JP(保留本項目目前選的)
-      function bonusJpOptions(g, it) {
+      function removeModeItem(m, idx) { if (Array.isArray(m.items)) m.items.splice(idx, 1); }
+      function modeItemJpOptions(m, it) {
         const usedByOthers = new Set(
-          (g.items || []).filter(x => x !== it && x.link_jackpot).map(x => x.link_jackpot)
+          (m.items || []).filter(x => x !== it && x.link_jackpot).map(x => x.link_jackpot)
         );
         return jackpots.filter(j => !usedByOthers.has(j.jp_id) || j.jp_id === it.link_jackpot);
       }
-      function addBonusItem(g) { g.items.push(makeBonusItem('', g.type === 'COLLECTION' ? 0 : 10, 100)); }
-      function removeBonusItem(g, idx) { g.items.splice(idx, 1); }
-      function bonusItemPct(g, idx) {
-        if (g.type === 'COLLECTION') return null;
-        const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+      function modeItemPct(m, idx) {
+        if (m.mode_kind === 'COLLECTION') return null;
+        const tot = (m.items || []).reduce((a, it) => a + (Number(it.weight) || 0), 0);
         if (!tot) return 0;
-        return (Number(g.items[idx].weight) || 0) / tot * 100;
+        return (Number(m.items[idx].weight) || 0) / tot * 100;
       }
-      // WHEEL/PICK 期望值(加權平均;含連結 JP)
-      function bonusExpected(g) {
-        if (g.type === 'COLLECTION') return null;
-        const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+      function modeExpected(m) {
+        if (m.mode_kind === 'COLLECTION') return null;
+        const tot = (m.items || []).reduce((a, it) => a + (Number(it.weight) || 0), 0);
         if (!tot) return 0;
-        return g.items.reduce((a, it) => {
+        return (m.items || []).reduce((a, it) => {
           let v = Number(it.value) || 0;
           if (it.link_jackpot) { const jp = jackpots.find(j => j.jp_id === it.link_jackpot); if (jp) v = Number(jp.mult) || v; }
           return a + v * (Number(it.weight) || 0);
         }, 0) / tot;
       }
-      const BONUS_TYPE_LABEL = { WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+      // WHEEL 升級目標:其他 WHEEL mode(排除自己)
+      function modeWheelTargets(m) {
+        return modes.filter(x => x !== m && x.mode_kind === 'WHEEL' && (x.mode || '').trim());
+      }
+      // mode 卡玩法子區摘要(收合時顯示)
+      function modeKindSummary(m) {
+        if (!isBonusKind(m)) return '';
+        const n = (m.items || []).length;
+        const k = MODE_KIND_LABEL[m.mode_kind] || m.mode_kind;
+        if (m.mode_kind === 'PICK')       return `${k} · 抽 ${Number(m.pick_count) || 0} 次 · ${n} 個獎項`;
+        if (m.mode_kind === 'COLLECTION') return `${k} · 目標 ${Number(m.collect_target) || 0} · ${n} 個獎項`;
+        const up = (m.wheel_upgrade_to || '').trim();
+        return `${k}${up ? ' · 升級→' + up : ''} · ${n} 個獎項`;
+      }
+      // v8.0:舊 LS bonusgames.v1 一次性遷移進 modes(取代 v7.14 的一鍵按鈕)。
+      //   讀舊 LS → 轉成 mode 玩法種類(同名略過)→ 清掉舊 key。啟動時呼叫一次。
+      //   lossy:title/trigger_desc/mode_scope 併 notes,trigger_condition 留空待人工重接。
+      function _migrateLegacyBonusLS() {
+        let games = [];
+        try {
+          const raw = localStorage.getItem('slotplanner.aconfig.bonusgames.v1');
+          if (!raw) return;
+          const obj = JSON.parse(raw);
+          games = (obj && Array.isArray(obj.games)) ? obj.games : [];
+        } catch (e) { return; }
+        if (!games.length) { localStorage.removeItem('slotplanner.aconfig.bonusgames.v1'); return; }
+        const taken = new Set(modes.map(x => x.mode));
+        let added = 0;
+        for (const g of games) {
+          if (!g || !g.bonus_id || taken.has(g.bonus_id)) continue;
+          const nm = makeMode(g.bonus_id);
+          _ensureModeGameplayFields(nm);
+          nm.mode_kind = (g.type || 'WHEEL').toUpperCase();
+          nm.wheel_upgrade_to = g.wheel_upgrade_to || '';
+          nm.pick_count = Number(g.pick_count) || 0;
+          nm.collect_target = Number(g.collect_target) || 0;
+          nm.items = Array.isArray(g.items) ? g.items.map(it => ({
+            label: it.label || '', value: Number(it.value) || 0, weight: Number(it.weight) || 0,
+            is_end: !!it.is_end, link_jackpot: it.link_jackpot || '',
+          })) : [];
+          const nts = [];
+          if (g.title && g.title !== g.bonus_id) nts.push(g.title);
+          if (g.trigger_desc) nts.push('觸發(舊):' + g.trigger_desc);
+          if (g.mode_scope && g.mode_scope !== 'ALL') nts.push('原適用模式:' + g.mode_scope);
+          if (g.notes) nts.push(g.notes);
+          nm.notes = nts.join(' / ');
+          modes.push(nm);
+          taken.add(g.bonus_id);
+          added++;
+        }
+        localStorage.removeItem('slotplanner.aconfig.bonusgames.v1');
+        if (added) emit('status', {
+          type: 'ok',
+          msg: `已將 ${added} 個舊版 Bonus 遷移為模式玩法種類。⚠️ 觸發條件(trigger_condition)需手動重接。`,
+        });
+      }
+      _migrateLegacyBonusLS();   // v8.0:啟動即遷移舊 LS bonus
 
       // ════════════════════════════════════════════════════════════
       //  v5.5:即時 RTP 計算器(LINE 玩法閉式計算)
@@ -6314,44 +6336,41 @@
             Object.assign(betConfig, base);
           } else warnings.push('找不到 14_Bet_Config(舊檔?押注設定未更新)');
 
-          // ── 17_Bonus_Games ── { games:[{...,items:[...]}] }。
-          //   game 主欄只在每組首列填值,其餘列首欄空白 → 沿用當前 game 累積 items。
+          // ── v8.0:舊 A.xlsx 的 17_Bonus_Games 先解析成暫存,待 11/11c 匯入 modes 後再遷移進 modes。
+          //   (11_Mode_Config 匯入會 replace modes 陣列,故不能在此直接塞。)
+          const _legacy17 = [];
           const ws17 = wb.getWorksheet('17_Bonus_Games');
           if (ws17) {
-            const games = [];
             let cur = null;
             ws17.eachRow((row, idx) => {
               if (idx === 1) return;
               const bonus_id = asStr(row.getCell(1).value).trim();
               if (bonus_id) {
-                // 新 game 起始列
-                cur = makeBonusGame(bonus_id, asStr(row.getCell(2).value).trim() || 'WHEEL');
-                cur.bonus_id         = bonus_id;
-                cur.type             = asStr(row.getCell(2).value).trim() || 'WHEEL';
-                cur.title            = asStr(row.getCell(3).value);
-                cur.trigger_desc     = asStr(row.getCell(4).value);
-                cur.mode_scope       = asStr(row.getCell(5).value).trim() || 'ALL';
-                cur.wheel_upgrade_to = asStr(row.getCell(6).value).trim();
-                cur.pick_count       = asNum(row.getCell(7).value, 0);
-                cur.collect_target   = asNum(row.getCell(8).value, 0);
-                cur.items            = [];
-                games.push(cur);
+                cur = {
+                  bonus_id,
+                  type: asStr(row.getCell(2).value).trim() || 'WHEEL',
+                  title: asStr(row.getCell(3).value),
+                  trigger_desc: asStr(row.getCell(4).value),
+                  mode_scope: asStr(row.getCell(5).value).trim() || 'ALL',
+                  wheel_upgrade_to: asStr(row.getCell(6).value).trim(),
+                  pick_count: asNum(row.getCell(7).value, 0),
+                  collect_target: asNum(row.getCell(8).value, 0),
+                  items: [],
+                };
+                _legacy17.push(cur);
               }
               if (!cur) return;
-              // item(第 9~13 欄);label 為空視為「無項目佔位列」跳過
               const label = asStr(row.getCell(9).value);
               if (!label && !(row.getCell(10).value) && !(row.getCell(11).value)) return;
-              const it = makeBonusItem ? makeBonusItem() : {};
-              it.label        = label;
-              it.value        = asNum(row.getCell(10).value, 0);
-              it.weight       = asNum(row.getCell(11).value, 0);
-              it.is_end       = asBool(row.getCell(12).value);
-              it.link_jackpot = asStr(row.getCell(13).value).trim();
-              cur.items.push(it);
+              cur.items.push({
+                label,
+                value: asNum(row.getCell(10).value, 0),
+                weight: asNum(row.getCell(11).value, 0),
+                is_end: asBool(row.getCell(12).value),
+                link_jackpot: asStr(row.getCell(13).value).trim(),
+              });
             });
-            if (!bonusGames.games) bonusGames.games = [];
-            bonusGames.games.splice(0, bonusGames.games.length, ...games);
-          } else warnings.push('找不到 17_Bonus_Games(舊檔?Bonus 未更新)');
+          }
 
           // ── 11_Mode_Config ── 先匯入,後面 04/05/08/12 才有正確 modeNames
           const ws11 = wb.getWorksheet('11_Mode_Config');
@@ -6374,6 +6393,13 @@
                 cap_enabled: asStr(row.getCell(8).value).trim(),
                 cap_value:   asStr(row.getCell(9).value).trim(),
                 stack_mode:  asStr(row.getCell(10).value).trim(),
+                // v7.14 additive:Mode_Kind(11)/Wheel_Upgrade_To(12)/Pick_Count(13)/Collect_Target(14)
+                //   舊檔無 → 空/0;mode_kind 空 → _ensureModeGameplayFields 補 'SPIN'。
+                mode_kind:        asStr(row.getCell(11).value).trim().toUpperCase(),
+                wheel_upgrade_to: asStr(row.getCell(12).value).trim(),
+                pick_count:       asNum(row.getCell(13).value, 0),
+                collect_target:   asNum(row.getCell(14).value, 0),
+                items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
             });
@@ -6398,8 +6424,57 @@
               if (byMode[m.mode]) m.trigger_pays = byMode[m.mode];
             }
           }
+
+          // ── 11c_Mode_Items(v7.14 additive;舊檔無此 sheet → 跳過,items 維持空)──
+          const ws11c = wb.getWorksheet('11c_Mode_Items');
+          if (ws11c) {
+            const itByMode = {};
+            ws11c.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(row.getCell(1).value).trim();
+              if (!mode) return;
+              (itByMode[mode] = itByMode[mode] || []).push({
+                label:        asStr(row.getCell(2).value),
+                value:        asNum(row.getCell(3).value, 0),
+                weight:       asNum(row.getCell(4).value, 0),
+                is_end:       asBool(row.getCell(5).value),
+                link_jackpot: asStr(row.getCell(6).value).trim(),
+              });
+            });
+            for (const m of modes) {
+              if (itByMode[m.mode]) m.items = itByMode[m.mode];
+            }
+          }
           // 確保匯入後每個 mode 都有 additive 欄位(舊檔安全)
           modes.forEach(_ensureModeGameplayFields);
+
+          // ── v8.0:把暫存的舊 17_Bonus_Games 遷移進 modes(同名略過;lossy:trigger 需人工重接)──
+          if (_legacy17.length) {
+            const takenM = new Set(modes.map(x => x.mode));
+            let mig = 0;
+            for (const g of _legacy17) {
+              if (!g.bonus_id || takenM.has(g.bonus_id)) continue;
+              const nm = makeMode(g.bonus_id);
+              _ensureModeGameplayFields(nm);
+              nm.mode_kind = (g.type || 'WHEEL').toUpperCase();
+              nm.wheel_upgrade_to = g.wheel_upgrade_to || '';
+              nm.pick_count = Number(g.pick_count) || 0;
+              nm.collect_target = Number(g.collect_target) || 0;
+              nm.items = g.items.map(it => ({
+                label: it.label || '', value: Number(it.value) || 0, weight: Number(it.weight) || 0,
+                is_end: !!it.is_end, link_jackpot: it.link_jackpot || '',
+              }));
+              const nts = [];
+              if (g.title && g.title !== g.bonus_id) nts.push(g.title);
+              if (g.trigger_desc) nts.push('觸發(舊):' + g.trigger_desc);
+              if (g.mode_scope && g.mode_scope !== 'ALL') nts.push('原適用模式:' + g.mode_scope);
+              nm.notes = nts.join(' / ');
+              modes.push(nm);
+              takenM.add(g.bonus_id);
+              mig++;
+            }
+            if (mig) warnings.push(`已將 ${mig} 個舊版 Bonus(17_Bonus_Games)遷移為模式玩法種類;觸發條件需手動重接`);
+          }
 
           // ── 12_Distribution_Bins ──
           const ws12 = wb.getWorksheet('12_Distribution_Bins');
@@ -7519,7 +7594,6 @@
         '腳本規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '投注結構':   'bet_config',         // v5.3:14_Bet_Config 獨立分頁
         '真實輪帶':   'reel_strips',        // v6.0-b:04b_Reel_Strips
-        'Bonus 小遊戲': 'rules',           // v7.10:bonus 入口關閉,dirty 暫掛規則 tab(後續移除)
         '倍數系統':   'multipliers',        // v5.4:15_Multipliers
         '金幣面額':   'coin_values',        // v5.4:16_Coin_Values
         'JP 定義':    'jackpots',         // v6.2 #0:JP 已獨立分頁
@@ -7563,7 +7637,6 @@
           case '腳本規則': return () => saveRules(rules.map(r => ({ ...r })));
           case '投注結構': return () => saveBetConfig({ ...betConfig, buy_features: betConfig.buy_features.map(bf => ({ ...bf })) });
           case '真實輪帶': return () => saveReelStrips({ enabled: reelStrips.enabled, strips: JSON.parse(JSON.stringify(reelStrips.strips)) });
-          case 'Bonus 小遊戲': return () => saveBonusGames({ games: JSON.parse(JSON.stringify(bonusGames.games)) });
           case '倍數系統': return () => saveMultipliers(JSON.parse(JSON.stringify(multipliers)));
           case '金幣面額': return () => saveCoinValues(JSON.parse(JSON.stringify(coinValues)));
           case 'JP 定義':  return () => saveJackpots(jackpots.map(j => ({ ...j })));
@@ -7612,7 +7685,6 @@
       watch(rules,        () => scheduleSave('腳本規則'), { deep: true });
       watch(betConfig,    () => scheduleSave('投注結構'), { deep: true });
       watch(reelStrips,   () => scheduleSave('真實輪帶'), { deep: true });
-      watch(bonusGames,   () => scheduleSave('Bonus 小遊戲'), { deep: true });
       watch(multipliers,  () => scheduleSave('倍數系統'), { deep: true });
       watch(coinValues,   () => scheduleSave('金幣面額'), { deep: true });
       watch(jackpots,     () => scheduleSave('JP 定義'), { deep: true });
@@ -7671,42 +7743,34 @@
           if (tm <= 1 || tm > 10) add('warn', 'bet_config', `Ante Bet 觸發倍率 ${tm}× 異常（通常 1.5–3×）`);
         }
 
-        // ─── 17_Bonus_Games（v6.0-c）───
-        const bgIdSeen = new Set();
-        for (const g of bonusGames.games) {
-          const id = (g.bonus_id || '').trim();
-          if (id) {
-            if (bgIdSeen.has(id)) add('error', 'bonus_games', `Bonus ID 重複:${id}`);
-            bgIdSeen.add(id);
-          } else {
-            add('warn', 'bonus_games', `有 Bonus 小遊戲缺 ID`);
+        // ─── v8.0:mode 玩法種類(bonus 小遊戲)驗證(取代舊 17_Bonus_Games 驗證)───
+        for (const g of modes) {
+          const kind = (g.mode_kind || 'SPIN').toUpperCase();
+          if (kind === 'SPIN') continue;
+          const id = (g.mode || '').trim() || '(未命名模式)';
+          const items = Array.isArray(g.items) ? g.items : [];
+          if (items.length === 0) add('warn', 'rules', `模式 ${id}（${kind}）尚無獎項`);
+          if (kind === 'WHEEL' || kind === 'PICK') {
+            const tot = items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
+            if (items.length && tot <= 0) add('error', 'rules', `模式 ${id} 獎項權重總和為 0`);
+            if (kind === 'PICK' && items.length && !items.some(it => it.is_end) && !(Number(g.pick_count) > 0))
+              add('warn', 'rules', `模式 ${id}（PICK）未設結束項也未設抽選次數,可能無法結束`);
           }
-          if (g.mode_scope && g.mode_scope !== 'ALL') {
-            for (const mn of g.mode_scope.split(',').map(x => x.trim()).filter(Boolean))
-              if (!validModeSet.has(mn)) add('error', 'bonus_games', `Bonus ${id} 適用模式「${mn}」不存在`);
-          }
-          if (g.items.length === 0) {
-            add('warn', 'bonus_games', `Bonus ${id || '(未命名)'} 尚無項目`);
-          }
-          if (g.type === 'WHEEL' || g.type === 'PICK') {
-            const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0);
-            if (g.items.length && tot <= 0) add('error', 'bonus_games', `Bonus ${id} 權重總和為 0`);
-            if (g.type === 'PICK' && g.items.length && !g.items.some(it => it.is_end) && !(Number(g.pick_count) > 0))
-              add('warn', 'bonus_games', `Bonus ${id}（PICK）未設結束項也未設次數,可能無法結束`);
-          }
-          if (g.type === 'COLLECTION' && !(Number(g.collect_target) > 0))
-            add('warn', 'bonus_games', `Bonus ${id}（COLLECTION）未設目標收集數`);
-          if (g.type === 'WHEEL' && g.wheel_upgrade_to) {
-            if (!bonusGames.games.some(x => x.bonus_id === g.wheel_upgrade_to))
-              add('error', 'bonus_games', `Bonus ${id} 升級目標「${g.wheel_upgrade_to}」不存在`);
+          if (kind === 'COLLECTION' && !(Number(g.collect_target) > 0))
+            add('warn', 'rules', `模式 ${id}（COLLECTION）未設收集目標`);
+          if (kind === 'WHEEL' && g.wheel_upgrade_to) {
+            const tgt = modes.find(x => x.mode === g.wheel_upgrade_to);
+            if (!tgt) add('error', 'rules', `模式 ${id} 升級目標「${g.wheel_upgrade_to}」不存在`);
+            else if ((tgt.mode_kind || 'SPIN').toUpperCase() !== 'WHEEL')
+              add('error', 'rules', `模式 ${id} 升級目標「${g.wheel_upgrade_to}」不是 WHEEL 玩法`);
           }
           const seenJp = new Set();
-          for (const it of g.items) {
+          for (const it of items) {
             if (it.link_jackpot && !jackpots.find(j => j.jp_id === it.link_jackpot))
-              add('error', 'bonus_games', `Bonus ${id} 項目連結的 JP「${it.link_jackpot}」不存在`);
+              add('error', 'rules', `模式 ${id} 獎項連結的 JP「${it.link_jackpot}」不存在`);
             if (it.link_jackpot) {
               if (seenJp.has(it.link_jackpot))
-                add('warn', 'bonus_games', `Bonus ${id} 重複連結同一個 JP「${it.link_jackpot}」`);
+                add('warn', 'rules', `模式 ${id} 重複連結同一個 JP「${it.link_jackpot}」`);
               seenJp.add(it.link_jackpot);
             }
           }
@@ -8730,8 +8794,8 @@
         reelCellDiff, gridCellDiff, cellDiffLabel,
         // v3.4 / B6:範本載入 diff preview
         modeExpandedKey, isModeExpanded, toggleModeExpanded,
-        isModeGpOpen, isModeBnOpen, toggleModeGp, toggleModeBn,
-        modeGpHasContent, modeGpSummary, modeBnHasContent, modeBnSummary,
+        isModeGpOpen, toggleModeGp,
+        modeGpHasContent, modeGpSummary,
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
         betConfig, addBuyFeature, removeBuyFeature,
@@ -8742,11 +8806,13 @@
         reelStrips, stripActiveMode, stripStr, stripLen, commitStrip, stripDist,
         stripGenLen, stripGenStacked,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
-        bonusGames, addBonusGame, removeBonusGame, addBonusItem, removeBonusItem,
-        bonusesForMode, addBonusForMode, bonusOtherModes,
         addTriggerPay, removeTriggerPay, RESET_SCOPE_OPTIONS, STACK_MODE_OPTIONS,
-        toggleBonusMode, bonusHasMode, bonusJpOptions,
-        bonusItemPct, bonusExpected, BONUS_TYPE_LABEL,
+        // v8.0:legacy bonus 匯出(bonusGames/addBonusGame/bonusesForMode/bonusJpOptions/…/
+        //   legacyBonusCount/migrateBonusesToModes)已移除——bonus 併入 mode 玩法種類。
+        // v7.14:mode 玩法種類 + mode-owned bonus 獎項
+        MODE_KIND_OPTIONS, MODE_KIND_LABEL, isBonusKind,
+        addModeItem, removeModeItem, modeItemJpOptions, modeItemPct, modeExpected,
+        modeWheelTargets, modeKindSummary,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
         confirmTemplateDiffLoad,
         // v3.4 / B5:active tab issues

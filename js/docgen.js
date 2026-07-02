@@ -116,7 +116,6 @@
     const betConfig   = _readLS('slotplanner.aconfig.betconfig.v1', {});
     const multipliers = _readLS('slotplanner.aconfig.multipliers.v1', {});
     const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
-    const bonusGames  = _readLS('slotplanner.aconfig.bonusgames.v1', {});   // v6.0-c
     const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
 
     const allSyms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
@@ -162,7 +161,6 @@
       betConfig: (betConfig && typeof betConfig === 'object') ? betConfig : {},
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
       coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
-      bonusGames: (bonusGames && Array.isArray(bonusGames.games)) ? bonusGames.games : [],   // v6.0-c
       genLimits: Array.isArray(genLimits) ? genLimits : [],   // v7.11
       derived: {
         gridStr,
@@ -234,6 +232,13 @@
     if (!md || md.cap_enabled !== 'Y') return '不封頂';
     const v = String(md.cap_value || '').trim();
     return v ? ('有（' + v + '）') : '有（未填上限值）';
+  }
+  // v7.14:mode 玩法種類。SPIN=旋轉;WHEEL/PICK/COLLECTION=bonus 小遊戲。
+  const _MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+  function _isModeBonus(md) { return !!(md && md.mode_kind && String(md.mode_kind).toUpperCase() !== 'SPIN'); }
+  function _modeKindDesc(md) {
+    const k = String((md && md.mode_kind) || 'SPIN').toUpperCase();
+    return _MODE_KIND_LABEL[k] ? (_MODE_KIND_LABEL[k] + '（' + k + '）') : k;
   }
   // 某符號的「有效」倍數疊加方式:符號自帶 mult_stack_mode 優先,否則用文件層 meta.mult_stack_mode。
   function _symStackMode(s, meta) {
@@ -683,8 +688,8 @@
     // ── Sheet 3：模式明細 ──
     const wsM = wb.addWorksheet('模式明細');
     wsM.columns = [{ width: 10 }, { width: 32 }, { width: 10 }, { width: 12 }, { width: 30 },
-                   { width: 22 }, { width: 16 }, { width: 18 }];
-    ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限'].forEach((h, i) =>
+                   { width: 22 }, { width: 16 }, { width: 18 }, { width: 14 }];
+    ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限', '玩法'].forEach((h, i) =>
       _cell(wsM, 1, i + 1, h, { bold: true, bg: C.band, fg: C.bandFg, h: 'center' }));
     cfg.modes.forEach((md, idx) => {
       const r = idx + 2;
@@ -697,6 +702,8 @@
       _cell(wsM, r, 6, _modeResetDesc(md), { h: 'center' });
       _cell(wsM, r, 7, _modeStackDesc(md), { h: 'center' });
       _cell(wsM, r, 8, _modeCapDesc(md), { h: 'center' });
+      // v7.14:玩法種類(SPIN / bonus 小遊戲)
+      _cell(wsM, r, 9, _modeKindDesc(md), { h: 'center' });
     });
 
     // ── Sheet 4：機制備註 ──
@@ -1014,6 +1021,47 @@
       L.push('');
     }
 
+    // v7.14:各模式 bonus 小遊戲（mode_kind = WHEEL / PICK / COLLECTION 的模式獎項表）
+    //   規格書描述用;本工具不執行、不算 RTP，數值由另一數值 / 模擬工具落盤遵循。
+    {
+      const _bmodes = (cfg.modes || []).filter(_isModeBonus);
+      if (_bmodes.length) {
+        const KLAB = { WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+        L.push('## 各模式 bonus 小遊戲');
+        L.push('');
+        L.push('> 以下模式的玩法種類為 bonus 小遊戲；何時觸發進入由各模式的觸發條件決定。供數值 / 模擬工具落盤遵循；本工具不執行、不計算 RTP。');
+        L.push('');
+        _bmodes.forEach(md => {
+          const k = String(md.mode_kind || '').toUpperCase();
+          L.push(`### ${md.mode}（${KLAB[k] || k}）`);
+          if (md.trigger_condition) L.push(`- 觸發條件：\`${md.trigger_condition}\``);
+          if (k === 'WHEEL' && md.wheel_upgrade_to) L.push(`- 升級至：${md.wheel_upgrade_to}`);
+          if (k === 'PICK') L.push(`- 抽選次數：${Number(md.pick_count) > 0 ? md.pick_count : '抽到結束項為止'}`);
+          if (k === 'COLLECTION') L.push(`- 目標收集數：${Number(md.collect_target) || 0}`);
+          if (md.notes) L.push(`- 說明：${md.notes}`);
+          const items = Array.isArray(md.items) ? md.items : [];
+          if (items.length) {
+            L.push('');
+            if (k === 'COLLECTION') {
+              L.push('| 獎勵 | 門檻 | 連結JP |');
+              L.push('| --- | --- | --- |');
+              items.forEach(it => L.push(`| ${it.label || ''} | ${Number(it.value) || 0} | ${it.link_jackpot || '—'} |`));
+            } else {
+              const tot = items.reduce((a, it) => a + (Number(it.weight) || 0), 0) || 1;
+              L.push('| 項目 | 值×注額 | 權重 | 機率 |' + (k === 'PICK' ? ' 結束 |' : '') + ' 連結JP |');
+              L.push('| --- | --- | --- | --- |' + (k === 'PICK' ? ' --- |' : '') + ' --- |');
+              items.forEach(it => {
+                const pct = ((Number(it.weight) || 0) / tot * 100).toFixed(1) + '%';
+                L.push(`| ${it.label || ''} | ${it.link_jackpot ? '（依JP）' : (Number(it.value) || 0)} | ${Number(it.weight) || 0} | ${pct} |`
+                  + (k === 'PICK' ? ` ${it.is_end ? '✓' : ''} |` : '') + ` ${it.link_jackpot || '—'} |`);
+              });
+            }
+          }
+          L.push('');
+        });
+      }
+    }
+
     // 圖示定義
     L.push('## 圖示定義');
     L.push('');
@@ -1288,39 +1336,9 @@
       L.push('');
     }
 
-    // v6.0-c:Bonus 小遊戲
-    const _bg = cfg.bonusGames || [];
-    if (_bg.length) {
-      const TLAB = { WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
-      L.push('## Bonus 小遊戲');
-      L.push('');
-      _bg.forEach(g => {
-        L.push(`### ${g.title || g.bonus_id}（${TLAB[g.type] || g.type}）`);
-        if (g.trigger_desc) L.push(`- 觸發：${g.trigger_desc}`);
-        if (g.mode_scope && g.mode_scope !== 'ALL') L.push(`- 適用模式：${g.mode_scope}`);
-        if (g.type === 'WHEEL' && g.wheel_upgrade_to) L.push(`- 升級至：${g.wheel_upgrade_to}`);
-        if (g.type === 'PICK') L.push(`- 抽選次數：${Number(g.pick_count) > 0 ? g.pick_count : '抽到結束項為止'}`);
-        if (g.type === 'COLLECTION') L.push(`- 目標收集數：${g.collect_target}`);
-        if (Array.isArray(g.items) && g.items.length) {
-          L.push('');
-          if (g.type === 'COLLECTION') {
-            L.push('| 獎勵 | 門檻 | 連結JP |');
-            L.push('| --- | --- | --- |');
-            g.items.forEach(it => L.push(`| ${it.label || ''} | ${Number(it.value) || 0} | ${it.link_jackpot || '—'} |`));
-          } else {
-            const tot = g.items.reduce((a, it) => a + (Number(it.weight) || 0), 0) || 1;
-            L.push('| 項目 | 值×注額 | 權重 | 機率 |' + (g.type === 'PICK' ? ' 結束 |' : '') + ' 連結JP |');
-            L.push('| --- | --- | --- | --- |' + (g.type === 'PICK' ? ' --- |' : '') + ' --- |');
-            g.items.forEach(it => {
-              const pct = ((Number(it.weight) || 0) / tot * 100).toFixed(1) + '%';
-              L.push(`| ${it.label || ''} | ${it.link_jackpot ? '（依JP）' : (Number(it.value) || 0)} | ${Number(it.weight) || 0} | ${pct} |`
-                + (g.type === 'PICK' ? ` ${it.is_end ? '✓' : ''} |` : '') + ` ${it.link_jackpot || '—'} |`);
-            });
-          }
-        }
-        L.push('');
-      });
-    }
+    // v8.0:舊「## Bonus 小遊戲（舊版獨立清單）」段已移除——bonus 全面併入模式玩法種類
+    //   (見上方「## 各模式 bonus 小遊戲」)。17_Bonus_Games 資料層於 v8.0 移除。
+
 
     return L.join('\n');
   }

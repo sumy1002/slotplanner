@@ -164,7 +164,6 @@
     const reelStrips  = readLS('slotplanner.aconfig.reelstrips.v1',   {});  // v6.0-b
     const multipliers = readLS('slotplanner.aconfig.multipliers.v1', {});  // v5.4
     const coinValues  = readLS('slotplanner.aconfig.coinvalues.v1',  {});  // v5.4
-    const bonusGames  = readLS('slotplanner.aconfig.bonusgames.v1',  {});  // v6.0-c
     const genLimits   = readLS('slotplanner.aconfig.genLimits.v1',   []);  // v7.11
     const registryRaw = readLS('slotplanner.registry.v1',             { symbols: [] });
 
@@ -203,13 +202,13 @@
       ['10_Discard_Rules', '棄牌規則'],
       ['11_Mode_Config', '模式設定'],
       ['11b_Mode_TriggerPays', '各模式 scatter-pay 觸發給付(v7.10;選用;引擎尚未消費,Stage 3 接)'],
+      ['11c_Mode_Items', '各模式 bonus 小遊戲獎項表(v7.14;WHEEL/PICK/COLLECT;選用;引擎不消費)'],
       ['12_Distribution_Bins', '分佈區間'],
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
       ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
       ['15_Multipliers', '倍數系統(v5.4:Wild/Progress/Random;選用;引擎讀取)'],
       ['15b_Symbol_Mults', '符號倍數/彩金 權威表(v6.3:Kind=MULT/PRIZE;選用;前端權威)'],
       ['16_Coin_Values', '金幣面額(v5.4:Hold&Win;選用;引擎讀取)'],
-      ['17_Bonus_Games', 'Bonus 小遊戲(v6.0-c:輪盤/選獎/收集;選用;引擎讀取)'],
     ]);
     wsR.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF5A3DB0' } };
     setCols(wsR, [28, 50]);
@@ -495,13 +494,21 @@
     // 11_Mode_Config
     const wsM = wb.addWorksheet('11_Mode_Config');
     // v7.10:尾端 additive 新增 Reset_Scope(既有 6 欄順序/內容不動)
+    // v7.14:D6 補匯出 Cap_Enabled/Cap_Value/Stack_Mode(loader 早已讀,匯出漏寫→round-trip 缺口修復);
+    //        再尾端 additive 加 Mode_Kind/Wheel_Upgrade_To/Pick_Count/Collect_Target。
+    //        前 7 欄順序/內容不動;loader 一律 by-name(.get),欄序不影響讀取。
     wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
-                'On_Enter_Reset_Vars', 'Notes', 'Reset_Scope']);
+                'On_Enter_Reset_Vars', 'Notes', 'Reset_Scope',
+                'Cap_Enabled', 'Cap_Value', 'Stack_Mode',
+                'Mode_Kind', 'Wheel_Upgrade_To', 'Pick_Count', 'Collect_Target']);
     for (const m of modes) {
       wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
-                  m.on_enter_reset_vars, m.notes, m.reset_scope || '']);
+                  m.on_enter_reset_vars, m.notes, m.reset_scope || '',
+                  m.cap_enabled || '', m.cap_value || '', m.stack_mode || '',
+                  m.mode_kind || 'SPIN', m.wheel_upgrade_to || '',
+                  Number(m.pick_count) || 0, Number(m.collect_target) || 0]);
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14]);
 
     // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
     //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
@@ -513,6 +520,18 @@
       }
     }
     boldHdr(wsTP); setCols(wsTP, [14, 14, 12, 14]);
+
+    // v7.14:11c_Mode_Items(bonus 小遊戲獎項表;additive 新子表,long-format tidy)
+    //   舊檔無此 sheet → loader 安全降級(各 mode.items 空)。一個 mode 多列(mode_kind != SPIN 才有)。
+    const wsMI = wb.addWorksheet('11c_Mode_Items');
+    wsMI.addRow(['Mode', 'Item_Label', 'Item_Value', 'Item_Weight', 'Item_Is_End', 'Item_Link_JP']);
+    for (const m of modes) {
+      for (const it of (m.items || [])) {
+        wsMI.addRow([m.mode, it.label || '', Number(it.value) || 0,
+                     Number(it.weight) || 0, !!it.is_end, it.link_jackpot || '']);
+      }
+    }
+    boldHdr(wsMI); setCols(wsMI, [12, 16, 11, 11, 10, 12]);
 
     // 12_Distribution_Bins
     const wsB = wb.addWorksheet('12_Distribution_Bins');
@@ -642,42 +661,8 @@
     boldHdr(wsSm); setCols(wsSm, [16, 8, 12, 10, 16, ...smModeNames.map(() => 10)]);
 
 
-    // 17_Bonus_Games(v6.0-c:每個 game 一段 KV header + 其 items 列。引擎讀取;選用)
-    const wsBonus = wb.addWorksheet('17_Bonus_Games');
-    wsBonus.addRow(['Bonus_ID', 'Type', 'Title', 'Trigger_Desc', 'Mode_Scope',
-                    'Upgrade_To', 'Pick_Count', 'Collect_Target',
-                    'Item_Label', 'Item_Value', 'Item_Weight', 'Item_Is_End', 'Item_Link_JP']);
-    {
-      const bg = (typeof bonusGames === 'object' && bonusGames) ? bonusGames : {};
-      const games = Array.isArray(bg.games) ? bg.games : [];
-      for (const g of games) {
-        if (!g || !g.bonus_id) continue;
-        const items = Array.isArray(g.items) ? g.items : [];
-        if (items.length === 0) {
-          // 無項目仍寫一列保留 game 定義
-          wsBonus.addRow([g.bonus_id, g.type || 'WHEEL', g.title || '', g.trigger_desc || '',
-                          g.mode_scope || 'ALL', g.wheel_upgrade_to || '',
-                          Number(g.pick_count) || 0, Number(g.collect_target) || 0,
-                          '', '', '', '', '']);
-          continue;
-        }
-        items.forEach((it, idx) => {
-          wsBonus.addRow([
-            idx === 0 ? g.bonus_id : '',
-            idx === 0 ? (g.type || 'WHEEL') : '',
-            idx === 0 ? (g.title || '') : '',
-            idx === 0 ? (g.trigger_desc || '') : '',
-            idx === 0 ? (g.mode_scope || 'ALL') : '',
-            idx === 0 ? (g.wheel_upgrade_to || '') : '',
-            idx === 0 ? (Number(g.pick_count) || 0) : '',
-            idx === 0 ? (Number(g.collect_target) || 0) : '',
-            it.label || '', Number(it.value) || 0, Number(it.weight) || 0,
-            !!it.is_end, it.link_jackpot || '',
-          ]);
-        });
-      }
-    }
-    boldHdr(wsBonus); setCols(wsBonus, [10, 12, 16, 24, 12, 11, 10, 12, 14, 11, 11, 10, 12]);
+    // v8.0:17_Bonus_Games 匯出已移除——bonus 併入模式玩法種類(mode_kind),
+    //   由 11_Mode_Config(Mode_Kind..Collect_Target)+ 11c_Mode_Items 承載。
 
     return await wb.xlsx.writeBuffer();
   }
@@ -762,7 +747,6 @@
       reelstrips:   'slotplanner.aconfig.reelstrips.v1',   // v6.0-b
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
-      bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
       genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
       registry:     'slotplanner.registry.v1',
     };
@@ -799,7 +783,6 @@
       reelstrips:   'slotplanner.aconfig.reelstrips.v1',   // v6.0-b
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
-      bonusgames:   'slotplanner.aconfig.bonusgames.v1',   // v6.0-c
       genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
       registry:     'slotplanner.registry.v1',
     };

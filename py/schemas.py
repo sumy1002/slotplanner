@@ -322,7 +322,8 @@ class SymbolDef:
 
 
 # ============================================================
-# Bonus 小遊戲 (對應 17_Bonus_Games, v6.0-c)
+# 獎項項目 (BonusItem;v6.0-c 起用於 17_Bonus_Games,v7.14 起亦為 ModeConfig.items 承載)
+# v8.0:BonusGame 已移除(bonus 併入 mode 玩法種類 mode_kind);BonusItem 保留供 ModeConfig.items 使用。
 # ============================================================
 @dataclass
 class BonusItem:
@@ -331,21 +332,6 @@ class BonusItem:
     weight:       float = 100.0
     is_end:       bool = False
     link_jackpot: str = ""
-
-@dataclass
-class BonusGame:
-    bonus_id:         str = "BG1"
-    type:             str = "WHEEL"   # WHEEL / PICK / COLLECTION
-    title:            str = ""
-    trigger_desc:     str = ""
-    mode_scope:       str = "ALL"
-    wheel_upgrade_to: str = ""
-    pick_count:       int = 0
-    collect_target:   int = 0
-    items:            list = None
-    notes:            str = ""
-    def __post_init__(self):
-        if self.items is None: self.items = []
 
 # ============================================================
 # 倍數系統 (對應 15_Multipliers, v5.4)
@@ -576,6 +562,15 @@ class ModeConfig:
     # v7.11 additive:此模式的倍數疊加方式;None = 繼承 Multipliers.stack_mode。
     #   三層優先序(docgen 描述):符號 mult_stack_mode → mode stack_mode → 全域。
     stack_mode: Optional[MultStackMode] = None
+    # v7.14 additive:此模式的玩法種類。SPIN=旋轉模式(預設,向後相容);
+    #   WHEEL/PICK/COLLECTION=bonus 小遊戲,此 mode 攜帶對應獎項表(items)。
+    #   規格書描述用;引擎不消費、不執行、不算 RTP(由下游模擬工具負責)。
+    mode_kind: str = "SPIN"          # SPIN / WHEEL / PICK / COLLECTION
+    # 以下四欄僅 mode_kind != SPIN 時有意義(SPIN 模式忽略):
+    wheel_upgrade_to: str = ""       # WHEEL 升級鏈:指向另一個 mode 名(空=無升級)
+    pick_count: int = 0              # PICK 抽選次數(0=抽到結束項為止)
+    collect_target: int = 0          # COLLECTION 目標值
+    items: list["BonusItem"] = field(default_factory=list)  # 獎項表(沿用 BonusItem)
 
 
 # ============================================================
@@ -627,8 +622,7 @@ class AConfig:
     # v6.0-b:真實輪帶（啟用時引擎視窗抽樣）;reel_strips[mode][reel_id] = [sym,...]
     reel_strips_enabled: bool = False
     reel_strips: dict = field(default_factory=dict)
-    # v6.0-c:Bonus 小遊戲（選用）
-    bonus_games: list = field(default_factory=list)
+    # v8.0:bonus_games 已移除(bonus 併入 mode 玩法種類 mode_kind;獎項在 ModeConfig.items)。
     # v7.11:產牌限制 / 生成期約束（選用;對應 07b_Gen_Limits）
     #   本工具僅描述 + 帶資料 + 文件輸出,不在本引擎執行;供下游數據模擬工具消費。
     gen_limits: list["GenLimit"] = field(default_factory=list)

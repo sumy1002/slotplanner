@@ -197,7 +197,7 @@
 
     <!-- 群組 3:檔案動作 — v7.6.1:暫時隱藏(目前用不到;保留 markup/handler 供日後維護)。
          要恢復顯示,把 v-if="false" 改成 v-if="true" 或移除即可。 -->
-    <div class="cfg-source-files" v-if="false">
+    <div class="cfg-source-files" v-if="true">
       <label class="btn-pill cfg-import-btn" title="從本機選擇 A.xlsx,解析並覆蓋目前所有設定">
         <span class="cfg-btn-icon">⇧</span>
         <span class="cfg-btn-text-full">匯入 A.xlsx</span>
@@ -4625,9 +4625,22 @@
                   </div>
                   <div v-show="isModeGpOpen(m)" class="cfg-card-body">
                   <div class="cfg-mode-future-note">
-                    <span class="cfg-mode-future-tag">規劃中</span>
-                    以下欄位已可設定並寫入 A.xlsx,但模擬引擎<strong>尚未接上執行</strong>(Stage 3 才會生效)。先設定不影響目前模擬結果。
+                    <span class="cfg-mode-future-tag">描述用</span>
+                    以下欄位寫入 A.xlsx / 規格書供下游數值 / 模擬工具落盤遵循;本工具<strong>不執行、不計算 RTP</strong>。
                   </div>
+
+                  <!-- v7.14:玩法種類(SPIN=旋轉;WHEEL/PICK/COLLECTION=bonus 小遊戲)-->
+                  <div class="cfg-field" style="margin-top:8px;">
+                    <label class="cfg-label">玩法種類 <span class="cfg-key">mode_kind</span></label>
+                    <select class="input input-w-name" v-model="m.mode_kind">
+                      <option v-for="opt in MODE_KIND_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
+                    </select>
+                    <div class="cfg-hint">選 WHEEL/PICK/COLLECTION 時,下方改設定 bonus 小遊戲獎項;何時觸發進入本模式仍由上方 trigger_condition 決定。</div>
+                  </div>
+
+                  <!-- SPIN 專屬:倍數 / 封頂 / 觸發給付(非 SPIN 時整區灰示不適用)-->
+                  <div class="cfg-mode-spin-fields" :class="{ 'cfg-kind-na': isBonusKind(m) }">
+                  <div v-if="isBonusKind(m)" class="cfg-hint cfg-kind-na-note">此玩法為 bonus 小遊戲,以下旋轉相關設定不適用。</div>
 
                   <div class="cfg-field" style="margin-top:8px;">
                     <label class="cfg-label">倍數重置範圍 <span class="cfg-key">reset_scope</span></label>
@@ -4684,118 +4697,67 @@
                       <span style="font-size:14px">+</span> 新增觸發給付
                     </button>
                   </div>
-                  </div><!-- /cfg-card-body -->
-                </div><!-- /cfg-mode-gameplay -->
+                  </div><!-- /cfg-mode-spin-fields -->
 
-                <!-- v7.10:關聯 Bonus 小遊戲(做法甲;依 mode_scope 過濾,原 17_Bonus_Games 入口已關)-->
-                <div class="cfg-section cfg-section-card cfg-mode-bonus"
-                     :class="{ 'is-empty': !modeBnHasContent(m), 'is-closed': !isModeBnOpen(m) }">
-                  <div class="cfg-section-title cfg-card-head" @click="toggleModeBn(m)">
-                    <span class="cfg-section-title-text">關聯 Bonus 小遊戲 <span class="cfg-key">17_Bonus_Games</span></span>
-                    <span v-if="!isModeBnOpen(m)" class="cfg-card-summary">
-                      <span v-if="modeBnSummary(m)" class="cfg-card-summary-chip">{{ modeBnSummary(m) }}</span>
-                      <span v-else class="cfg-card-summary-muted">無</span>
-                    </span>
-                    <span v-else class="cfg-mode-bonus-count">{{ bonusesForMode(m.mode).length }}</span>
-                    <span class="cfg-card-caret" :class="{ open: isModeBnOpen(m) }" title="展開 / 收合">›</span>
-                  </div>
-                  <div v-show="isModeBnOpen(m)" class="cfg-card-body">
-                  <div class="cfg-hint" style="margin:4px 0 8px;">
-                    此處列出 <strong>適用於「{{ m.mode || '此模式' }}」</strong>的 Bonus(mode_scope 為 ALL 或含此模式)。
-                    新增的 Bonus 預設只適用此模式;可在卡片內用「適用模式」chip 改成多模式或全部。
-                  </div>
-                  <div class="cfg-bonus-add-row">
-                    <button class="cfg-mode-add-btn" @click="addBonusForMode('WHEEL', m.mode)"><span style="font-size:15px">+</span> 輪盤</button>
-                    <button class="cfg-mode-add-btn" @click="addBonusForMode('PICK', m.mode)"><span style="font-size:15px">+</span> 選獎</button>
-                    <button class="cfg-mode-add-btn" @click="addBonusForMode('COLLECTION', m.mode)"><span style="font-size:15px">+</span> 收集</button>
-                  </div>
-
-                  <div v-if="bonusesForMode(m.mode).length === 0" class="cfg-hint" style="margin:6px 0;">
-                    尚無適用此模式的 Bonus。
-                  </div>
-
-                  <div v-for="{ g, gi } in bonusesForMode(m.mode)" :key="'bg'+gi" class="cfg-bonus-card">
-                    <div class="cfg-bonus-head">
-                      <span class="cfg-bonus-type-badge" :class="'cfg-bonus-type-' + g.type">{{ BONUS_TYPE_LABEL[g.type] }}</span>
-                      <input class="input input-w-id cfg-mono" type="text" v-model.trim="g.bonus_id" placeholder="BG1" title="Bonus ID">
-                      <input class="input input-w-name" type="text" v-model.trim="g.title" placeholder="關卡名稱（選填）">
-                      <button class="cfg-mode-delete-btn" @click="removeBonusGame(gi)" title="刪除此 Bonus">✕</button>
+                  <!-- v7.14:bonus 小遊戲編輯器(mode_kind != SPIN)-->
+                  <div v-if="isBonusKind(m)" class="cfg-mode-minigame">
+                    <div v-if="m.mode_kind === 'WHEEL'" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">升級目標 <span class="cfg-key">wheel_upgrade_to</span></label>
+                      <select class="input input-w-name" v-model="m.wheel_upgrade_to">
+                        <option value="">（無升級）</option>
+                        <option v-for="wt in modeWheelTargets(m)" :key="wt.mode" :value="wt.mode">{{ wt.mode }}</option>
+                      </select>
+                      <div class="cfg-hint">轉到特定分段時升級到另一個 WHEEL 模式;空 = 無升級。目標必須也是 WHEEL 玩法。</div>
                     </div>
-                    <div v-if="bonusOtherModes(g, m.mode).length" class="cfg-mode-bonus-shared">
-                      ⓘ 此 Bonus 也適用於:{{ bonusOtherModes(g, m.mode).join('、') }}(編輯會同步影響該些模式)
+                    <div v-if="m.mode_kind === 'PICK'" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">抽選次數 <span class="cfg-key">pick_count</span></label>
+                      <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.pick_count">
+                      <div class="cfg-hint">可抽選的次數;0 = 抽到「結束」項為止。</div>
+                    </div>
+                    <div v-if="m.mode_kind === 'COLLECTION'" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">收集目標 <span class="cfg-key">collect_target</span></label>
+                      <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.collect_target">
+                      <div class="cfg-hint">達到此累積量即完成收集。</div>
                     </div>
 
-                    <div class="cfg-bonus-meta">
-                      <div class="cfg-bonus-mcell">
-                        <label class="cfg-label">觸發說明</label>
-                        <input class="input input-w-name" type="text" v-model.trim="g.trigger_desc" placeholder="3 個 BONUS 符號觸發">
-                      </div>
-                      <div class="cfg-bonus-mcell">
-                        <label class="cfg-label">適用模式</label>
-                        <div class="cfg-chip-row">
-                          <button class="cfg-chip cfg-chip-sm" :class="{ active: bonusHasMode(g, 'ALL') }"
-                                  @click="toggleBonusMode(g, 'ALL')">全部</button>
-                          <button v-for="mn in modeNames" :key="mn"
-                                  class="cfg-chip cfg-chip-sm" :class="{ active: bonusHasMode(g, mn) }"
-                                  @click="toggleBonusMode(g, mn)">{{ mn }}</button>
-                        </div>
-                      </div>
-                      <div v-if="g.type === 'WHEEL'" class="cfg-bonus-mcell">
-                        <label class="cfg-label">升級至 <span class="cfg-key">選填</span></label>
-                        <select class="input input-w-id" v-model="g.wheel_upgrade_to">
-                          <option value="">（無升級）</option>
-                          <template v-for="og in bonusGames.games" :key="og.bonus_id">
-                            <option v-if="og.bonus_id && og.bonus_id !== g.bonus_id" :value="og.bonus_id">{{ og.bonus_id }}</option>
-                          </template>
-                        </select>
-                      </div>
-                      <div v-if="g.type === 'PICK'" class="cfg-bonus-mcell">
-                        <label class="cfg-label">抽選次數 <span class="cfg-key">0=抽到結束</span></label>
-                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="g.pick_count">
-                      </div>
-                      <div v-if="g.type === 'COLLECTION'" class="cfg-bonus-mcell">
-                        <label class="cfg-label">目標收集數</label>
-                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="g.collect_target">
-                      </div>
-                    </div>
-
-                    <div class="cfg-bonus-items">
+                    <div class="cfg-bonus-items" style="margin-top:8px;">
                       <div class="cfg-bonus-items-title">
-                        {{ g.type === 'WHEEL' ? '輪盤分段' : g.type === 'PICK' ? '獎項池' : '收集獎勵' }}
-                        <span v-if="bonusExpected(g) != null && bonusExpected(g) > 0" class="cfg-bonus-ev">期望 ×{{ bonusExpected(g).toFixed(2) }}</span>
+                        {{ m.mode_kind === 'WHEEL' ? '輪盤分段' : m.mode_kind === 'PICK' ? '獎項池' : '收集獎勵' }}
+                        <span v-if="modeExpected(m) != null && modeExpected(m) > 0" class="cfg-bonus-ev">期望 ×{{ modeExpected(m).toFixed(2) }}</span>
                       </div>
-                      <div v-for="(it, ii) in g.items" :key="'bi'+ii" class="cfg-bonus-item-row">
+                      <div v-if="(m.items || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無獎項。</div>
+                      <div v-for="(it, ii) in m.items" :key="'mi'+ii" class="cfg-bonus-item-row">
                         <input class="input input-w-id" type="text" v-model.trim="it.label" placeholder="標籤">
                         <div class="cfg-bonus-icell">
-                          <span class="cfg-bonus-ilabel">{{ g.type === 'COLLECTION' ? '門檻' : '值×注額' }}</span>
+                          <span class="cfg-bonus-ilabel">{{ m.mode_kind === 'COLLECTION' ? '門檻' : '值×注額' }}</span>
                           <input class="input input-w-num input-center" type="number" min="0" step="any"
                                  v-model.number="it.value" :disabled="!!it.link_jackpot">
                         </div>
-                        <div v-if="g.type !== 'COLLECTION'" class="cfg-bonus-icell">
+                        <div v-if="m.mode_kind !== 'COLLECTION'" class="cfg-bonus-icell">
                           <span class="cfg-bonus-ilabel">權重</span>
                           <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="it.weight">
                         </div>
-                        <span v-if="g.type !== 'COLLECTION'" class="cfg-bonus-ipct">{{ (bonusItemPct(g, ii) || 0).toFixed(1) }}%</span>
-                        <label v-if="g.type === 'PICK'" class="cfg-bonus-end-toggle" title="抽到此項即結束（pooper）">
+                        <span v-if="m.mode_kind !== 'COLLECTION'" class="cfg-bonus-ipct">{{ (modeItemPct(m, ii) || 0).toFixed(1) }}%</span>
+                        <label v-if="m.mode_kind === 'PICK'" class="cfg-bonus-end-toggle" title="抽到此項即結束（pooper）">
                           <input type="checkbox" v-model="it.is_end"> 結束
                         </label>
                         <div class="cfg-bonus-icell">
                           <span class="cfg-bonus-ilabel">連結JP</span>
                           <select class="input input-w-id" v-model="it.link_jackpot">
                             <option value="">—</option>
-                            <option v-for="j in bonusJpOptions(g, it)" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                            <option v-for="j in modeItemJpOptions(m, it)" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
                           </select>
                         </div>
-                        <button class="cfg-mode-delete-btn" @click="removeBonusItem(g, ii)" title="刪除">✕</button>
+                        <button class="cfg-mode-delete-btn" @click="removeModeItem(m, ii)" title="刪除">✕</button>
                       </div>
-                      <button class="cfg-mode-add-btn cfg-bonus-item-add" @click="addBonusItem(g)">
-                        <span style="font-size:14px">+</span> 新增項目
+                      <button class="cfg-mode-add-btn cfg-bonus-item-add" @click="addModeItem(m)">
+                        <span style="font-size:14px">+</span> 新增獎項
                       </button>
                     </div>
-                  </div>
-                  </div><!-- /cfg-card-body -->
-                </div><!-- /cfg-mode-bonus -->
+                  </div><!-- /cfg-mode-minigame -->
 
+                  </div><!-- /cfg-card-body -->
+                </div><!-- /cfg-mode-gameplay -->
               </div>
               </div><!-- /cfg-mode-card-expand (v5.0-d) -->
             </div>
@@ -5148,10 +5110,6 @@
            資料物件 multipliers/coinValues 仍由遷移/存檔/驗證層維護,見 setup.js。 -->
 
 
-      <!-- ─── 17:Bonus 小遊戲（v6.0-c）─── -->
-      <!-- v7.10:17_Bonus_Games 編輯已移入規則頁「模式」子分頁各 mode 卡的「關聯 Bonus」(做法甲);
-           此面板保留為隱藏 v-else-if 鏈(永不渲染),handler/資料/匯出皆保留。後續將整體移除。 -->
-      <div v-else-if="active === 'bonus_games'" class="cfg-form cfg-bonus-form"></div>
 
       <!-- ═══════ 📄 文件生成（跨分頁輸出，非 A.xlsx 設定）═══════ -->
       <div v-else-if="active === 'docgen'" class="cfg-docgen-host">

@@ -10805,6 +10805,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   color: var(--warn-text);
   border: 1px solid var(--warn-brd);
 }
+/* v7.14:mode 玩法種類 — SPIN 專屬欄位灰示(非 SPIN 時) + bonus 小遊戲編輯區 */
+.cfg-mode-spin-fields.cfg-kind-na { opacity: .45; pointer-events: none; }
+.cfg-kind-na-note { color: var(--warn-text); margin: 6px 0 2px; font-style: italic; }
+.cfg-mode-minigame { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--glass-edge); }
 .cfg-mode-tp { margin-top: 10px; }
 .cfg-mode-tp-row {
   display: flex;

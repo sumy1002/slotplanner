@@ -30,7 +30,7 @@ from typing import Any
 from core.schemas import (
     BetConfig, BuyFeatureDef,
     Multipliers, MultValue, CoinValues, CoinDenom,
-    BonusGame, BonusItem,
+    BonusItem,
     AConfig, GlobalConfig, LayoutConfig, ReelLayout, PanelDef,
     SymbolDef, SymbolType,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
@@ -86,6 +86,9 @@ def load_a_config(path: str | Path) -> AConfig:
     discard_rules = _parse_discard_rules(sheets["10_Discard_Rules"])
     modes = _parse_modes(sheets["11_Mode_Config"])
     _parse_mode_trigger_pays(sheets.get("11b_Mode_TriggerPays"), modes)   # v7.10 additive
+    _parse_mode_items(sheets.get("11c_Mode_Items"), modes)                # v7.14 additive
+    # v8.0:舊檔相容 — 若舊 A.xlsx 仍帶 17_Bonus_Games,讀入即遷移成 mode 玩法種類(併入 modes)。
+    _migrate_bonus_games_to_modes(sheets.get("17_Bonus_Games"), modes)
     distribution_bins = _parse_distribution_bins(sheets["12_Distribution_Bins"])
 
     cfg = AConfig(
@@ -136,8 +139,7 @@ def load_a_config(path: str | Path) -> AConfig:
     cfg.reel_strips_enabled = rs_enabled
     cfg.reel_strips = rs_strips
 
-    # v6.0-c:17_Bonus_Games
-    cfg.bonus_games = _parse_bonus_games(sheets.get('17_Bonus_Games'))
+    # v8.0:17_Bonus_Games 不再獨立載入(已於上方 _migrate_bonus_games_to_modes 併入 modes)。
 
     # v7.11:07b_Gen_Limits（產牌限制 / 生成期約束;選用,舊檔無 sheet → 空）
     cfg.gen_limits = _parse_gen_limits(sheets.get('07b_Gen_Limits'), symbols, layout)
@@ -579,14 +581,18 @@ def _parse_reel_strips(df):
     return (enabled, strips)
 
 
-def _parse_bonus_games(df) -> list:
-    """v6.0-c: 17_Bonus_Games — 每 game 首列帶 game 欄位,後續列僅 item 欄。
-    以「首列非空 → 新 game」carry-forward 方式還原。sheet 不存在 → []。
+def _migrate_bonus_games_to_modes(df, modes: dict) -> None:
+    """v8.0:舊檔相容遷移器(取代 v6.0-c 的 _parse_bonus_games)。
+
+    舊 A.xlsx 若仍帶 17_Bonus_Games(每 game 首列帶 game 欄、後續列僅 item 欄,carry-forward),
+    讀入即轉成 mode 玩法種類(mode_kind = WHEEL/PICK/COLLECTION)併入 modes:
+      - mode 名取 Bonus_ID;同名 mode 已存在(如已在 11_Mode_Config/11c 定義)→ 略過(避免覆蓋)。
+      - Title/Trigger_Desc/Mode_Scope 併入 notes(lossy;trigger_condition 需人工重接,留 None)。
+      - items 沿用 BonusItem。
+    sheet 不存在 / 空 → 不動 modes(安全降級)。本工具不執行、不算 RTP。
     """
     if df is None or df.empty:
-        return []
-    games = []
-    cur = None
+        return
 
     def _b(v):
         if isinstance(v, bool): return v
@@ -599,26 +605,39 @@ def _parse_bonus_games(df) -> list:
         try: return cast(v)
         except (ValueError, TypeError): return cast(0)
 
+    cur = None
     for _, r in df.iterrows():
         bid = _s(r.get("Bonus_ID"))
         if bid:
-            cur = BonusGame(
-                bonus_id=bid,
-                type=(_s(r.get("Type")) or "WHEEL").upper(),
-                title=_s(r.get("Title")),
-                trigger_desc=_s(r.get("Trigger_Desc")),
-                mode_scope=_s(r.get("Mode_Scope")) or "ALL",
+            if bid in modes:
+                cur = None   # 同名 mode 已存在 → 該 game 略過
+                continue
+            kind = (_s(r.get("Type")) or "WHEEL").upper()
+            if kind not in _VALID_MODE_KINDS or kind == "SPIN":
+                kind = "WHEEL"
+            notes_parts = []
+            title = _s(r.get("Title"))
+            tdesc = _s(r.get("Trigger_Desc"))
+            mscope = _s(r.get("Mode_Scope"))
+            if title and title != bid: notes_parts.append(title)
+            if tdesc: notes_parts.append("觸發(舊):" + tdesc)
+            if mscope and mscope.upper() != "ALL": notes_parts.append("原適用模式:" + mscope)
+            cur = ModeConfig(
+                mode=bid,
+                trigger_condition=None,      # lossy:舊 trigger_desc 無法自動變 Condition,需人工重接
+                spin_count=0,
+                notes=" / ".join(notes_parts),
+                mode_kind=kind,
                 wheel_upgrade_to=_s(r.get("Upgrade_To")),
                 pick_count=_n(r.get("Pick_Count"), int),
                 collect_target=_n(r.get("Collect_Target"), int),
             )
-            games.append(cur)
+            modes[bid] = cur
         if cur is None:
             continue
         label = _s(r.get("Item_Label"))
         val = r.get("Item_Value")
         link = _s(r.get("Item_Link_JP"))
-        # 有 item 內容才加（避免無 item 的純 header 列誤加空項）
         if label or (val is not None and not pd.isna(val) and _n(val) != 0) or link:
             cur.items.append(BonusItem(
                 label=label,
@@ -627,7 +646,7 @@ def _parse_bonus_games(df) -> list:
                 is_end=_b(r.get("Item_Is_End")),
                 link_jackpot=link,
             ))
-    return games
+
 
 
 def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
@@ -1061,6 +1080,10 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
     return out
 
 
+# v7.14:合法玩法種類(SPIN=旋轉;其餘=bonus 小遊戲)
+_VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION")
+
+
 def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
     sheet = "11_Mode_Config"
     out = {}
@@ -1094,6 +1117,18 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 except ValueError:
                     raise ConfigValidationError(
                         sheet, f"Stack_Mode '{sm_raw}' 非合法值(MUL/ADD 或留空)", row=idx + 2)
+            # v7.14 additive:Mode_Kind(尾端新欄;缺欄/空 → SPIN;非法值 → 報錯)
+            #   + WHEEL/PICK/COLLECTION 的 mini-game 欄位(by-name,缺 → 預設)。
+            mk_raw = _to_str(r.get("Mode_Kind")).strip().upper()
+            mode_kind = mk_raw or "SPIN"
+            if mode_kind not in _VALID_MODE_KINDS:
+                raise ConfigValidationError(
+                    sheet,
+                    f"Mode_Kind '{mk_raw}' 非合法值({'/'.join(_VALID_MODE_KINDS)} 或留空)",
+                    row=idx + 2)
+            wheel_upgrade_to = _to_str(r.get("Wheel_Upgrade_To")).strip()
+            pick_count = int(r.get("Pick_Count", 0) or 0)
+            collect_target = int(r.get("Collect_Target", 0) or 0)
             out[mode] = ModeConfig(
                 mode=mode,
                 trigger_condition=cond,
@@ -1105,6 +1140,10 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 cap_enabled=cap_enabled,
                 cap_value=cap_value,
                 stack_mode=stack_mode,
+                mode_kind=mode_kind,
+                wheel_upgrade_to=wheel_upgrade_to,
+                pick_count=pick_count,
+                collect_target=collect_target,
             )
         except ConfigValidationError:
             raise
@@ -1140,6 +1179,38 @@ def _parse_mode_trigger_pays(df, modes: dict) -> None:
                 scatter_count=int(r.get("Scatter_Count", 0) or 0),
                 pay=float(r.get("Pay", 0) or 0),
                 grants_spins=int(r.get("Grants_Spins", 0) or 0),
+            ))
+        except (ValueError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+
+
+def _parse_mode_items(df, modes: dict) -> None:
+    """v7.14:11c_Mode_Items(bonus 小遊戲獎項表,long-format tidy)。
+
+    additive 契約:sheet 不存在(df is None)→ 整段跳過,各 mode.items 維持空。
+    一個 mode 多列;依 Mode 欄分組塞回對應 ModeConfig.items(沿用 BonusItem)。
+    引用不存在的 Mode → 報錯(交叉驗證,比照 11b_Mode_TriggerPays)。
+    注意:引擎不消費(本工具不執行、不算 RTP);此處僅資料載入供 docgen/下游工具。
+    """
+    sheet = "11c_Mode_Items"
+    if df is None:
+        return
+    for idx, r in df.iterrows():
+        if pd.isna(r.get("Mode")):
+            continue
+        mode = str(r["Mode"]).strip()
+        if not mode:
+            continue
+        if mode not in modes:
+            raise ConfigValidationError(
+                sheet, f"Mode '{mode}' 未在 11_Mode_Config 定義", row=idx + 2)
+        try:
+            modes[mode].items.append(BonusItem(
+                label=_to_str(r.get("Item_Label")),
+                value=float(r.get("Item_Value", 0) or 0),
+                weight=float(r.get("Item_Weight", 100) or 0),
+                is_end=_to_bool(r.get("Item_Is_End")),
+                link_jackpot=_to_str(r.get("Item_Link_JP")),
             ))
         except (ValueError, TypeError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
@@ -1187,6 +1258,32 @@ def _cross_validate(cfg: AConfig):
             "01_Global",
             f"starting_mode '{cfg.global_cfg.starting_mode}' 在 11_Mode_Config 未定義",
         )
+
+    # v7.14:starting_mode 必須是 SPIN 玩法(不能從 bonus 小遊戲開局)
+    _start = cfg.modes.get(cfg.global_cfg.starting_mode)
+    if _start is not None and getattr(_start, "mode_kind", "SPIN") != "SPIN":
+        raise ConfigValidationError(
+            "01_Global",
+            f"starting_mode '{cfg.global_cfg.starting_mode}' 的 Mode_Kind 為 "
+            f"'{_start.mode_kind}';開局模式必須是 SPIN",
+        )
+
+    # v7.14:WHEEL 升級鏈交叉驗證 — wheel_upgrade_to 指向的 mode 須存在且為 WHEEL
+    for _m in cfg.modes.values():
+        _tgt = getattr(_m, "wheel_upgrade_to", "").strip()
+        if not _tgt:
+            continue
+        if _tgt not in cfg.modes:
+            raise ConfigValidationError(
+                "11_Mode_Config",
+                f"Mode '{_m.mode}' 的 Wheel_Upgrade_To '{_tgt}' 未在 11_Mode_Config 定義",
+            )
+        if cfg.modes[_tgt].mode_kind != "WHEEL":
+            raise ConfigValidationError(
+                "11_Mode_Config",
+                f"Mode '{_m.mode}' 的 Wheel_Upgrade_To 指向 '{_tgt}',"
+                f"但其 Mode_Kind 為 '{cfg.modes[_tgt].mode_kind}'(升級目標必須是 WHEEL)",
+            )
 
     # 所有 Reel_Weights 引用的 Mode 必須存在
     for w in cfg.reel_weights:

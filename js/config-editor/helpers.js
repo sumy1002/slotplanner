@@ -53,8 +53,7 @@
     { id: 'bet_config',        sheet: '14_Bet_Config',          name: '加押/購買',    icon: '💴', done: true, group: 'base' },
     // v7.10:global 併入規則頁(模式子分頁的賠付橫幅 + 起始模式),從導覽列隱藏(markup/路由/匯出皆保留)
     { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'base', hidden: true },
-    // v7.10:bonus_games 前端入口關閉(後續功能由模式玩法涵蓋,最終將移除);markup/handler/資料/匯出暫留
-    { id: 'bonus_games',       sheet: '17_Bonus_Games',         name: 'Bonus 小遊戲', icon: '🎡', done: true, group: 'base', hidden: true },
+    // v8.0:bonus_games 分頁移除(bonus 併入 mode 玩法種類 mode_kind)
     // ── 賠付 ──
     { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule' },
     { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
@@ -752,11 +751,9 @@
     return out;
   }
 
-  // ─── v6.0-c:Bonus 小遊戲（17_Bonus_Games）───
-  //   三型:WHEEL 輪盤 / PICK 選獎 / COLLECTION 收集。
-  //   統一 items 陣列承載各型項目;型別專屬純量另存。
-  const LS_BONUS_GAMES_KEY = 'slotplanner.aconfig.bonusgames.v1';
-  function defaultBonusGames() { return { games: [] }; }
+  // ─── BonusItem 工廠(v6.0-c 起用於 bonus;v7.14 起為 ModeConfig.items 承載;v8.0 保留)───
+  //   v8.0:bonus 小遊戲已併入 mode 玩法種類(mode_kind);移除 LS_BONUS_GAMES_KEY /
+  //   defaultBonusGames / makeBonusGame / loadBonusGames / saveBonusGames。makeBonusItem 保留。
   function makeBonusItem(label, value, weight) {
     return {
       label: label || '',
@@ -765,44 +762,6 @@
       link_jackpot: '',         // 連結 13_Jackpots（空=純值）
       is_end: false,            // PICK 專用:抽到即結束（pooper）
     };
-  }
-  function makeBonusGame(id, type) {
-    return {
-      bonus_id: id || 'BG1',
-      type: type || 'WHEEL',     // WHEEL / PICK / COLLECTION
-      title: '',
-      trigger_desc: '',
-      mode_scope: 'ALL',
-      // WHEEL:可升級到下一輪盤（多層輪盤）
-      wheel_upgrade_to: '',      // 指向另一個 bonus_id（空=無升級）
-      // PICK:可選次數（0=抽到 end 為止）
-      pick_count: 0,
-      // COLLECTION:目標收集數
-      collect_target: 0,
-      items: [],                 // Array<BonusItem>
-      notes: '',
-    };
-  }
-  function loadBonusGames() {
-    try {
-      const raw = localStorage.getItem(LS_BONUS_GAMES_KEY);
-      if (!raw) return defaultBonusGames();
-      const d = JSON.parse(raw);
-      const games = Array.isArray(d.games) ? d.games : [];
-      return {
-        games: games.map(g => ({
-          ...makeBonusGame('', ''), ...g,
-          items: Array.isArray(g.items) ? g.items.map(it => ({ ...makeBonusItem(), ...it })) : [],
-        })),
-      };
-    } catch (e) {
-      console.warn('[config-editor] loadBonusGames failed:', e);
-      return defaultBonusGames();
-    }
-  }
-  function saveBonusGames(obj) {
-    try { localStorage.setItem(LS_BONUS_GAMES_KEY, JSON.stringify(obj)); return true; }
-    catch (e) { console.warn('[config-editor] saveBonusGames failed:', e); return false; }
   }
 
   // ─── v5.4:倍數系統(15_Multipliers)───
@@ -2844,7 +2803,8 @@
     makePayRow, migratePayRows,
     LS_REEL_STRIPS_KEY, defaultReelStrips, loadReelStrips, saveReelStrips,
     parseStripStr, stripToStr, stripToWeights, weightsToStrip,
-    LS_BONUS_GAMES_KEY, defaultBonusGames, makeBonusItem, makeBonusGame, loadBonusGames, saveBonusGames,
+    makeBonusItem,
+    // v8.0:LS_BONUS_GAMES_KEY/defaultBonusGames/makeBonusGame/loadBonusGames/saveBonusGames 已移除
     LS_MULTIPLIERS_KEY, defaultMultipliers, makeMultValue, loadMultipliers, saveMultipliers, parseLadder,
     LS_COIN_VALUES_KEY, defaultCoinValues, makeCoinDenom, loadCoinValues, saveCoinValues,
     makeMultValueEntry, makePrizeValueEntry, migrateSymbolMults,
