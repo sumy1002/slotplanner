@@ -1812,6 +1812,21 @@
     { id: 'payload',               label: 'payload',               needsSubkey: true,
       subkeyHint: '欄位名',        valueType: 'auto',   subkeySource: 'text',
       desc: '伴隨 ON_CUSTOM_EMIT 帶來的資料(來自 EMIT_EVENT 的 payload 參數)' },
+    // ── v8.4 / R2 P4:條件變數六枚(純描述詞彙;parse_condition 任意識別字皆合法,
+    //    Python 端零改;求值語意由下游模擬工具實作) ──
+    { id: 'win',                   label: 'win',                   needsSubkey: false, valueType: 'number',
+      desc: '本局贏分(注額倍數)' },
+    { id: 'prev_win',              label: 'prev_win',              needsSubkey: false, valueType: 'number',
+      desc: '前一局贏分;「win > prev_win」= 贏分變大才續轉(Aloha Sticky Win)' },
+    { id: 'rand',                  label: 'rand',                  needsSubkey: false, valueType: 'number',
+      desc: '每次求值的 0–1 隨機值;「rand < 0.1」= 10% 機率觸發(Wild Desire 式隨機事件)' },
+    { id: 'reel_height',           label: 'reel_height',           needsSubkey: true,
+      subkeyHint: '輪號(1-based)', valueType: 'number', subkeySource: 'text',
+      desc: '某輪目前有效高度;「reel_height.3 == 12」(White Rabbit 加局條件)' },
+    { id: 'board_symbol_total',    label: 'board_symbol_total',    needsSubkey: false, valueType: 'number',
+      desc: '盤面現存符號總數;== 0 即「清空全盤」(Moon Princess +100×)' },
+    { id: 'rightmost_reel_in_win', label: 'rightmost_reel_in_win', needsSubkey: false, valueType: 'number',
+      desc: '最右輪是否參與中獎(1/0);Infinity Reels 延續加輪條件' },
   ];
   const VAR_CATEGORY_MAP = Object.fromEntries(VAR_CATEGORIES.map(c => [c.id, c]));
 
@@ -2449,6 +2464,11 @@
         { key: 'var',   label: '變數名(不含 global. 前綴)', type: 'text', placeholder: 'coin_pool', required: true },
         { key: 'op',    label: '運算',   type: 'enum',   options: ['add', 'sub', 'mul', 'set'], default: 'add', required: true },
         { key: 'value', label: '數值',   type: 'number', placeholder: '1', required: true },
+        // v8.4 / R2 P3(C-7 收編):變數生命週期宣告(收集計量表/跨 session 解鎖;描述層)
+        { key: 'lifecycle', label: '生命週期(可選)', type: 'enum', options: ['', 'SPIN', 'FEATURE', 'SESSION'], default: '',
+          desc: '變數重置範圍:SPIN=每局/FEATURE=feature 結束/SESSION=跨局跨 session 持久;留空=沿用預設' },
+        { key: 'cap', label: '上限(可選)', type: 'number', placeholder: '',
+          desc: '變數封頂值;「滿值事件」用「global.X >= 上限」條件 + EMIT_EVENT 拼出' },
       ] },
     { type: 'UPDATE_LOCAL', label: '更新本局變數', icon: '🔧',
       desc: '修改 spin_locals.X(僅本局有效)',
@@ -2477,6 +2497,9 @@
       params: [
         { key: 'count', label: '局數',         type: 'number', placeholder: '5', required: true },
         { key: 'mode',  label: '目標模式(可選)', type: 'mode' },
+        // v8.4 / R2 P3:respin 鏈累計上限(Starburst 最多 3 次;描述層)
+        { key: 'max_total', label: '累計上限(可選)', type: 'number', placeholder: '3',
+          desc: '同一鏈內此規則累計給予的免費局上限;留空=不設限' },
       ] },
     { type: 'HALT_RESOLUTION', label: '中斷結算', icon: '🛑',
       desc: '立刻停止本 trigger 後續所有規則的執行(等同 break)',
@@ -2486,20 +2509,20 @@
     { type: 'BOARD_FILL', label: '盤面填補', icon: '🧩',
       desc: '在指定位置/已被消除的格子強制填入符號',
       params: [
-        { key: 'symbol_id', label: '符號',        type: 'symbol', required: true },
+        { key: 'symbol_id', label: '符號',        type: 'symbol', required: true, sentinels: ['RANDOM'] },
         { key: 'positions', label: '位置清單(可選)', type: 'text',
           placeholder: '[[0,1],[2,3]]', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...]' },
       ] },
     { type: 'BOARD_TRANSFORM', label: '盤面轉換', icon: '🔁',
       desc: '把盤面上指定符號轉成另一個符號',
       params: [
-        { key: 'from_symbol', label: '原符號', type: 'symbol', required: true },
-        { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true },
+        { key: 'from_symbol', label: '原符號', type: 'symbol', required: true, sentinels: ['RANDOM'] },
+        { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true, sentinels: ['RANDOM', 'BEST'] },
       ] },
     { type: 'BOARD_DESTROY', label: '盤面銷毀', icon: '💥',
       desc: '銷毀盤面上指定符號或指定位置',
       params: [
-        { key: 'symbol_id', label: '符號(可選)',    type: 'symbol' },
+        { key: 'symbol_id', label: '符號(可選)',    type: 'symbol', sentinels: ['RANDOM'] },
         { key: 'positions', label: '位置清單(可選)', type: 'text', placeholder: '[[0,1],[2,3]]' },
       ] },
     { type: 'MOVE', label: '移動符號', icon: '➡️',
@@ -2520,12 +2543,79 @@
         { key: 'positions', label: '位置清單', type: 'text', placeholder: '[[0,1]]',
           desc: '省略則黏所有中獎符號' },
         { key: 'duration',  label: '黏著局數', type: 'number', placeholder: '2', required: true },
+        // v8.4 / R2 P3:additive 參數(描述層,引擎不消費)
+        { key: 'until', label: '黏著期間', type: 'enum', options: ['SPINS', 'FEATURE'], default: 'SPINS',
+          desc: 'SPINS=依局數;FEATURE=黏至 feature 結束(Dog House / Chaos Crew 式,duration 忽略)' },
+        { key: 'mult_growth', label: '逐局乘數成長(可選)', type: 'number', placeholder: '0',
+          desc: '黏著符號每局乘數 +N(如 Mental 死亡病患);0/留空=不成長' },
       ] },
     { type: 'LOCK_REEL', label: '鎖定轉軸', icon: '🔒',
       desc: '指定的 reel 在下一局不重新抽樣(整列保持不變)',
       params: [
         { key: 'reel',     label: '輪盤編號(0-based)', type: 'number', placeholder: '0', required: true },
         { key: 'duration', label: '鎖定局數',          type: 'number', placeholder: '1', required: true },
+      ] },
+
+    // ── v8.4 / R2 P2:描述型符號行為 action(七枚) ──
+    //   純描述:本工具不執行、不算 RTP;a_loader 照收(schemas.ActionType additive)、
+    //   logic_parser 無 handler(由下游模擬工具實作)。docgen 照印進「特色規則」。
+    { type: 'EXPAND_REEL', label: '擴展整輪', icon: '🗼',
+      desc: '單格符號擴滿整輪(可鎖輪+重轉;Starburst 擴展 Wild)',
+      params: [
+        { key: 'symbol',  label: '符號',           type: 'symbol', required: true },
+        { key: 'lock',    label: '擴後鎖輪',        type: 'enum', options: ['Y', 'N'], default: 'Y' },
+        { key: 'respins', label: '附帶重轉局數(可選)', type: 'number', placeholder: '1' },
+      ] },
+    { type: 'NUDGE', label: '推移符號', icon: '🔃',
+      desc: '符號逐格推移(可整輪、可每步乘數+N;xNudge / Razor Shark)',
+      params: [
+        { key: 'symbol',        label: '符號',        type: 'symbol', required: true },
+        { key: 'direction',     label: '方向',        type: 'enum', options: ['UP', 'DOWN'], default: 'DOWN', required: true },
+        { key: 'full_reel',     label: '推滿整輪',     type: 'enum', options: ['Y', 'N'], default: 'N' },
+        { key: 'mult_per_step', label: '每步乘數+(可選)', type: 'number', placeholder: '1',
+          desc: '乘數=推移步數的耦合(xNudge);0/留空=無' },
+      ] },
+    { type: 'WALK', label: '走位符號', icon: '🚶',
+      desc: '符號每次消除/每局隨機走 N 步且持續存在(Jammin\' Jars / Toro)',
+      params: [
+        { key: 'symbol',  label: '符號',    type: 'symbol', required: true },
+        { key: 'steps',   label: '每次步數', type: 'number', placeholder: '1', default: 1 },
+        { key: 'persist', label: '存續範圍', type: 'enum', options: ['SPIN', 'CHAIN', 'FEATURE'], default: 'CHAIN',
+          desc: 'SPIN=僅本局;CHAIN=跨連鎖;FEATURE=至 feature 結束' },
+      ] },
+    { type: 'REVEAL_AS', label: '揭示符號', icon: '🎭',
+      desc: '佔位符號落定後統一揭示為其他符號(Mystery Stack / ER 罐 / xWays)',
+      params: [
+        { key: 'symbol', label: '佔位符號', type: 'symbol', required: true },
+        { key: 'pool',   label: '揭示池',   type: 'text', placeholder: 'H1,H2,WILD 或 RANDOM', required: true,
+          desc: '逗號分隔候選(權重由 04 表沿用)或 RANDOM=全符號隨機' },
+        { key: 'scope',  label: '揭示範圍', type: 'enum', options: ['CELL', 'REEL'], default: 'CELL',
+          desc: 'CELL=各格獨立揭示;REEL=同輪佔位統一揭示為同一符號' },
+      ] },
+    { type: 'SPLIT', label: '分裂符號', icon: '🪓',
+      desc: '把符號一分為 N(數量翻倍計分;razor split / xSplit)',
+      params: [
+        { key: 'symbol', label: '符號',   type: 'symbol', required: true },
+        { key: 'into',   label: '分裂數', type: 'number', placeholder: '2', default: 2, required: true },
+      ] },
+    { type: 'DESTROY_ADJACENT', label: '相鄰消除', icon: '🧨',
+      desc: '以符號為中心消除相鄰範圍(可炸開封閉列;xBomb)',
+      params: [
+        { key: 'symbol',    label: '中心符號', type: 'symbol', required: true },
+        { key: 'radius',    label: '半徑',    type: 'number', placeholder: '1', default: 1 },
+        { key: 'open_rows', label: '炸開封閉列', type: 'enum', options: ['Y', 'N'], default: 'N',
+          desc: '消除範圍觸及封閉列時將其開啟(Fire in the Hole)' },
+      ] },
+    { type: 'GROW_BOARD', label: '盤面成長', icon: '📐',
+      desc: '事件驅動的加列/加輪/開格(White Rabbit / Nitro / Infinity Reels / Money Train)',
+      params: [
+        { key: 'effect',  label: '效果',   type: 'enum', options: ['ADD_ROW', 'ADD_REEL', 'OPEN_CELL'], default: 'ADD_ROW', required: true },
+        { key: 'target',  label: '目標',   type: 'text', placeholder: '3 或 RIGHTMOST',
+          desc: 'reel_id(1-based)/RIGHTMOST=最右輪;ADD_REEL 時為插入位置' },
+        { key: 'amount',  label: '數量',   type: 'number', placeholder: '1', default: 1 },
+        { key: 'cap',     label: '上限(可選)', type: 'number', placeholder: '12',
+          desc: '成長上限(如 White Rabbit 高度 12、Infinity 12 輪巨獎門檻搭配 reel_height 條件)' },
+        { key: 'persist', label: '持久範圍', type: 'enum', options: ['SPIN', 'FEATURE'], default: 'FEATURE' },
       ] },
   ];
   const ACTION_BY_TYPE = Object.fromEntries(ACTION_CATALOG.map(a => [a.type, a]));

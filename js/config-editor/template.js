@@ -3624,6 +3624,25 @@
               <input class="input input-w-num" type="number" v-model.number="rules[selectedRuleIdx].priority">
               <div class="cfg-hint">數字越大越優先(同 trigger 下執行順序)</div>
             </div>
+
+            <!-- v8.4 / R2 P5:隨機擇一組(同組同時觸發時依權重抽一條執行;描述層,由下游實作) -->
+            <div class="cfg-field cfg-field-compact">
+              <label class="cfg-label">
+                隨機組(可選) <span class="cfg-key">random_group</span>
+              </label>
+              <input class="input input-w-num cfg-mono" type="text" placeholder="—"
+                     v-model="rules[selectedRuleIdx].random_group"
+                     title="同組規則同時觸發時只隨機執行一條(如 Girl Power 三選一施放);留空=一般規則">
+              <div class="cfg-hint">同組名的規則觸發時擇一執行</div>
+            </div>
+            <div class="cfg-field cfg-field-compact" v-if="rules[selectedRuleIdx].random_group">
+              <label class="cfg-label">
+                抽選權重 <span class="cfg-key">random_weight</span>
+              </label>
+              <input class="input input-w-num" type="number" min="0"
+                     v-model.number="rules[selectedRuleIdx].random_weight">
+              <div class="cfg-hint">同組內依權重抽選</div>
+            </div>
           </div>
 
           <div class="cfg-field">
@@ -3912,6 +3931,8 @@
                               :value="actParamValue(act, param.key)"
                               @change="setActParam(act, param.key, $event.target.value)">
                         <option value="">(選擇符號)</option>
+                        <!-- v8.4 / R2 P3:哨兵值(param 有宣告 sentinels 才出現) -->
+                        <option v-for="sv in (param.sentinels || [])" :key="'sv'+sv" :value="sv">{{ sv }}（{{ sv === 'BEST' ? '取最有利' : '隨機挑選' }}）</option>
                         <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
                       </select>
                       <input v-else class="input cfg-mono"
@@ -4698,6 +4719,34 @@
                     </button>
                   </div>
                   </div><!-- /cfg-mode-spin-fields -->
+
+                  <!-- v8.5 / R3:玩家擇一 + Hold&Win Respin(所有玩法種類皆適用;規格描述,引擎不消費)-->
+                  <div class="cfg-mode-r3-fields">
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">玩家擇一組(可選) <span class="cfg-key">choice_group</span></label>
+                      <input class="input input-w-name cfg-mono" type="text" placeholder="—"
+                             v-model.trim="m.choice_group"
+                             title="同組名的模式=玩家擇一進入(二選一/三選一 FS;Dog House / Moon Princess)">
+                      <div class="cfg-hint">觸發時由玩家在同組模式中選一個進入;留空 = 一般模式。同組需至少 2 個模式。</div>
+                    </div>
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">Hold&Win Respin(可選) <span class="cfg-key">respin_base</span></label>
+                      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span class="cfg-bonus-ilabel">初始局數</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.respin_base">
+                        <span class="cfg-bonus-ilabel">重置條件</span>
+                        <select class="input" v-model="m.respin_reset_on" :disabled="!(Number(m.respin_base) > 0)">
+                          <option value="">（未指定）</option>
+                          <option value="NEW_SYMBOL">落新符號重置</option>
+                          <option value="ANY_WIN">任何中獎重置</option>
+                          <option value="NEVER">不重置</option>
+                        </select>
+                      </div>
+                      <input class="input" type="text" style="margin-top:6px;" placeholder="停止條件（自由描述:盤面填滿 / SEVEN 出現…）"
+                             v-model.trim="m.respin_stop_cond" :disabled="!(Number(m.respin_base) > 0)">
+                      <div class="cfg-hint">符號落地即鎖、respin 計數的 Hold&Win 描述(Money Train / Lucky Wagon);0 = 未啟用。開放式停止條件(Toro「直到某符號出現」)寫在停止條件欄。</div>
+                    </div>
+                  </div>
 
                   <!-- v7.14:bonus 小遊戲編輯器(mode_kind != SPIN)-->
                   <div v-if="isBonusKind(m)" class="cfg-mode-minigame">

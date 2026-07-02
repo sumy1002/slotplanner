@@ -69,7 +69,11 @@
     const list = Array.isArray(syms) ? syms.filter(s => s && s.enabled !== false) : [];
     const sidOf = (s) => (s.symbol_id && String(s.symbol_id).trim()) || s.name || ('#' + s.number);
     const normMults = (a) => (Array.isArray(a) ? a : [])
-      .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0 }))
+      .map(v => ({
+        mult: Number(v.mult) || 0, weight: Number(v.weight) || 0,
+        // v8.3 / R1 D-13:MULT 比照 PRIZE 帶 per-mode 權重(「NG 無乘數、FG 才有」宣告式)
+        weight_by_mode: (v.weight_by_mode && typeof v.weight_by_mode === 'object') ? v.weight_by_mode : {},
+      }))
       .filter(v => v.mult > 0);
     const normPrizes = (a) => (Array.isArray(a) ? a : [])
       .map(v => ({
@@ -190,7 +194,7 @@
       ['01_Global', '全域設定'],
       ['02_Layout', '盤面結構'],
       ['03_Symbols', '符號清單'],
-      ['03c_Paytable', '動態賠付表(v5.3;優先於 03_Symbols Pay_Nx)'],
+      ['03c_Paytable', '動態賠付表(v5.3;優先於 03_Symbols Pay_Nx;v8.3 支援 Count_From/To 區間同賠)'],
       ['04_Reel_Weights', 'Reel 權重'],
       ['04b_Reel_Strips', '真實輪帶(v6.0-b:實體序列;啟用時引擎用視窗抽樣;選用)'],
       ['05_Grid_Size_Weights', '格數權重'],
@@ -198,7 +202,7 @@
       ['07_Constraints', '硬約束'],
       ['07b_Gen_Limits', '產牌限制 / 生成期約束(v7.11;選用;長格式 符號×zone×min/max;供下游模擬工具,本工具不執行)'],
       ['08_Combo_Weights', '連爆權重'],
-      ['09_Puzzle_Rules', '腳本規則'],
+      ['09_Puzzle_Rules', '腳本規則(v8.4:含描述型 action 七種與 Random_Group 隨機擇一,執行語意由下游模擬工具實作)'],
       ['10_Discard_Rules', '棄牌規則'],
       ['11_Mode_Config', '模式設定'],
       ['11b_Mode_TriggerPays', '各模式 scatter-pay 觸發給付(v7.10;選用;引擎尚未消費,Stage 3 接)'],
@@ -278,6 +282,7 @@
       'Pay_3x', 'Pay_4x', 'Pay_5x', 'Pay_6x',
       'Mega_W', 'Mega_H', 'Is_Wild', 'Is_Scatter',
       'Weight', 'Max_Count', 'Use_Max', 'Reel_Limit',
+      'Mode_Scope',   // v8.3 / R1 D-12:出現模式宣告(逗號分隔;空=所有模式);尾端 additive
     ]);
     const syms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     // v4.0 / #13:停用(enabled === false)的符號不匯出;同時建立啟用 id 集合供 04/08 過濾,
@@ -297,13 +302,17 @@
         s.mega_w || 1, s.mega_h || 1, !!s.is_wild, !!s.is_scatter,
         s.weight || 0, s.max_count || 0, !!s.use_max,
         Array.isArray(s.reel_limit) ? s.reel_limit.join(',') : '',
+        (s.mode_scope != null ? String(s.mode_scope) : ''),   // v8.3 D-12
       ]);
     }
-    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18]);
+    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14]);
 
     // 03c_Paytable(v5.3:動態賠付表)
+    // v8.3 / R1 A-1:尾端 additive 加 Count_From / Count_To(count 區間同賠)。
+    //   Count 保留 = 區間起點(舊 loader 至少讀到 from 單點,安全降級);
+    //   單點列 From=To=Count。前 3 欄順序/內容不動。
     const wsPaytable = wb.addWorksheet('03c_Paytable');
-    wsPaytable.addRow(['Symbol_ID', 'Count', 'Pay']);
+    wsPaytable.addRow(['Symbol_ID', 'Count', 'Pay', 'Count_From', 'Count_To']);
     for (const s of syms) {
       if (s.enabled === false) continue;
       const sid = s.symbol_id || s.name || String(s.number || '');
@@ -312,10 +321,14 @@
         : [2,3,4,5,6,7,8,9].filter(n => Number(s['pay_'+n+'x']) > 0)
                              .map(n => ({ count: n, pay: s['pay_'+n+'x'] }));
       for (const r of rows) {
-        if (Number(r.pay) > 0) wsPaytable.addRow([sid, Number(r.count), Number(r.pay)]);
+        if (Number(r.pay) > 0) {
+          const cFrom = Number(r.count);
+          const cTo = (Number(r.count_to) > cFrom) ? Number(r.count_to) : cFrom;
+          wsPaytable.addRow([sid, cFrom, Number(r.pay), cFrom, cTo]);
+        }
       }
     }
-    boldHdr(wsPaytable); setCols(wsPaytable, [16, 10, 12]);
+    boldHdr(wsPaytable); setCols(wsPaytable, [16, 10, 12, 11, 11]);
 
     // 04_Reel_Weights(扁平化)
     const wsRW = wb.addWorksheet('04_Reel_Weights');
@@ -403,11 +416,12 @@
 
     // 06_Paylines
     const wsP = wb.addWorksheet('06_Paylines');
-    wsPaytable.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
+    // v8.1 bugfix:原誤寫 wsPaytable(中獎線被寫進 03c_Paytable、06_Paylines 恆空 → LINE 遊戲 round-trip 丟線)。
+    wsP.addRow(['Line_ID', 'Path', 'Direction', 'Notes']);
     // v4.0 / #16:Direction 改全域設定(g.payline_direction);每行寫入相同值以維持後端逐行讀取相容
     const _plDir = (g && g.payline_direction) || 'LTR';
-    for (const pl of paylines) wsPaytable.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
-    boldHdr(wsPaytable); setCols(wsPaytable, [10, 44, 12, 28]);
+    for (const pl of paylines) wsP.addRow([pl.line_id, pl.path, _plDir, pl.notes]);
+    boldHdr(wsP); setCols(wsP, [10, 44, 12, 28]);
 
     // 07_Constraints
     const wsC = wb.addWorksheet('07_Constraints');
@@ -463,8 +477,10 @@
     //   Actions 欄用後端 condition_parser.parse_actions 認得的 DSL 格式
     //   若 rule.mode_scope !== 'ALL',會把 mode == X 自動合併到 Condition 前面
     const wsPR = wb.addWorksheet('09_Puzzle_Rules');
+    // v8.4 / R2 P5:尾端 additive 加 Random_Group / Random_Weight(前 8 欄不動)
     wsPR.addRow(['Rule_ID', 'Priority', 'Trigger', 'Condition',
-                 'Actions', 'Emits', 'Enabled', 'Description']);
+                 'Actions', 'Emits', 'Enabled', 'Description',
+                 'Random_Group', 'Random_Weight']);
     const sortedRules = [...rules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
     for (const r of sortedRules) {
       const condition = _composeConditionWithModeScope(r.mode_scope, r.condition);
@@ -479,9 +495,11 @@
         emitsStr,
         r.enabled !== false ? 'TRUE' : 'FALSE',
         r.description || r.notes || '',  // 兼容舊資料的 notes
+        r.random_group || '',                                            // v8.4 P5
+        (r.random_group ? (Number(r.random_weight) || 100) : ''),        // v8.4 P5(無組不寫權重)
       ]);
     }
-    boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28]);
+    boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28, 14, 14]);
 
     // 10_Discard_Rules
     const wsDR = wb.addWorksheet('10_Discard_Rules');
@@ -497,18 +515,23 @@
     // v7.14:D6 補匯出 Cap_Enabled/Cap_Value/Stack_Mode(loader 早已讀,匯出漏寫→round-trip 缺口修復);
     //        再尾端 additive 加 Mode_Kind/Wheel_Upgrade_To/Pick_Count/Collect_Target。
     //        前 7 欄順序/內容不動;loader 一律 by-name(.get),欄序不影響讀取。
+    // v8.5 / R3:尾端 additive 加 Choice_Group / Respin_Base / Respin_Reset_On / Respin_Stop_Cond
+    //          (玩家擇一 + Hold&Win respin 描述;前 14 欄順序/內容不動)。
     wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
                 'On_Enter_Reset_Vars', 'Notes', 'Reset_Scope',
                 'Cap_Enabled', 'Cap_Value', 'Stack_Mode',
-                'Mode_Kind', 'Wheel_Upgrade_To', 'Pick_Count', 'Collect_Target']);
+                'Mode_Kind', 'Wheel_Upgrade_To', 'Pick_Count', 'Collect_Target',
+                'Choice_Group', 'Respin_Base', 'Respin_Reset_On', 'Respin_Stop_Cond']);
     for (const m of modes) {
       wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
                   m.on_enter_reset_vars, m.notes, m.reset_scope || '',
                   m.cap_enabled || '', m.cap_value || '', m.stack_mode || '',
                   m.mode_kind || 'SPIN', m.wheel_upgrade_to || '',
-                  Number(m.pick_count) || 0, Number(m.collect_target) || 0]);
+                  Number(m.pick_count) || 0, Number(m.collect_target) || 0,
+                  m.choice_group || '', Number(m.respin_base) || 0,
+                  m.respin_reset_on || '', m.respin_stop_cond || '']);
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22]);
 
     // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
     //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
@@ -650,7 +673,10 @@
     wsSm.addRow(['Symbol_ID', 'Kind', 'Value', 'Weight', 'Link_JP', ...smModeNames.map(m => 'W_' + m)]);
     for (const p of derivedMults.perSymbol) {
       for (const mv of p.mults) {
-        wsSm.addRow([p.sid, 'MULT', Number(mv.mult) || 0, Number(mv.weight) || 0, '', ...smModeNames.map(() => '')]);
+        // v8.3 / R1 D-13:MULT 列寫入 per-mode 權重(缺 → 空字串 = 未宣告,向後相容)
+        const mwbm = mv.weight_by_mode || {};
+        wsSm.addRow([p.sid, 'MULT', Number(mv.mult) || 0, Number(mv.weight) || 0, '',
+                     ...smModeNames.map(m => (mwbm[m] != null ? Number(mwbm[m]) || 0 : ''))]);
       }
       for (const pz of p.prizes) {
         const wbm = pz.weight_by_mode || {};

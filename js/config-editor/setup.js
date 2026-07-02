@@ -1033,6 +1033,11 @@
         if (m.pick_count == null) m.pick_count = 0;
         if (m.collect_target == null) m.collect_target = 0;
         if (!Array.isArray(m.items)) m.items = [];         // 獎項表(mode_kind != SPIN)
+        // v8.5 / R3:玩家擇一組 + Hold&Win respin 描述(additive;引擎不消費)
+        if (m.choice_group == null) m.choice_group = '';
+        if (m.respin_base == null) m.respin_base = 0;
+        if (m.respin_reset_on == null) m.respin_reset_on = '';   // '' | NEW_SYMBOL | ANY_WIN | NEVER
+        if (m.respin_stop_cond == null) m.respin_stop_cond = '';
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1114,6 +1119,7 @@
         if ((m.reset_scope || '') || (m.stack_mode || '')) return true;
         if (m.cap_enabled === 'Y' && (m.cap_value || '')) return true;
         if ((m.trigger_pays || []).length > 0) return true;
+        if ((m.choice_group || '') || Number(m.respin_base) > 0) return true;   // v8.5 R3
         return false;
       }
       // 玩法設定收合摘要:精要描述
@@ -1127,6 +1133,9 @@
         if (m.cap_enabled === 'Y' && (m.cap_value || '')) parts.push('封頂');
         const tp = (m.trigger_pays || []).length;
         if (tp) parts.push(tp + ' 條觸發給付');
+        // v8.5 / R3
+        if (m.choice_group) parts.push('擇一組 ' + m.choice_group);
+        if (Number(m.respin_base) > 0) parts.push('Respin ' + m.respin_base);
         return parts.join(' · ');
       }
       // v8.0:關聯 Bonus 子卡已移除(bonus 併入 mode 玩法種類);modeBn* helpers 一併移除。
@@ -5443,7 +5452,15 @@
       });
 
       // ── 09_Puzzle_Rules 狀態 ──
-      const rules = reactive(loadRules());
+      // v8.4 / R2 P5:規則 additive 欄位正規化(random_group/random_weight;舊資料補預設,不碰 helpers makeRule)
+      function _ensureRuleR2Fields(r) {
+        if (r && typeof r === 'object') {
+          if (r.random_group == null) r.random_group = '';
+          if (r.random_weight == null || isNaN(Number(r.random_weight))) r.random_weight = 100;
+        }
+        return r;
+      }
+      const rules = reactive(loadRules().map(_ensureRuleR2Fields));
       const rulesDebugJson = computed(() => JSON.stringify(rules, null, 2));
 
       const ruleDuplicateIds = computed(() => {
@@ -6195,6 +6212,16 @@
                 subreel_position: asStr(row.getCell(5).value).trim(),
                 subreel_rows: asNum(row.getCell(6).value, 0),
                 subreel_inherit_weight: asBool(row.getCell(7).value),
+                // v8.1 bugfix:匯入對稱補讀第 8–10 欄(SubReel_Kind / SubReel_Symbol_Set / Cells;
+                //   v5.1 / v7.5-Layer C 契約加法欄,原匯入漏讀 → round-trip 缺口)。舊檔缺欄 → 預設。
+                subreel_kind: asStr(row.getCell(8).value).trim() || 'STACK',
+                subreel_symbol_set: asStr(row.getCell(9).value).trim(),
+                cells: (() => {
+                  const s = asStr(row.getCell(10).value).trim();
+                  if (!s) return null;   // 空 = 實心欄(與匯出對稱)
+                  const arr = s.split(';').map(x => x.trim()).filter(Boolean);
+                  return arr.length ? arr : null;
+                })(),
               });
             });
             if (nl.length > 0) layout.splice(0, layout.length, ...nl);
@@ -6399,6 +6426,12 @@
                 wheel_upgrade_to: asStr(row.getCell(12).value).trim(),
                 pick_count:       asNum(row.getCell(13).value, 0),
                 collect_target:   asNum(row.getCell(14).value, 0),
+                // v8.5 / R3 additive:Choice_Group(15)/Respin_Base(16)/Respin_Reset_On(17)/Respin_Stop_Cond(18)
+                //   舊檔無 → 空/0(_ensureModeGameplayFields 補預設)。
+                choice_group:     asStr(row.getCell(15).value).trim(),
+                respin_base:      asNum(row.getCell(16).value, 0),
+                respin_reset_on:  asStr(row.getCell(17).value).trim().toUpperCase(),
+                respin_stop_cond: asStr(row.getCell(18).value).trim(),
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -6584,6 +6617,9 @@
             const hdrRow = ws9.getRow(1);
             for (let c = 1; c <= 10; c++) hdr.push(asStr(hdrRow.getCell(c).value).trim());
             const isNewSchema = hdr.includes('Actions') && hdr.includes('Enabled');
+            // v8.4 / R2 P5:隨機組欄位(by-name;舊檔缺欄 → 0 → 走預設)
+            const cRG9 = hdr.indexOf('Random_Group') + 1;
+            const cRW9 = hdr.indexOf('Random_Weight') + 1;
 
             const nr = [];
             ws9.eachRow((row, idx) => {
@@ -6613,6 +6649,8 @@
                   emits: emitsStr ? emitsStr.split(',').map(s => s.trim()).filter(Boolean) : [],
                   enabled: enabledStr !== 'FALSE' && enabledStr !== 'NO' && enabledStr !== '0',
                   description: asStr(row.getCell(8).value),
+                  random_group: cRG9 > 0 ? asStr(row.getCell(cRG9).value).trim() : '',          // v8.4 P5
+                  random_weight: cRW9 > 0 ? asNum(row.getCell(cRW9).value, 100) : 100,          // v8.4 P5
                 });
               } else {
                 // 舊 schema:轉換到新 schema 結構
@@ -6729,6 +6767,7 @@
             const colMH       = headers['Mega_H']           || null;
             const colIsWild   = headers['Is_Wild']          || null;
             const colIsScat   = headers['Is_Scatter']       || null;
+            const colModeScope = headers['Mode_Scope']      || null;   // v8.3 / R1 D-12(缺欄→null,舊檔安全)
 
             let updated = 0;
             let skipped = 0;
@@ -6755,12 +6794,66 @@
               if (colMH)    matched.mega_h     = asNum(row.getCell(colMH).value, 1);
               if (colIsWild) matched.is_wild   = asBool(row.getCell(colIsWild).value);
               if (colIsScat) matched.is_scatter= asBool(row.getCell(colIsScat).value);
+              if (colModeScope) matched.mode_scope = asStr(row.getCell(colModeScope).value).trim();   // v8.3 D-12
               updated++;
             });
             // 把更新後的 symbols 套回 registry(觸發 changed)
             try { registry.applyAll(allSyms, registry.swatchMap()); } catch (e) {}
             if (updated > 0 || skipped > 0) {
               warnings.push(`03_Symbols:更新 ${updated} 個符號,跳過 ${skipped} 個(無對應的 Symbol_ID/Display_Name)`);
+            }
+          }
+
+          // ── 03c_Paytable ── v8.3 / R1 A-1:匯入對稱(修 pre-existing round-trip 缺口:
+          //   匯出寫 pay_rows 到 03c,但匯入原本只讀 03 的 Pay_3x–6x → 2/7/8+ 連與區間丟失)。
+          //   欄位:Symbol_ID | Count | Pay | Count_From | Count_To(v8.3 區間;缺欄→單點)。
+          //   比照 15b「以檔案為準」:sheet 存在 → 先清空 pay_rows 再依檔案填;
+          //   sheet 不存在(舊檔)→ 跳過,沿用 03 的 Pay_Nx(既有行為,pay_rows 由遷移函式回推)。
+          const ws3c = wb.getWorksheet('03c_Paytable');
+          if (ws3c && registry) {
+            const allSyms = registry.symbols();
+            const h3c = {};
+            ws3c.getRow(1).eachCell((cell, col) => { h3c[asStr(cell.value).trim()] = col; });
+            const cSid3c  = h3c['Symbol_ID']  || 1;
+            const cCnt3c  = h3c['Count']      || 2;
+            const cPay3c  = h3c['Pay']        || 3;
+            const cFrom3c = h3c['Count_From'] || null;
+            const cTo3c   = h3c['Count_To']   || null;
+            const paysBySid = new Map();
+            ws3c.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const sid = asStr(row.getCell(cSid3c).value).trim();
+              if (!sid) return;
+              const pay = asNum(row.getCell(cPay3c).value, 0);
+              const cnt = asNum(row.getCell(cCnt3c).value, 0);
+              let from = cFrom3c ? asNum(row.getCell(cFrom3c).value, 0) : 0;
+              if (!(from > 0)) from = cnt;
+              let to = cTo3c ? asNum(row.getCell(cTo3c).value, 0) : 0;
+              if (!(to > from)) to = 0;
+              if (!(from >= 2) || !(pay > 0)) return;
+              if (!paysBySid.has(sid)) paysBySid.set(sid, []);
+              paysBySid.get(sid).push({ count: Math.round(from), count_to: to ? Math.round(to) : 0, pay });
+            });
+            const matchSym3c = (sid) => allSyms.find(s =>
+              (s.symbol_id && s.symbol_id === sid) || (s.name && s.name === sid));
+            let pUpdated = 0, pSkipped = 0;
+            for (const s of allSyms) { s.pay_rows = []; }   // 以檔案為準(無列者由 Pay_Nx 回推,見上)
+            for (const [sid, rows] of paysBySid) {
+              const m = matchSym3c(sid);
+              if (!m) { pSkipped++; continue; }
+              rows.sort((a, b) => a.count - b.count);
+              m.pay_rows = rows;
+              // 回填 pay_3x–6x 相容欄(僅單點列;pay_rows 為主)
+              const by3c = {};
+              rows.forEach(r => { if (!r.count_to) by3c[r.count] = r.pay; });
+              m.pay_3x = Number(by3c[3]) || 0; m.pay_4x = Number(by3c[4]) || 0;
+              m.pay_5x = Number(by3c[5]) || 0; m.pay_6x = Number(by3c[6]) || 0;
+              pUpdated++;
+            }
+            try { registry.applyAll(allSyms, registry.swatchMap()); } catch (e) {}
+            if (pUpdated > 0 || pSkipped > 0) {
+              warnings.push(`03c_Paytable:更新 ${pUpdated} 個符號賠付表`
+                + (pSkipped ? `,跳過 ${pSkipped} 個(無對應符號)` : ''));
             }
           }
 
@@ -6795,7 +6888,13 @@
               if (!bySid.has(sid)) bySid.set(sid, { mults: [], prizes: [] });
               const bucket = bySid.get(sid);
               if (kind === 'MULT') {
-                bucket.mults.push({ mult: asNum(row.getCell(cVal).value, 0), weight: asNum(row.getCell(cWt).value, 0) });
+                // v8.3 / R1 D-13:MULT 比照 PRIZE 讀 per-mode 權重(舊檔恆空欄 → {})
+                const mwbm = {};
+                for (const [mode, col] of Object.entries(modeCols)) {
+                  const raw = row.getCell(col).value;
+                  if (raw != null && asStr(raw).trim() !== '') mwbm[mode] = asNum(raw, 0);
+                }
+                bucket.mults.push({ mult: asNum(row.getCell(cVal).value, 0), weight: asNum(row.getCell(cWt).value, 0), weight_by_mode: mwbm });
               } else if (kind === 'PRIZE') {
                 const wbm = {};
                 for (const [mode, col] of Object.entries(modeCols)) {
@@ -7704,6 +7803,48 @@
           return reg.filter(x => x.enabled !== false).map(x => (x.symbol_id && x.symbol_id.trim()) || x.name).filter(Boolean);
         } catch (e) { return []; }
       }
+      // ── #3 規則座標靜態 lint(純描述檢查;不執行、不接引擎)──
+      //   盤面 action 的 pos/positions 座標為 0-based [reel,row](catalog placeholder [0,1]);
+      //   layout 的 reel_id 為 1-based → pos reel 0 = reel_id 1。
+      //   洞格語義複刻 schemas.ReelLayout.active_local_rows(前端版,cells=null→全實心)。
+      function _reelActiveRows(reel) {
+        const n = Math.max(0, Number(reel.max_rows) || 0);
+        if (!Array.isArray(reel.cells) || reel.cells.length === 0) {
+          const all = []; for (let i = 0; i < n; i++) all.push(i); return all;
+        }
+        const seen = new Set(), out = [];
+        for (const s of reel.cells) {
+          const m = /^\s*(-?\d+)\s*,\s*(-?\d+)\s*$/.exec(String(s));
+          if (!m) continue;
+          const dx = +m[1], dy = +m[2];
+          if (dx !== 0) continue;               // 主輪 mask dx 恆 0
+          if (dy >= 0 && dy < n && !seen.has(dy)) { seen.add(dy); out.push(dy); }
+        }
+        out.sort((a, b) => a - b); return out;
+      }
+      // 回傳 null(合法) / '格式' / '越界' / '落洞';coord = [reel0, row0](0-based)
+      function _coordIssue(coord) {
+        if (!Array.isArray(coord) || coord.length < 2) return '格式';
+        const reel0 = Number(coord[0]), row0 = Number(coord[1]);
+        if (!Number.isInteger(reel0) || !Number.isInteger(row0)) return '格式';
+        const reel = layout.find(r => r.reel_id === reel0 + 1);   // 0-based → reel_id
+        if (!reel) return '越界';
+        const active = _reelActiveRows(reel);                     // 局部 row(0-based, 相對 y_offset)
+        // pos 的 row 為「盤面 row」;主輪起點 = y_offset,活格 = y_offset + active[i]
+        const yoff = Number(reel.y_offset) || 0;
+        const localRow = row0 - yoff;
+        if (localRow < 0 || localRow >= (Number(reel.max_rows) || 0)) return '越界';
+        return active.includes(localRow) ? null : '落洞';
+      }
+      // 解析 positions 自由字串 '[[reel,row],...]' → coord 陣列(失敗回 null)
+      function _parsePositions(raw) {
+        if (raw == null || raw === '') return null;
+        try {
+          const v = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (Array.isArray(v) && v.every(c => Array.isArray(c) && c.length >= 2)) return v;
+          return null;
+        } catch (e) { return null; }
+      }
       function _computeValidationIssues() {
         const out = [];
         // 跑時 push 函數(以避免重複 push 同種訊息可在外層去重)
@@ -7722,6 +7863,44 @@
         }
         // 03_Symbols 名稱集合(SymbolRegistry)
         const symbolNameSet = new Set(symbolNames.value);
+
+        // ─── v8.3 / R1 D-12:符號出現模式宣告引用不存在的模式 → warn ───
+        try {
+          const regSyms = (registry && registry.symbols) ? registry.symbols() : [];
+          for (const s of regSyms) {
+            if (s.enabled === false) continue;
+            const msc = String(s.mode_scope || '').trim();
+            if (!msc) continue;
+            msc.split(',').map(x => x.trim()).filter(Boolean).forEach(mn => {
+              if (!validModeSet.has(mn)) {
+                add('warn', 'symbols', `符號「${s.symbol_id || s.name}」的出現模式「${mn}」不存在於模式清單`);
+              }
+            });
+          }
+        } catch (e) { /* registry 未就緒時靜默略過 */ }
+
+        // ─── v8.5 / R3:玩家擇一組 + Hold&Win respin 描述檢查 ───
+        try {
+          const _cgCount = {};
+          for (const m of modes) {
+            const cg = String(m.choice_group || '').trim();
+            if (cg) _cgCount[cg] = (_cgCount[cg] || 0) + 1;
+            const rr = String(m.respin_reset_on || '').trim().toUpperCase();
+            if (rr && !['NEW_SYMBOL', 'ANY_WIN', 'NEVER'].includes(rr)) {
+              add('warn', 'rules', `模式「${m.mode}」的 Respin 重置條件「${rr}」非合法值(NEW_SYMBOL/ANY_WIN/NEVER 或留空)`);
+            }
+            if (Number(m.respin_base) > 0 && !(m.respin_stop_cond || '').trim()) {
+              add('warn', 'rules', `模式「${m.mode}」啟用 Hold&Win Respin 但未填停止條件(建議描述,如「盤面填滿」)`);
+            }
+          }
+          Object.entries(_cgCount).forEach(([cg, n]) => {
+            if (n < 2) add('warn', 'rules', `擇一組「${cg}」只有 1 個模式(玩家擇一需至少 2 個同組模式)`);
+          });
+          const _startM = modes.find(mm => (mm.mode || '').trim() === ((g && g.starting_mode) || '').trim());
+          if (_startM && String(_startM.choice_group || '').trim()) {
+            add('error', 'rules', `起始模式「${_startM.mode}」不可屬擇一組(開局模式不是被選出來的)`);
+          }
+        } catch (e) { /* 靜默 */ }
 
         // ─── 01_Global · 投注結構(v5.3)───
         for (const bf of betConfig.buy_features) {
@@ -8088,9 +8267,12 @@
               }
               // symbol 引用檢查
               if (p.type === 'symbol' && act.params && act.params[p.key]) {
-                if (!symbolNameSet.has(act.params[p.key])) {
+                const _sv = act.params[p.key];
+                // v8.4 / R2 P3:哨兵值(RANDOM/BEST)——僅在該參數宣告 sentinels 時放行
+                const _isSentinel = Array.isArray(p.sentinels) && p.sentinels.includes(_sv);
+                if (!_isSentinel && !symbolNameSet.has(_sv)) {
                   add('warn', 'rules',
-                    `${tag}:符號「${act.params[p.key]}」未在 03_Symbols 定義`);
+                    `${tag}:符號「${_sv}」未在 03_Symbols 定義`);
                 }
               }
               // mode 引用檢查
@@ -8098,6 +8280,32 @@
                 if (!validModeSet.has(act.params[p.key])) {
                   add('warn', 'rules',
                     `${tag}:模式「${act.params[p.key]}」不存在於 11_Mode_Config`);
+                }
+              }
+              // #3 pos 座標檢查(MOVE from/to、SWAP a/b)—— 純描述 lint,不執行
+              if (p.type === 'pos' && act.params && act.params[p.key] != null && act.params[p.key] !== '') {
+                if (layout.length === 0) {
+                  add('warn', 'rules', `${tag}:座標「${p.label || p.key}」無法檢查(尚未定義盤面)`);
+                } else {
+                  const issue = _coordIssue(act.params[p.key]);
+                  if (issue === '格式') add('error', 'rules', `${tag}:座標「${p.label || p.key}」格式非法(需 [reel,row],0-based)`);
+                  else if (issue === '越界') add('error', 'rules', `${tag}:座標「${p.label || p.key}」${JSON.stringify(act.params[p.key])} 超出盤面範圍`);
+                  else if (issue === '落洞') add('error', 'rules', `${tag}:座標「${p.label || p.key}」${JSON.stringify(act.params[p.key])} 落在洞格(結構性永遠空,搬移/填補會被略過)`);
+                }
+              }
+            }
+            // #3 positions 自由字串座標檢查(BOARD_FILL/DESTROY/STICKY 選填)
+            const posRaw = (act.params || {}).positions;
+            if (posRaw != null && posRaw !== '' && layout.length > 0) {
+              const coords = _parsePositions(posRaw);
+              if (coords === null) {
+                add('warn', 'rules', `${tag}:位置清單格式無法解析(需 [[reel,row],...],0-based)`);
+              } else {
+                for (const c of coords) {
+                  const issue = _coordIssue(c);
+                  if (issue === '越界') add('error', 'rules', `${tag}:位置 ${JSON.stringify(c)} 超出盤面範圍`);
+                  else if (issue === '落洞') add('error', 'rules', `${tag}:位置 ${JSON.stringify(c)} 落在洞格(填補/銷毀會被略過)`);
+                  else if (issue === '格式') add('warn', 'rules', `${tag}:位置 ${JSON.stringify(c)} 座標格式非法`);
                 }
               }
             }

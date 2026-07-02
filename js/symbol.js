@@ -245,6 +245,12 @@
                 <button class="cfg-stepper-btn" @click="bumpPayCount(i, 1)" title="增加連線數">+</button>
               </div>
               <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">連線</span>
+              <!-- v8.3 / R1 A-1:count 區間同賠(選填終點;留空＝單點)。8-9/10-11 scatter-pays / 大盤 cluster 用 -->
+              <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">–</span>
+              <input class="input input-sm cfg-mono sym-pay-to" type="number" min="0"
+                     v-model.number="row.count_to" @input="onFieldEdit" placeholder="迄"
+                     title="區間終點（選填）：填入後為「起–迄連同賠」；留空＝單點"
+                     style="width:56px;">
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
                      v-model.number="row.pay" @input="onFieldEdit" placeholder="賠付倍數"
                      style="flex:1; min-width:60px;">
@@ -328,6 +334,17 @@
                        @input="onFieldEdit">
                 <span class="sym-unit">顆</span>
               </div>
+              <!-- v8.3 / R1 D-12:出現模式宣告(取代「per-mode 權重 0 繞路」;未勾＝所有模式) -->
+              <div class="field-label-sm" style="margin-top:10px;">出現模式 <span class="field-label-hint">未勾＝所有模式</span></div>
+              <div v-if="modeNames.length" class="reel-limits">
+                <label v-for="mn in modeNames" :key="'msc'+mn" class="chk">
+                  <input type="checkbox" :checked="modeScopeHas(mn)"
+                         @change="toggleModeScope(mn, $event.target.checked)">
+                  <span class="box"></span>
+                  <span>{{ mn }}</span>
+                </label>
+              </div>
+              <div v-else class="field-label-hint">（尚未定義模式）</div>
             </div>
           </div>
 
@@ -396,14 +413,24 @@
             <div class="sym-mult-sublabel">
               倍數 <span>（×N;多筆＝加權隨機，留空＝無）</span>
             </div>
-            <div v-for="(mv, i) in form.mult_values" :key="'mv'+i" class="sym-mult-row">
-              <span class="sym-mult-x">×</span>
-              <input class="input input-sm cfg-mono sym-mult-num" type="number" step="any" min="0"
-                     v-model.number="mv.mult" @input="onFieldEdit" placeholder="倍數">
-              <span class="sym-mult-wlabel">權重</span>
-              <input class="input input-sm cfg-mono sym-mult-weight" type="number" step="any" min="0"
-                     v-model.number="mv.weight" @input="onFieldEdit" placeholder="權重">
-              <button class="btn-pill del sym-mult-del" @click="removeMultValue(i)" title="刪除此倍數">🗑</button>
+            <div v-for="(mv, i) in form.mult_values" :key="'mv'+i" class="sym-mult-entry">
+              <div class="sym-mult-row">
+                <span class="sym-mult-x">×</span>
+                <input class="input input-sm cfg-mono sym-mult-num" type="number" step="any" min="0"
+                       v-model.number="mv.mult" @input="onFieldEdit" placeholder="倍數">
+                <span class="sym-mult-wlabel">權重</span>
+                <input class="input input-sm cfg-mono sym-mult-weight" type="number" step="any" min="0"
+                       v-model.number="mv.weight" @input="onFieldEdit" placeholder="權重">
+                <button class="btn-pill del sym-mult-del" @click="removeMultValue(i)" title="刪除此倍數">🗑</button>
+              </div>
+              <!-- v8.3 / R1 D-13:MULT 各模式權重(比照 PRIZE;「NG 無乘數、FG 才有」填 0/100) -->
+              <div v-if="modeNames.length" class="sym-prize-modes">
+                <label v-for="mn in modeNames" :key="'mw'+mn" class="sym-prize-mode">
+                  <span>W_{{ mn }}</span>
+                  <input class="input input-sm cfg-mono" type="number" step="any" min="0"
+                         v-model.number="mv.weight_by_mode[mn]" @input="onFieldEdit">
+                </label>
+              </div>
             </div>
             <button class="btn-pill add" @click="addMultValue">＋ 新增倍數</button>
           </div>
@@ -602,6 +629,7 @@
         mega_w: 1,
         mega_h: 1,
         can_expand: false,   // v6.2 #10:可擴張標籤
+        mode_scope: '',      // v8.3 / R1 D-12:出現模式(逗號分隔;'' = 所有模式)
         is_wild: false,
         is_scatter: false,
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
@@ -669,6 +697,7 @@
         form.name = s.name;
         form.weight = s.weight;
         form.use_max = s.use_max;
+        form.mode_scope = (s.mode_scope != null ? String(s.mode_scope) : '');   // v8.3 D-12
         form.max_count = s.max_count;
         form.reel_limit = [...s.reel_limit];
         form.subreel_limit = (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {};
@@ -683,7 +712,8 @@
         form.pay_rows   = _readPayRows(s);
         // v6.3 / Q3:倍數 / 彩金倍數(深拷貝;prize 補齊各模式權重 key)
         form.mult_values  = (Array.isArray(s.mult_values) ? s.mult_values : [])
-          .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0 }));
+          .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0,
+                       weight_by_mode: _fillModeWeights(v.weight_by_mode) }));   // v8.3 D-13
         form.prize_values = (Array.isArray(s.prize_values) ? s.prize_values : [])
           .map(v => ({
             value: Number(v.value) || 0,
@@ -772,9 +802,17 @@
         if (numErr.value || nameErr.value) return;
 
         const cur = symbols.value[idx];
-        // v6.1:整理 pay_rows(限 2–20 連、去除無效列、依連線數排序)並回填 pay_3x–6x 相容欄
+        // v6.1:整理 pay_rows(去除無效列、依連線數排序)並回填 pay_3x–6x 相容欄
+        // v8.3 / R1 A-1:上限改動態(群集/任意=盤面總格數,不再硬鎖 20;不低於 20 保底)、
+        //   count_to 正規化(<=count → 0＝單點;夾在上限內)
+        const hiCap = Math.max(20, Number(spec.maxLineLength) || 20);
         const cleanRows = (form.pay_rows || [])
-          .map(r => ({ count: Math.max(2, Math.min(20, Math.round(Number(r.count) || 0))), pay: Number(r.pay) || 0 }))
+          .map(r => {
+            const count = Math.max(2, Math.min(hiCap, Math.round(Number(r.count) || 0)));
+            let cto = Math.round(Number(r.count_to) || 0);
+            cto = (cto > count) ? Math.min(hiCap, cto) : 0;
+            return { count, count_to: cto, pay: Number(r.pay) || 0 };
+          })
           .filter(r => r.count >= 2)
           .sort((a, b) => a.count - b.count);
         const payByCount = {};
@@ -785,6 +823,7 @@
           weight: Number(form.weight) || 0,
           use_max: !!form.use_max,
           max_count: form.use_max ? Math.max(1, Number(form.max_count) || 1) : Number(form.max_count) || 0,
+          mode_scope: (form.mode_scope || '').trim(),   // v8.3 D-12
           reel_limit: [...form.reel_limit],
           subreel_limit: { ...form.subreel_limit },
           // 擴充欄位
@@ -833,7 +872,7 @@
           }
           if (rows.length === 0) rows = [{ count: 3, pay: 0 }, { count: 4, pay: 0 }, { count: 5, pay: 0 }];
         }
-        return rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 }));
+        return rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 }));   // v8.3 A-1
       }
       // ── #5:賠付連線數上限(連線型=盤面輪數;群集/任意=20) ──
       const maxPayCount = computed(() => Math.max(2, Number(spec.maxLineLength) || 20));
@@ -846,7 +885,7 @@
         let c = 2;
         while (c <= hi && used.has(c)) c++;
         if (c > hi) { emitStatus('err', `連線數已達上限(最多 ${hi} 連)`); return; }
-        rows.push({ count: c, pay: 0 });
+        rows.push({ count: c, count_to: 0, pay: 0 });   // v8.3 A-1:count_to 0＝單點
         onFieldEdit();
       }
       function removePayRow(i) {
@@ -879,6 +918,28 @@
           [...new Set(counts.filter(c => c > spec.reelCount))]
             .forEach(c => issues.push(`⚠️ ${c} 連線超過盤面 ${spec.reelCount} 輪`));
         }
+        // 4. v8.3 A-1:區間列檢查(count_to 終點、區間彼此重疊)
+        const bandLbl = (b) => (b.to > b.from ? `${b.from}–${b.to}` : `${b.from}`);
+        const bands = rows.map(r => {
+          const from = Number(r.count) || 0;
+          const to = (Number(r.count_to) > from) ? Number(r.count_to) : from;
+          return { from, to };
+        });
+        rows.forEach(r => {
+          const cto = Number(r.count_to) || 0;
+          if (cto > 0 && cto <= Number(r.count)) issues.push(`⚠️ ${r.count} 連的區間終點 ${cto} 須大於起點（留空＝單點）`);
+          if (cto > maxPayCount.value) issues.push(`⚠️ ${r.count}–${cto} 連的終點超過上限 ${maxPayCount.value}`);
+        });
+        const overlapped = new Set();
+        for (let a = 0; a < bands.length; a++) {
+          for (let b = a + 1; b < bands.length; b++) {
+            if (bands[a].from === bands[b].from && bands[a].to === bands[b].to) continue;  // 完全相同 → 由重複檢查涵蓋
+            if (bands[a].from <= bands[b].to && bands[b].from <= bands[a].to) {
+              overlapped.add(`⚠️ 連線數區間重疊：${bandLbl(bands[a])} 與 ${bandLbl(bands[b])}`);
+            }
+          }
+        }
+        overlapped.forEach(msg => issues.push(msg));
         // 3. 賠率遞減(連線數較多反而賠付較低)
         const sorted = rows.slice().sort((a, b) => a.count - b.count);
         for (let i = 1; i < sorted.length; i++) {
@@ -924,7 +985,9 @@
       function addMultValue() {
         const mk = (SP.ConfigEditor && SP.ConfigEditor.Helpers && SP.ConfigEditor.Helpers.makeMultValueEntry)
           ? SP.ConfigEditor.Helpers.makeMultValueEntry : (a, b) => ({ mult: a || 2, weight: b || 100 });
-        form.mult_values.push(mk(2, 100));
+        const entry = mk(2, 100);
+        entry.weight_by_mode = _fillModeWeights(null);   // v8.3 D-13
+        form.mult_values.push(entry);
         onFieldEdit();
       }
       function removeMultValue(i) {
@@ -952,7 +1015,14 @@
           if (mult <= 0) return;            // 倍數須 > 0
           if (seen.has(mult)) return;       // 去重(同倍數)
           seen.add(mult);
-          out.push({ mult, weight: Math.max(0, Number(v.weight) || 0) });
+          const wbm = {};   // v8.3 D-13:保留各模式權重(僅收非負數字)
+          if (v.weight_by_mode && typeof v.weight_by_mode === 'object') {
+            Object.entries(v.weight_by_mode).forEach(([k, w]) => {
+              const n = Number(w);
+              if (!isNaN(n)) wbm[k] = Math.max(0, n);
+            });
+          }
+          out.push({ mult, weight: Math.max(0, Number(v.weight) || 0), weight_by_mode: wbm });
         });
         return out;
       }
@@ -979,6 +1049,17 @@
         form.subreel_limit[key] = !!checked;
         onFieldEdit();
       }
+      // ── v8.3 / R1 D-12:出現模式(逗號分隔字串 ↔ checkbox;'' = 所有模式)──
+      function _modeScopeSet() {
+        return new Set(String(form.mode_scope || '').split(',').map(s => s.trim()).filter(Boolean));
+      }
+      function modeScopeHas(mn) { return _modeScopeSet().has(mn); }
+      function toggleModeScope(mn, checked) {
+        const set = _modeScopeSet();
+        if (checked) set.add(mn); else set.delete(mn);
+        form.mode_scope = [...set].join(',');
+        onFieldEdit();
+      }
 
       // #9:Type 為單一來源,wild/scatter 由 Type 推導
       function setType(t) {
@@ -996,10 +1077,12 @@
       // ── v7.9.3:卡片收合摘要 ──
       // 賠付表:目前有設定賠付(>0)的連線數,如 "3/4/5";皆未設定則回 ''
       const paySummary = computed(() => {
+        // v8.3 A-1:區間列顯示「起–迄」
         const rows = (form.pay_rows || [])
           .filter(r => Number(r.count) >= 2 && Number(r.pay) > 0)
-          .map(r => Number(r.count))
-          .sort((a, b) => a - b);
+          .map(r => ({ from: Number(r.count), to: Number(r.count_to) || 0 }))
+          .sort((a, b) => a.from - b.from)
+          .map(r => (r.to > r.from ? `${r.from}–${r.to}` : `${r.from}`));
         return rows.length ? rows.join('/') : '';
       });
       // 出現限制摘要:輪數/上限簡述
@@ -1009,6 +1092,8 @@
         const total = (form.reel_limit || []).length;
         if (total && reels < total) parts.push(`輪 ${reels}/${total}`);
         if (form.use_max && Number(form.max_count) > 0) parts.push(`上限 ${form.max_count}`);
+        const msc = String(form.mode_scope || '').trim();   // v8.3 D-12
+        if (msc) parts.push(`限 ${msc}`);
         return parts.join(' · ');
       });
       // 圖示尺寸摘要
@@ -1041,7 +1126,8 @@
         const reelRestricted = rl.length > 0 && rl.some(x => !x);
         const subRestricted = Object.values(form.subreel_limit || {}).some(Boolean);
         const maxOn = !!form.use_max && Number(form.max_count) > 0;
-        return reelRestricted || subRestricted || maxOn;
+        const modeScoped = String(form.mode_scope || '').trim() !== '';   // v8.3 D-12
+        return reelRestricted || subRestricted || maxOn || modeScoped;
       });
       // 倍數/彩金:任一陣列有有效 entry → 「有設定」
       const hasMult = computed(() => {
@@ -1610,6 +1696,7 @@
         initialOf, pctOf,
         onFieldEdit, setType, bumpMega, resetMega,
         addPayRow, removePayRow, bumpPayCount, toggleSubLimit,
+        modeScopeHas, toggleModeScope,   // v8.3 D-12
         modeNames, jackpotOptions, refreshMultRefs,
         addMultValue, removeMultValue, addPrizeValue, removePrizeValue,
         exportJson, triggerImport, importJson,

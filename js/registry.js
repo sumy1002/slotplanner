@@ -37,8 +37,13 @@
   //   mult_values  「倍數」×N(× 在數字前):空=無、1筆=固定、多筆=加權隨機
   //   prize_values 「彩金倍數」N×(× 在數字後)/ 金幣面額:含 per-mode 權重與 link_jackpot
   function _normMultValues(arr) {
+    // v8.3 / R1 D-13:MULT 比照 PRIZE 保留 per-mode 權重(weight_by_mode;舊資料缺 → {})
     return Array.isArray(arr)
-      ? arr.map(v => ({ mult: Number(v && v.mult) || 0, weight: Number(v && v.weight) || 0 }))
+      ? arr.map(v => ({
+          mult: Number(v && v.mult) || 0, weight: Number(v && v.weight) || 0,
+          weight_by_mode: (v && v.weight_by_mode && typeof v.weight_by_mode === 'object')
+            ? { ...v.weight_by_mode } : {},
+        }))
       : [];
   }
   function _normPrizeValues(arr) {
@@ -84,6 +89,7 @@
       is_wild: false,
       is_scatter: false,
       image: null,        // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
+      mode_scope: '',     // v8.3 / R1 D-12:出現模式宣告(逗號分隔模式名;'' = 所有模式)
     };
   }
 
@@ -105,7 +111,7 @@
       pay_4x:     s.pay_4x     != null ? s.pay_4x     : 0,
       pay_5x:     s.pay_5x     != null ? s.pay_5x     : 0,
       pay_6x:     s.pay_6x     != null ? s.pay_6x     : 0,
-      pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
+      pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
       mega_w:     s.mega_w     != null ? s.mega_w     : 1,
       mega_h:     s.mega_h     != null ? s.mega_h     : 1,
       can_expand: s.can_expand != null ? !!s.can_expand : false,
@@ -114,6 +120,7 @@
       is_wild:    s.is_wild    != null ? s.is_wild    : false,
       is_scatter: s.is_scatter != null ? s.is_scatter : false,
       image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
+      mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
     };
   }
 
@@ -303,7 +310,7 @@
           pay_4x:     s.pay_4x     || 0,
           pay_5x:     s.pay_5x     || 0,
           pay_6x:     s.pay_6x     || 0,
-          pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
+          pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
           mega_w:     s.mega_w     || 1,
           mega_h:     s.mega_h     || 1,
           can_expand: !!s.can_expand,
@@ -312,6 +319,7 @@
           is_wild:    !!s.is_wild,
           is_scatter: !!s.is_scatter,
           image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
+      mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
           swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
@@ -340,7 +348,7 @@
           pay_4x:     d.pay_4x     || 0,
           pay_5x:     d.pay_5x     || 0,
           pay_6x:     d.pay_6x     || 0,
-          pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
+          pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
           mega_w:     d.mega_w     || 1,
           mega_h:     d.mega_h     || 1,
           can_expand: !!d.can_expand,
@@ -349,6 +357,7 @@
           is_wild:    !!d.is_wild,
           is_scatter: !!d.is_scatter,
           image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
+          mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
@@ -401,7 +410,7 @@
             pay_4x:     d.pay_4x     || 0,
             pay_5x:     d.pay_5x     || 0,
             pay_6x:     d.pay_6x     || 0,
-            pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0 })) : [],
+            pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
             mega_w:     d.mega_w     || 1,
             mega_h:     d.mega_h     || 1,
             can_expand: !!d.can_expand,
@@ -410,6 +419,7 @@
             is_wild:    !!d.is_wild,
             is_scatter: !!d.is_scatter,
             image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
+          mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

@@ -368,11 +368,16 @@ def _parse_reel_cells(raw: Any, max_rows: int) -> Optional[list[str]]:
 
 def _parse_paytable_03c(df, symbols: dict) -> None:
     """v5.3: 03c_Paytable — Symbol_ID / Count / Pay。
+    v8.3 / R1 A-1: 尾端 additive 欄 Count_From / Count_To(count 區間同賠;
+    scatter-pays 8-9/10-11/12-30、大盤 cluster)。缺欄/同值 → 單點(向後相容)。
+    區間列同步展開進 pay_table(from..to 每個 count 同賠)→ 引擎照舊消費
+    pay_table、逐位元組不動;原始區間另存 SymbolDef.pay_ranges 供文件輸出。
     有值時覆蓋 symbols 的 pay_table（優先於 03_Symbols Pay_Nx 欄）。
     sheet 不存在或空 → 靜默跳過（向後相容）。
     """
     if df is None or df.empty:
         return
+    _RANGE_SPAN_CAP = 512   # 防呆:單列區間最多展開 512 個 count(64 格盤綽綽有餘)
     for idx, r in df.iterrows():
         sid = r.get("Symbol_ID")
         if pd.isna(sid):
@@ -385,7 +390,31 @@ def _parse_paytable_03c(df, symbols: dict) -> None:
             pay = float(r.get("Pay", 0.0))
         except (ValueError, TypeError):
             continue
-        if count > 0:
+        # v8.3:by-name 讀區間欄(缺欄 → NaN → 單點)
+        c_from, c_to = count, count
+        try:
+            v_from = r.get("Count_From")
+            v_to = r.get("Count_To")
+            if pd.notna(v_from):
+                c_from = int(v_from)
+            if pd.notna(v_to):
+                c_to = int(v_to)
+        except (ValueError, TypeError):
+            c_from, c_to = count, count
+        if c_from <= 0:
+            c_from = count
+        if c_to < c_from:
+            c_to = c_from
+        if c_to - c_from > _RANGE_SPAN_CAP:
+            c_to = c_from + _RANGE_SPAN_CAP
+        if c_from > 0:
+            for c in range(c_from, c_to + 1):
+                symbols[sid].pay_table[c] = pay
+            if c_to > c_from:
+                if symbols[sid].pay_ranges is None:
+                    symbols[sid].pay_ranges = []
+                symbols[sid].pay_ranges.append((c_from, c_to, pay))
+        elif count > 0:
             symbols[sid].pay_table[count] = pay
 
 
@@ -649,6 +678,31 @@ def _migrate_bonus_games_to_modes(df, modes: dict) -> None:
 
 
 
+# ── 03b_Symbol_Sets:符號集(v4.7;Set_Name/Symbol_ID 長格式攤平 → {set: [sym,...]})
+#    v8.1 bugfix:load_a_config() 一直呼叫本函式,但定義在某次重構中遺失
+#    (NameError → 任何 A.xlsx 都無法載入)。依 aconfig-xlsx.js 匯出契約補回:
+#    欄名 .get 讀取(守則 #81)、缺分頁/空分頁 → {}(安全降級)、保留插入順序。
+def _parse_symbol_sets(df: pd.DataFrame | None) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    if df is None or df.empty:
+        return out
+    for _, row in df.iterrows():
+        set_name = row.get("Set_Name")
+        symbol_id = row.get("Symbol_ID")
+        if set_name is None or symbol_id is None:
+            continue
+        if pd.isna(set_name) or pd.isna(symbol_id):
+            continue
+        sname = str(set_name).strip()
+        sid = str(symbol_id).strip()
+        if not sname or not sid:
+            continue
+        out.setdefault(sname, [])
+        if sid not in out[sname]:
+            out[sname].append(sid)
+    return out
+
+
 def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
     sheet = "03_Symbols"
     out = {}
@@ -676,6 +730,8 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 is_wild=_to_bool(r.get("Is_Wild")),
                 is_scatter=_to_bool(r.get("Is_Scatter")),
                 notes=_to_str(r.get("Notes")),
+                # v8.3 / R1 D-12:出現模式宣告(缺欄/空 → "" = 所有模式;安全降級)
+                mode_scope=_to_str(r.get("Mode_Scope")).strip(),
             )
             out[sid] = sym
         except (ValueError, KeyError) as e:
@@ -1039,6 +1095,9 @@ def _parse_puzzle_rules(df: pd.DataFrame) -> list[PuzzleRule]:
                 emits=emits,
                 enabled=enabled,
                 description=_to_str(r.get("Description")),
+                # v8.4 / R2 P5:隨機擇一組(缺欄/空 → 預設;安全降級)
+                random_group=_to_str(r.get("Random_Group")).strip(),
+                random_weight=float(r.get("Random_Weight")) if pd.notna(r.get("Random_Weight")) else 100.0,
             ))
             seen_priorities[(trigger, priority)].append(rule_id)
         except ConfigValidationError:
@@ -1082,6 +1141,7 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
 
 # v7.14:合法玩法種類(SPIN=旋轉;其餘=bonus 小遊戲)
 _VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION")
+_VALID_RESPIN_RESET = ("NEW_SYMBOL", "ANY_WIN", "NEVER")   # v8.5:Respin_Reset_On 合法值(另可留空)
 
 
 def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
@@ -1129,6 +1189,17 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
             wheel_upgrade_to = _to_str(r.get("Wheel_Upgrade_To")).strip()
             pick_count = int(r.get("Pick_Count", 0) or 0)
             collect_target = int(r.get("Collect_Target", 0) or 0)
+            # v8.5 / R3 additive:玩家擇一組 + Hold&Win respin 描述欄(by-name,缺欄 → 預設)
+            choice_group = _to_str(r.get("Choice_Group")).strip()
+            respin_base = int(r.get("Respin_Base", 0) or 0)
+            rr_raw = _to_str(r.get("Respin_Reset_On")).strip().upper()
+            if rr_raw and rr_raw not in _VALID_RESPIN_RESET:
+                raise ConfigValidationError(
+                    sheet,
+                    f"Respin_Reset_On '{rr_raw}' 非合法值({'/'.join(_VALID_RESPIN_RESET)} 或留空)",
+                    row=idx + 2)
+            respin_reset_on = rr_raw
+            respin_stop_cond = _to_str(r.get("Respin_Stop_Cond")).strip()
             out[mode] = ModeConfig(
                 mode=mode,
                 trigger_condition=cond,
@@ -1144,6 +1215,10 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 wheel_upgrade_to=wheel_upgrade_to,
                 pick_count=pick_count,
                 collect_target=collect_target,
+                choice_group=choice_group,
+                respin_base=respin_base,
+                respin_reset_on=respin_reset_on,
+                respin_stop_cond=respin_stop_cond,
             )
         except ConfigValidationError:
             raise
@@ -1266,6 +1341,14 @@ def _cross_validate(cfg: AConfig):
             "01_Global",
             f"starting_mode '{cfg.global_cfg.starting_mode}' 的 Mode_Kind 為 "
             f"'{_start.mode_kind}';開局模式必須是 SPIN",
+        )
+
+    # v8.5 / R3:starting_mode 不可屬玩家擇一組(開局模式不是被選出來的)
+    if _start is not None and getattr(_start, "choice_group", "").strip():
+        raise ConfigValidationError(
+            "01_Global",
+            f"starting_mode '{cfg.global_cfg.starting_mode}' 屬擇一組 "
+            f"'{_start.choice_group}';開局模式不可設 Choice_Group",
         )
 
     # v7.14:WHEEL 升級鏈交叉驗證 — wheel_upgrade_to 指向的 mode 須存在且為 WHEEL

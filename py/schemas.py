@@ -70,6 +70,16 @@ class ActionType(Enum):
     SWITCH_MODE        = "SWITCH_MODE"
     EMIT_EVENT         = "EMIT_EVENT"
     HALT_RESOLUTION    = "HALT_RESOLUTION"
+    # ── v8.4 / R2 P2:描述型符號行為 action(純描述,本工具不執行) ──
+    #   a_loader 經 condition_parser.parse_actions 照收;logic_parser 無 handler
+    #   (執行語意由下游數值模擬工具實作,本工具僅作 A.xlsx 帶資料 + docgen 描述)。
+    EXPAND_REEL        = "EXPAND_REEL"        # 單格擴滿整輪(+鎖輪/重轉;Starburst)
+    NUDGE              = "NUDGE"              # 逐格推移(+每步乘數;xNudge)
+    WALK               = "WALK"               # 走位且持續存在(Jammin' Jars / Toro)
+    REVEAL_AS          = "REVEAL_AS"          # 佔位符號統一揭示(Mystery Stack / xWays)
+    SPLIT              = "SPLIT"              # 符號一分為 N(razor split / xSplit)
+    DESTROY_ADJACENT   = "DESTROY_ADJACENT"   # 相鄰範圍消除(+開列;xBomb)
+    GROW_BOARD         = "GROW_BOARD"         # 事件驅動加列/加輪/開格(Nitro / Infinity Reels)
 
 
 class ConditionOp(Enum):
@@ -315,6 +325,13 @@ class SymbolDef:
     notes: str = ""
     # v6.4 / 缺漏#1:此符號攜帶的倍數疊加方式;None = 繼承 Multipliers.stack_mode。
     mult_stack_mode: Optional[MultStackMode] = None
+    # v8.3 / R1 D-12:符號出現模式宣告(逗號分隔模式名;"" = 所有模式)。
+    #   取代「per-mode 權重 0 繞路」的宣告式欄位;純描述,引擎不消費。
+    mode_scope: str = ""
+    # v8.3 / R1 A-1:賠付 count 區間同賠(scatter-pays 8-9/10-11/12-30、大盤 cluster)。
+    #   loader 已同步把區間展開進 pay_table(from..to 每個 count 同賠),引擎照舊消費
+    #   pay_table 即得正確結果;此欄保留原始區間描述供文件/下游輸出。None = 無區間列。
+    pay_ranges: Optional[list] = None   # [(count_from, count_to, pay), ...]
 
     @property
     def is_mega(self) -> bool:
@@ -517,6 +534,10 @@ class PuzzleRule:
     emits: list[str] = field(default_factory=list)
     enabled: bool = True
     description: str = ""
+    # v8.4 / R2 P5:隨機擇一——同 random_group 的規則同時觸發時依 random_weight 抽一條執行
+    #   (描述層;抽選由下游實作。Girl Power 三選一施放式)。"" = 不屬任何隨機組。
+    random_group: str = ""
+    random_weight: float = 100.0
 
     # 統計埋點 (跑測時動態累加)
     trigger_count: int = 0
@@ -571,6 +592,15 @@ class ModeConfig:
     pick_count: int = 0              # PICK 抽選次數(0=抽到結束項為止)
     collect_target: int = 0          # COLLECTION 目標值
     items: list["BonusItem"] = field(default_factory=list)  # 獎項表(沿用 BonusItem)
+    # v8.5 / R3 additive:玩家擇一 + Hold&Win respin(規格描述;引擎不消費、不執行)。
+    #   choice_group:同組名的模式=玩家擇一進入(二選一/三選一 FS;Dog House / Moon Princess)。
+    #   respin_*:Hold&Win / Sticky Win 的 respin 狀態機描述(Money Train / Lucky Wagon / Aloha):
+    #     respin_base > 0 即啟用;reset_on 描述何事重置計數;stop_cond 為開放式停止條件自由文字
+    #     (「盤面填滿」「SEVEN 出現」等;Toro Re-Spins「直到某符號出現」亦收於此)。
+    choice_group: str = ""           # "" = 不屬任何擇一組
+    respin_base: int = 0             # 初始 respin 數(0 = 未啟用 Hold&Win 描述)
+    respin_reset_on: str = ""        # "" / NEW_SYMBOL(落新符號重置) / ANY_WIN / NEVER
+    respin_stop_cond: str = ""       # 開放式停止條件(自由文字)
 
 
 # ============================================================

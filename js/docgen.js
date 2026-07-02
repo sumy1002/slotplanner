@@ -103,6 +103,54 @@
     return label;
   }
 
+  // ── v8.2 / 缺失清單 F-19:特色規則(09/10)人話化 helper ─────────────
+  //   標籤對齊 helpers.js TRIGGER_CATALOG / ACTION_CATALOG(docgen 為獨立
+  //   IIFE、直讀 LS,故此處持有唯讀 label map;未知值一律回印原 raw,安全降級)。
+  const _RULE_TRIGGER_LABEL = {
+    ON_SPIN_START: 'Spin 開始', ON_GRID_GENERATED: '盤面生成', ON_WIN_RESOLVED: '中獎結算',
+    ON_SYMBOL_LANDED: '符號落盤', ON_COMBO_STEP: '連爆步進', ON_COMBO_END: '連爆結束',
+    ON_DEAD_SPIN: '無中獎', ON_MODE_ENTER: '進入模式', ON_MODE_EXIT: '離開模式',
+    ON_CUSTOM_EMIT: '自訂事件',
+  };
+  const _RULE_ACTION_LABEL = {
+    ADJUST_MULTIPLIER: '調整倍數', UPDATE_GLOBAL: '更新全域變數', UPDATE_LOCAL: '更新本局變數',
+    EMIT_EVENT: '發出事件', SWITCH_MODE: '切換模式', AWARD_FREE_SPIN: '給免費局',
+    HALT_RESOLUTION: '中止結算', BOARD_FILL: '盤面填充', BOARD_TRANSFORM: '符號轉換',
+    BOARD_DESTROY: '盤面消除', MOVE: '搬移', SWAP: '交換', STICKY: '黏著',
+    LOCK_REEL: '鎖輪', REEL_RESTRICT: '輪位限制', GLOBAL_MAX: '全盤上限', SCROLL: '捲動',
+    // v8.4 / R2 P2:描述型 action(執行語意由下游模擬工具實作)
+    EXPAND_REEL: '擴展整輪', NUDGE: '推移', WALK: '走位', REVEAL_AS: '揭示',
+    SPLIT: '分裂', DESTROY_ADJACENT: '相鄰消除', GROW_BOARD: '盤面成長',
+  };
+  // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
+  function _mdCell(v) {
+    return String(v == null ? '' : v).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+  }
+  // 單一 action → 「標籤(k=v, k=v)」;params 物件淺列印,未知型別安全
+  // v8.4 勘誤:前端規則的 action 型別欄位為 atype(helpers.makeAction);
+  //   v8.2 誤讀 a.type 導致實際資料一律印 '?' 回退。atype 優先、type 兼容。
+  function _ruleActionDesc(a) {
+    if (!a || typeof a !== 'object') return '';
+    const atype = a.atype || a.type || '';
+    const label = _RULE_ACTION_LABEL[atype] || atype || '?';
+    const p = (a.params && typeof a.params === 'object') ? a.params : {};
+    const kv = Object.entries(p)
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${Array.isArray(v) ? JSON.stringify(v) : v}`);
+    return kv.length ? `${label}（${kv.join(', ')}）` : label;
+  }
+  // v8.2 / F-20:輪帶符號分佈摘要 —「SYM×n」依出現數降冪,超過 10 種截斷
+  function _stripDistSummary(arr) {
+    const cnt = {};
+    for (const s of (Array.isArray(arr) ? arr : [])) {
+      const k = String(s).trim(); if (!k) continue;
+      cnt[k] = (cnt[k] || 0) + 1;
+    }
+    const ent = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
+    const head = ent.slice(0, 10).map(([k, n]) => `${k}×${n}`).join('、');
+    return ent.length > 10 ? `${head}、…（共 ${ent.length} 種）` : head;
+  }
+
   function collectConfig() {
     const g           = _readLS('slotplanner.aconfig.global.v1', {});
     const modes       = _readLS('slotplanner.aconfig.modes.v1', []);
@@ -117,6 +165,11 @@
     const multipliers = _readLS('slotplanner.aconfig.multipliers.v1', {});
     const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
     const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
+    // v8.2 / 缺失清單 F-19/F-20:機制文件補印 特色規則 / 棄牌 / 輪帶 / 格數分佈
+    //   (皆為既有 LS 的唯讀取出;純描述輸出,本工具不執行、不計算 RTP)
+    const discards    = _readLS('slotplanner.aconfig.discards.v1', []);
+    const reelStrips  = _readLS('slotplanner.aconfig.reelstrips.v1', {});
+    const gridWeights = _readLS('slotplanner.aconfig.gridweights.v1', {});
 
     const allSyms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     const syms = allSyms.filter(s => s.enabled !== false);
@@ -162,6 +215,10 @@
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
       coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
       genLimits: Array.isArray(genLimits) ? genLimits : [],   // v7.11
+      // v8.2:
+      discards: Array.isArray(discards) ? discards : [],
+      reelStrips: (reelStrips && typeof reelStrips === 'object') ? reelStrips : {},
+      gridWeights: (gridWeights && typeof gridWeights === 'object') ? gridWeights : {},
       derived: {
         gridStr,
         waysCount,
@@ -188,7 +245,8 @@
     if (Array.isArray(s.pay_rows) && s.pay_rows.length) {
       return s.pay_rows
         .filter(r => Number(r.pay) > 0)
-        .map(r => ({ count: Number(r.count), pay: Number(r.pay) }))
+        .map(r => ({ count: Number(r.count), pay: Number(r.pay),
+                     count_to: (Number(r.count_to) > Number(r.count)) ? Number(r.count_to) : 0 }))   // v8.3 A-1
         .sort((a, b) => b.count - a.count);
     }
     const rows = [];
@@ -233,6 +291,23 @@
     const v = String(md.cap_value || '').trim();
     return v ? ('有（' + v + '）') : '有（未填上限值）';
   }
+  // v8.5 / R3:玩家擇一 / Hold&Win respin 人話化(空 → —)
+  function _modeChoiceDesc(md) {
+    const g = (md && md.choice_group != null ? String(md.choice_group) : '').trim();
+    return g ? `組「${g}」` : '—';
+  }
+  function _modeRespinDesc(md) {
+    const base = Number(md && md.respin_base) || 0;
+    if (base <= 0) return '—';
+    const rrMap = { NEW_SYMBOL: '落新符號重置', ANY_WIN: '任何中獎重置', NEVER: '不重置' };
+    const parts = [`初始 ${base} 局`];
+    const rr = (md.respin_reset_on || '').trim().toUpperCase();
+    if (rr) parts.push(rrMap[rr] || rr);
+    const sc = (md.respin_stop_cond || '').trim();
+    if (sc) parts.push(`停止：${sc}`);
+    return parts.join(' · ');
+  }
+
   // v7.14:mode 玩法種類。SPIN=旋轉;WHEEL/PICK/COLLECTION=bonus 小遊戲。
   const _MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
   function _isModeBonus(md) { return !!(md && md.mode_kind && String(md.mode_kind).toUpperCase() !== 'SPIN'); }
@@ -351,6 +426,11 @@
     // 各模式一句話描述（連動開啟時預帶 modes.notes;關閉則留白由企劃手填）
     const modeDesc = {};
     cfg.modes.forEach(m => { if (m.mode) modeDesc[m.mode] = inherit ? (m.notes || '') : ''; });
+    // 每模式演出 / 文案描述欄(純文件敘述,不進 A.xlsx、不接引擎)
+    const modeMarquee = {};   // 跑馬燈文字
+    const modeEvent = {};     // 事件規劃(預報 / 聽牌演出)
+    const modeQuickstop = {}; // 快停 / 跳過機制
+    cfg.modes.forEach(m => { if (m.mode) { modeMarquee[m.mode] = ''; modeEvent[m.mode] = ''; modeQuickstop[m.mode] = ''; } });
     // 各特殊圖示行為（預設空白）
     const specialBehavior = {};
     cfg.specialSyms.forEach(s => { specialBehavior[_symId(s)] = ''; });
@@ -364,6 +444,7 @@
       flags: { wild: cfg.specialSyms.some(s => s.is_wild), payline: false, symbol_count: false, special: cfg.specialSyms.length > 0,
                has_jackpot: true },   // v6.4 / 缺漏#5:預設有彩池段(向後相容);關閉則跳過 JACKPOT 段
       inherit_config: true,   // v6.2 文件生成#0:是否自動帶入各分頁設定(連動);關閉則只用手填,基本資訊仍跟全域
+      numbers_are_placeholder: false,   // v8.3 / R1 F-21:數值為佔位旗標(公版化流程;文件自動標註「佔位」)
       payline_desc: '',
       payline_method: PAYLINE_METHODS[0],   // v6.2 文件生成#1:連線方式(下拉)
       refill_method: REFILL_METHODS[0],      // v6.2:補盤方式(下拉)
@@ -378,6 +459,9 @@
       // v6.4 / 缺漏#2:各模式進度倍數重置範圍。{ [mode]: 'CASCADE'|'SPIN'|'FEATURE' }。空=沿用舊布林敘述。
       mode_reset_scope: {},
       mode_desc: modeDesc,
+      mode_marquee: modeMarquee,
+      mode_event: modeEvent,
+      mode_quickstop: modeQuickstop,
       special_behavior: specialBehavior,
       jackpot: {
         // v5.1:連動開啟時優先帶入設定檔 JP(13_Jackpots);關閉或無 JP 則退回通用四級樣板。
@@ -436,6 +520,9 @@
     out.mode_reset_scope = Object.assign({}, base.mode_reset_scope, meta.mode_reset_scope || {});
     // 模式描述：保留既有、補新模式
     out.mode_desc = Object.assign({}, base.mode_desc, meta.mode_desc || {});
+    out.mode_marquee = Object.assign({}, base.mode_marquee, meta.mode_marquee || {});
+    out.mode_event = Object.assign({}, base.mode_event, meta.mode_event || {});
+    out.mode_quickstop = Object.assign({}, base.mode_quickstop, meta.mode_quickstop || {});
     // 特殊圖示行為：保留既有、補新圖示（移除已不存在的留著也無妨，匯出時只取現存）
     out.special_behavior = Object.assign({}, base.special_behavior, meta.special_behavior || {});
     return out;
@@ -687,9 +774,12 @@
 
     // ── Sheet 3：模式明細 ──
     const wsM = wb.addWorksheet('模式明細');
+    // v8.5 / R3:尾端 additive 加「玩家擇一 / Hold&Win Respin」兩欄(前 9 欄不動)
     wsM.columns = [{ width: 10 }, { width: 32 }, { width: 10 }, { width: 12 }, { width: 30 },
-                   { width: 22 }, { width: 16 }, { width: 18 }, { width: 14 }];
-    ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限', '玩法'].forEach((h, i) =>
+                   { width: 22 }, { width: 16 }, { width: 18 }, { width: 14 },
+                   { width: 14 }, { width: 30 }];
+    ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限', '玩法',
+     '玩家擇一', 'Hold&Win Respin'].forEach((h, i) =>
       _cell(wsM, 1, i + 1, h, { bold: true, bg: C.band, fg: C.bandFg, h: 'center' }));
     cfg.modes.forEach((md, idx) => {
       const r = idx + 2;
@@ -704,6 +794,8 @@
       _cell(wsM, r, 8, _modeCapDesc(md), { h: 'center' });
       // v7.14:玩法種類(SPIN / bonus 小遊戲)
       _cell(wsM, r, 9, _modeKindDesc(md), { h: 'center' });
+      _cell(wsM, r, 10, _modeChoiceDesc(md), { h: 'center' });   // v8.5 R3
+      _cell(wsM, r, 11, _modeRespinDesc(md));                       // v8.5 R3
     });
 
     // ── Sheet 4：機制備註 ──
@@ -952,6 +1044,533 @@
     return await wb.xlsx.writeBuffer();
   }
 
+
+  // ════════════════════════════════════════════════════════════════════
+  //  公司格式企劃書（Excel，多分頁）— buildCompanyXlsxBuffer
+  //  分頁/版式/色階/欄寬列高對齊公司企劃書慣例(自 8 份範例逐格抽取):
+  //   · 每頁標籤色階:一般遊戲 2F5597(accent1-25%) / FREE GAME 1F3864(accent1-50%)
+  //     / BONUS 1F4E79(accent5-50%) / 輪盤 2E75B6(accent5-25%)
+  //   · 賠率表:區段帶 333F50(dk2-25%)+表頭 D6DCE4(dk2+80%)
+  //   · 標籤=微軟正黑體14粗白置中;內容=12左靠;數量「N個」藍色粗體(圖示代替慣例)
+  //   · 一般遊戲/FG/BONUS 內容自第17列起(1-16留白=logo圖區);賠率表自第9列起
+  //  純描述,不執行不算 RTP。舊 buildPlanXlsxBuffer 不動。
+  // ════════════════════════════════════════════════════════════════════
+  async function buildCompanyXlsxBuffer(metaIn) {
+    if (typeof window.ExcelJS === 'undefined') throw new Error('ExcelJS 未載入');
+    const cfg  = collectConfig();
+    const meta = mergeMeta(metaIn || loadMeta(), cfg);
+    const wb = new window.ExcelJS.Workbook();
+    wb.creator = 'SlotPlanner Pro';
+    wb.created = new Date();
+
+    // ── 公司色票(Excel 標準色盤) ──
+    const NG_C = '2F5597';    // 一般遊戲標籤(accent1 深25%)
+    const FG_C = '1F3864';    // FREE GAME 標籤(accent1 深50%)
+    const BN_C = '1F4E79';    // BONUS 標籤(accent5 深50%)
+    const WH_C = '2E75B6';    // 輪盤標籤(accent5 深25%)
+    const TB_C = '333F50';    // 賠率表區段帶(dk2 深25%)
+    const TH_C = 'D6DCE4';    // 表頭列(dk2 淺80%)
+    const TH_FG = '44546A';   // 表頭字色(dk2)
+    const LB_C = 'BDD7EE';    // 淺藍表頭(accent5 淺60%)
+    const ACC  = '4472C4';    // 特殊圖示名(accent1)
+    const BLU  = '0000FF';    // 「N個」藍字(圖示代替慣例)
+    const WIDE = 13;          // 內容尾欄(M)
+    const START_R = 17;       // 敘述頁內容起始列(1-16 留白給 logo 圖)
+
+    // ── 版式小工具 ──
+    // 敘述頁欄寬(對齊公司:A=1.2 B=6.8 C=8.9 D=12.2 E=8.9 其餘預設)
+    function descCols(ws) {
+      const cols = [{ width: 1.2 }, { width: 6.8 }, { width: 8.9 }, { width: 12.2 }, { width: 8.9 }];
+      for (let c = 6; c <= WIDE; c++) cols.push({ width: 8.43 });
+      ws.columns = cols;
+    }
+    function label(ws, R, c0, c1, text, color, rows) {
+      rows = rows || 1;
+      if (rows > 1 || c1 > c0) ws.mergeCells(R, c0, R + rows - 1, c1);
+      _cell(ws, R, c0, text, { bold: true, bg: color, fg: 'FFFFFF', h: 'center', size: 14 });
+    }
+    function value(ws, R, c0, c1, v, o) {
+      o = o || {};
+      if (c1 > c0) ws.mergeCells(R, c0, R, c1);
+      _cell(ws, R, c0, v == null ? '' : v, { h: o.h || 'left', size: o.size || 12, bold: !!o.bold, fg: o.fg, bg: o.bg });
+    }
+    // 標籤(B:C 跨列) + 內容(D:M 每行一列)。回傳下一列。
+    function descRow(ws, R, lab, val, color, o) {
+      o = o || {};
+      const vals = Array.isArray(val) ? val : [val];
+      const rows = Math.max(1, vals.length);
+      label(ws, R, 2, 3, lab, color, rows);
+      for (let i = 0; i < rows; i++) {
+        value(ws, R + i, 4, WIDE, vals[i]);
+        ws.getRow(R + i).height = o.h || 28.5;
+      }
+      return R + rows;
+    }
+    // 同列雙標籤:主題選用(B:C|D:F) + 風格選用(G:H|I:M)
+    function pairRow(ws, R, lab1, val1, lab2, val2, color) {
+      label(ws, R, 2, 3, lab1, color);
+      value(ws, R, 4, 6, val1);
+      label(ws, R, 7, 8, lab2, color);
+      value(ws, R, 9, WIDE, val2);
+      ws.getRow(R).height = 28.5;
+      return R + 1;
+    }
+    // 同列三標籤:局數設定(B:C|D:F) 加局(G:H|I) 上限(J|K:M)
+    function tripleRow(ws, R, lab1, v1, lab2, v2, lab3, v3, color) {
+      label(ws, R, 2, 3, lab1, color);
+      value(ws, R, 4, 6, v1);
+      label(ws, R, 7, 8, lab2, color);
+      value(ws, R, 9, 9, v2, { h: 'center' });
+      label(ws, R, 10, 10, lab3, color);
+      value(ws, R, 11, WIDE, v3);
+      ws.getRow(R).height = 28.5;
+      return R + 1;
+    }
+    // 標籤 + 子標(D 藍粗) + 內容(E:M);用於特殊圖示說明/購買
+    function descRow3(ws, R, lab, subs, color) {
+      // subs: [{sub, val, subFg}] 多列;標籤跨列
+      const rows = Math.max(1, subs.length);
+      label(ws, R, 2, 3, lab, color, rows);
+      subs.forEach((s, i) => {
+        _cell(ws, R + i, 4, s.sub, { bold: true, fg: s.subFg || ACC, h: 'center', size: 12 });
+        value(ws, R + i, 5, WIDE, s.val);
+        ws.getRow(R + i).height = s.h || 28.5;
+      });
+      return R + rows;
+    }
+    // 每模式演出三欄(跑馬燈/事件規劃/快停跳過機制)。快停一律輸出。
+    function modeExtras(ws, R, modeName, color) {
+      const mq = (meta.mode_marquee && meta.mode_marquee[modeName]) || '';
+      const ev = (meta.mode_event && meta.mode_event[modeName]) || '';
+      const qs = (meta.mode_quickstop && meta.mode_quickstop[modeName]) || '';
+      if (mq) R = descRow(ws, R, '跑馬燈文字', mq.split('\n'), color);
+      if (ev) R = descRow(ws, R, '事件規劃', ev.split('\n'), color);
+      R = descRow(ws, R, '快停/跳過機制', qs, color);
+      return R;
+    }
+    // 產牌限制 mini 表(併入 NG / FG 頁)。limits 已依 scope 過濾。
+    function genLimitBlock(ws, R, limits, color) {
+      if (!limits.length) return R;
+      const symName = {};
+      cfg.symbols.forEach(s => { symName[_symId(s)] = s.name || _symId(s); });
+      label(ws, R, 2, 3, '產牌限制', color, limits.length + 1);
+      // 表頭
+      ['符號', '區域', '下限', '上限'].forEach((h, i) => _cell(ws, R, 4 + i, h, { bold: true, bg: TH_C, fg: TH_FG, h: 'center', size: 12 }));
+      ws.mergeCells(R, 8, R, WIDE);
+      _cell(ws, R, 8, '備註', { bold: true, bg: TH_C, fg: TH_FG, h: 'center', size: 12 });
+      ws.getRow(R).height = 24;
+      R++;
+      limits.forEach(gl => {
+        _cell(ws, R, 4, symName[gl.symbol_id] || gl.symbol_id || '', { h: 'center', size: 12 });
+        _cell(ws, R, 5, gl.zone || 'MAIN', { h: 'center', size: 12 });
+        _cell(ws, R, 6, gl.min_count != null ? gl.min_count : '', { h: 'center', size: 12 });
+        _cell(ws, R, 7, gl.max_count != null ? gl.max_count : '', { h: 'center', size: 12 });
+        ws.mergeCells(R, 8, R, WIDE);
+        _cell(ws, R, 8, gl.notes || '', { size: 12 });
+        ws.getRow(R).height = 24;
+        R++;
+      });
+      return R;
+    }
+    // 依 mode_scope 過濾產牌限制:scope='ALL' 或含指定模式名 → 收入
+    function limitsForModes(modeNames) {
+      const gls = Array.isArray(cfg.genLimits) ? cfg.genLimits : [];
+      return gls.filter(gl => {
+        const sc = String(gl.mode_scope || 'ALL').trim();
+        if (!sc || sc.toUpperCase() === 'ALL') return true;
+        const parts = sc.split(',').map(x => x.trim());
+        return modeNames.some(mn => parts.includes(mn));
+      });
+    }
+
+    const startMode = cfg.derived.startingMode;
+    const spinModes  = cfg.modes.filter(m => !_isModeBonus(m));
+    const bonusModes = cfg.modes.filter(m => _isModeBonus(m));
+    const fgModes    = spinModes.filter(m => m.mode && m.mode !== startMode);
+    const wheelModes = bonusModes.filter(m => String(m.mode_kind).toUpperCase() === 'WHEEL');
+    const normNames = cfg.normalSyms.map(s => s.name || _symId(s));
+    const specNames = cfg.specialSyms.map(s => s.name || _symId(s));
+    const gridDesc = cfg.derived.gridStr ? `本遊戲為${cfg.derived.gridStr}的連線SLOT遊戲。` : '';
+    const _plCount = Array.isArray(cfg.paylines) ? cfg.paylines.length : 0;
+    const _isLine = String(cfg.global.pay_type || '').toUpperCase() === 'LINE';
+    const lineDesc = cfg.derived.isScatterLike
+      ? (cfg.derived.payMethodDesc || cfg.derived.payTypeLabel || '')
+      : _isLine
+        ? `${cfg.derived.payTypeLabel || ''}${_plCount ? `。共有${_plCount}種連線方式。` : ''}`
+        : `${cfg.derived.payTypeLabel || ''}${cfg.derived.waysCount ? `。共有${cfg.derived.waysCount}種連線方式。` : ''}`;
+
+    // ══════════ 1. 修訂紀錄(公司樣式:無填色無框線、置中) ══════════
+    {
+      const ws = wb.addWorksheet('修訂紀錄');
+      ws.columns = [{ width: 2.1 }, { width: 12.6 }, { width: 8.43 }, { width: 18.7 }, { width: 42.1 }, { width: 49.4 }, { width: 35 }];
+      ws.getRow(1).height = 6;
+      ['時間', '修訂人', '修訂類型', '分頁', '說明', '備註'].forEach((h, i) =>
+        _cell(ws, 2, i + 2, h, { h: 'center', size: 12, border: false }));
+      const today = new Date().toISOString().slice(0, 10);
+      ['' , today, 'SlotPlanner', '產生', 'ALL', '由 SlotPlanner Pro 匯出企劃書', ''].forEach((v, i) => {
+        if (i === 0) return;
+        _cell(ws, 3, i + 1, v, { h: i === 5 ? 'left' : 'center', size: 12, border: false });
+      });
+    }
+
+    // ══════════ 2. 一般遊戲(標籤 2F5597,自第17列起) ══════════
+    {
+      const ws = wb.addWorksheet('一般遊戲');
+      descCols(ws);
+      let R = START_R;
+      R = pairRow(ws, R, '主題選用', meta.theme_pick || meta.game_name || cfg.global.game_name || '',
+                          '風格選用', meta.style_pick || '', NG_C);
+      R = descRow(ws, R, '盤面(H×W)', gridDesc, NG_C);
+      R = descRow(ws, R, '連線方式', lineDesc, NG_C);
+      R = descRow(ws, R, '遊戲概述', meta.game_overview || `本遊戲模式共有${cfg.modes.map(m => m.mode).filter(Boolean).join('、') || '一般遊戲'}。`, NG_C);
+      // 模式說明:各模式一行
+      const modeLines = cfg.modes.filter(m => m.mode).map(m => {
+        const d = (meta.mode_desc && meta.mode_desc[m.mode]) || m.notes || '';
+        return d ? `${m.mode}：${d}` : m.mode;
+      });
+      if (modeLines.length) R = descRow(ws, R, '模式說明', modeLines, NG_C);
+      // 玩法說明(留給企劃填)
+      R = descRow(ws, R, '玩法說明', '', NG_C);
+      // 一般 / 特殊圖示規劃(N個 藍粗)
+      label(ws, R, 2, 3, '一般圖示規劃', NG_C);
+      _cell(ws, R, 4, `${normNames.length}個`, { bold: true, fg: BLU, h: 'center', size: 12 });
+      value(ws, R, 5, WIDE, normNames.join('、'));
+      ws.getRow(R).height = 28.5; R++;
+      label(ws, R, 2, 3, '特殊圖示規劃', NG_C);
+      _cell(ws, R, 4, `${specNames.length}個`, { bold: true, fg: BLU, h: 'center', size: 12 });
+      value(ws, R, 5, WIDE, specNames.join('、'));
+      ws.getRow(R).height = 28.5; R++;
+      // 特殊圖示說明:D=名稱(accent 藍粗) E:M=行為
+      if (cfg.specialSyms.length) {
+        R = descRow3(ws, R, '特殊圖示說明', cfg.specialSyms.map(s => ({
+          sub: s.name || _symId(s),
+          val: (meta.special_behavior && meta.special_behavior[_symId(s)]) || behaviorTemplate(s),
+        })), NG_C);
+      }
+      // 得分規則
+      const scoreDesc = meta.score_formula || (cfg.derived.isScatterLike
+        ? '彩金計算方式：達標數量圖示 × 圖示賠率（見賠率表）。'
+        : `彩金計算方式：押注額 × 圖示賠率${(_symbolMultView(cfg).multSyms.length ? ' × 倍數' : '')}＝獲得彩金。`);
+      R = descRow(ws, R, '得分規則', scoreDesc, NG_C);
+      // 加押規劃 / 特殊模式購買
+      const bc = cfg.betConfig || {};
+      if (bc.ante_bet_enabled) {
+        R = descRow3(ws, R, '加押規劃', [{
+          sub: '加押',
+          val: `成本為原押注 ×${Number(bc.ante_bet_mult) || 0}，觸發倍率 ×${Number(bc.ante_bet_trigger_mult) || 0}。${bc.ante_bet_desc || ''}`,
+          subFg: TH_FG,
+        }], NG_C);
+      }
+      if (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length) {
+        R = descRow3(ws, R, '特殊模式購買', bc.buy_features.map((f, i) => ({
+          sub: f.bf_id || `購買${i + 1}`,
+          val: `目標模式 ${f.target_mode || '—'}，成本 ×${Number(f.cost_mult) || 0} 注額。${f.notes || ''}`,
+          subFg: TH_FG,
+        })), NG_C);
+      }
+      // 跑馬燈 / 事件規劃 / 快停跳過(NG)
+      R = modeExtras(ws, R, startMode, NG_C);
+      // 產牌限制(NG / ALL)
+      R = genLimitBlock(ws, R, limitsForModes([startMode]), NG_C);
+    }
+
+    // ══════════ 3. FREE GAME(標籤 1F3864,自第17列起) ══════════
+    if (fgModes.length) {
+      const ws = wb.addWorksheet('FREE GAME');
+      descCols(ws);
+      let R = START_R;
+      fgModes.forEach((md, mi) => {
+        if (fgModes.length > 1) {
+          ws.mergeCells(R, 2, R, WIDE);
+          _cell(ws, R, 2, `模式 ${md.mode}`, { bold: true, bg: FG_C, fg: 'FFFFFF', size: 14, h: 'left' });
+          ws.getRow(R).height = 28.5; R++;
+        }
+        // 觸發方式
+        const trig = (mi === 0 && meta.freegame.trigger) ? meta.freegame.trigger : (md.trigger_condition || '');
+        R = descRow(ws, R, '觸發方式', trig, FG_C);
+        // 觸發給付(有才出)
+        const tp = mi === 0 ? (meta.freegame.trigger_pays || []).filter(t => t && (Number(t.count) || Number(t.pay))) : [];
+        if (tp.length) R = descRow(ws, R, '觸發給付', tp.map(t => `${t.count} 個 → ${t.pay}x`).join('、'), FG_C);
+        // 盤面顯示 進入/結束(留給企劃填)
+        R = descRow3(ws, R, '盤面顯示', [
+          { sub: '進入', val: '', subFg: TH_FG },
+          { sub: '結束', val: '', subFg: TH_FG },
+        ], FG_C);
+        // 盤面 / 連線方式(同主盤)
+        R = descRow(ws, R, '盤面(H×W)', gridDesc, FG_C);
+        R = descRow(ws, R, '連線方式', lineDesc, FG_C);
+        // 局數設定 | 加局 | 上限(同一列)
+        const spins = (Number(md.spin_count) || 0) > 0 ? `${md.spin_count}局`
+                    : (mi === 0 && Number(meta.freegame.min_spins) > 0 ? `${meta.freegame.min_spins}局` : '');
+        const addSp = mi === 0 ? (meta.freegame.add_spins ? '有' : '無') : '';
+        const capV  = mi === 0 ? (meta.freegame.cap === '有' ? (meta.freegame.cap_value || '有') : (meta.freegame.cap || '無')) : '';
+        R = tripleRow(ws, R, '局數設定', spins, '加局', addSp, '上限', capV, FG_C);
+        if (mi === 0 && meta.freegame.add_spins) R = descRow(ws, R, '加局說明', meta.freegame.add_spins, FG_C);
+        // 遊戲說明(模式描述)
+        const d = (meta.mode_desc && meta.mode_desc[md.mode]) || md.notes || '';
+        R = descRow(ws, R, '遊戲說明', d, FG_C);
+        // 一般 / 特殊圖示(公司 FG 頁會重複列)
+        label(ws, R, 2, 3, '一般圖示', FG_C);
+        _cell(ws, R, 4, `${normNames.length}個`, { bold: true, fg: BLU, h: 'center', size: 12 });
+        value(ws, R, 5, WIDE, normNames.join('、'));
+        ws.getRow(R).height = 28.5; R++;
+        label(ws, R, 2, 3, '特殊圖示', FG_C);
+        _cell(ws, R, 4, `${specNames.length}個`, { bold: true, fg: BLU, h: 'center', size: 12 });
+        value(ws, R, 5, WIDE, specNames.join('、'));
+        ws.getRow(R).height = 28.5; R++;
+        // 跑馬燈 / 事件規劃 / 快停跳過(per FG mode)
+        R = modeExtras(ws, R, md.mode, FG_C);
+        R++; // 模式間空一列
+      });
+      // 產牌限制(FG / ALL)
+      R = genLimitBlock(ws, R, limitsForModes(fgModes.map(m => m.mode)), FG_C);
+    }
+
+    // ══════════ 4. BONUS GAME(標籤 1F4E79,自第17列起) ══════════
+    if (bonusModes.length) {
+      const ws = wb.addWorksheet('BONUS GAME');
+      descCols(ws);
+      let R = START_R;
+      bonusModes.forEach(md => {
+        R = descRow(ws, R, '玩法種類', `${md.mode}：${_modeKindDesc(md)}`, BN_C);
+        R = descRow(ws, R, '觸發方式', md.trigger_condition || '', BN_C);
+        const k = String(md.mode_kind).toUpperCase();
+        if (k === 'WHEEL' && md.wheel_upgrade_to) R = descRow(ws, R, '升級至', md.wheel_upgrade_to, BN_C);
+        if (k === 'PICK') R = descRow(ws, R, '抽選次數', Number(md.pick_count) > 0 ? String(md.pick_count) : '抽到結束項為止', BN_C);
+        if (k === 'COLLECTION') R = descRow(ws, R, '目標收集數', String(Number(md.collect_target) || 0), BN_C);
+        // 獎項表(淺藍表頭)
+        const items = Array.isArray(md.items) ? md.items : [];
+        if (items.length) {
+          label(ws, R, 2, 3, '各項獎值', BN_C, items.length + 1);
+          ['項目', '數值 / JP', '權重', '是否結束'].forEach((h, i) => _cell(ws, R, 4 + i, h, { bold: true, bg: LB_C, fg: TH_FG, h: 'center', size: 12 }));
+          ws.getRow(R).height = 24; R++;
+          items.forEach(it => {
+            _cell(ws, R, 4, it.label || '', { h: 'center', size: 12 });
+            _cell(ws, R, 5, it.link_jp ? `JP：${it.link_jp}` : (it.value != null ? it.value : ''), { h: 'center', size: 12 });
+            _cell(ws, R, 6, Number(it.weight) || 0, { h: 'center', size: 12 });
+            _cell(ws, R, 7, it.is_end ? '是' : '', { h: 'center', size: 12 });
+            ws.getRow(R).height = 24; R++;
+          });
+        }
+        R = modeExtras(ws, R, md.mode, BN_C);
+        R++;
+      });
+    }
+
+    // ══════════ 5. 連線方式(標籤 2F5597,自第17列起) ══════════
+    {
+      const ws = wb.addWorksheet('連線方式');
+      descCols(ws);
+      let R = START_R;
+      R = descRow(ws, R, '賠付方式', cfg.derived.payTypeLabel || '', NG_C);
+      if (cfg.derived.isScatterLike) {
+        R = descRow(ws, R, '計分方式', cfg.derived.payMethodDesc || '', NG_C);
+      } else if (_isLine && _plCount) {
+        R = descRow(ws, R, '連線種數', `共有${_plCount}種連線方式。`, NG_C);
+      } else if (cfg.derived.waysCount) {
+        R = descRow(ws, R, '連線種數', `共有${cfg.derived.waysCount}種連線方式。`, NG_C);
+      }
+      const geom = _mainBoardGeom(cfg.layout);
+      const pls = Array.isArray(cfg.paylines) ? cfg.paylines : [];
+      if (pls.length && geom) {
+        pls.forEach(pl => {
+          const pts = _parsePathPoints(pl.path || pl.path_str || '');
+          if (!pts.length) return;
+          const asc = _renderPaylineAscii(pts, geom);
+          const titleBits = [`Line ${pl.line_id != null ? pl.line_id : ''}`];
+          if (pl.notes) titleBits.push(pl.notes);
+          label(ws, R, 2, 3, titleBits.join(' '), NG_C, asc.length + 1);
+          value(ws, R, 4, WIDE, _pathArrowStr(pts));
+          ws.getRow(R).height = 24; R++;
+          asc.forEach(line => {
+            ws.mergeCells(R, 4, R, WIDE);
+            const cell = _cell(ws, R, 4, line, { h: 'left', size: 11 });
+            cell.font = { name: 'Consolas', size: 11, color: { argb: _argb(TH_FG) } };
+            R++;
+          });
+          R++;
+        });
+      }
+    }
+
+    // ══════════ 6. 賠率表(自第9列起;帶 333F50 / 表頭 D6DCE4) ══════════
+    {
+      const ws = wb.addWorksheet('賠率表');
+      let maxCount = 0;
+      cfg.symbols.forEach(s => _symPayRows(s).forEach(r => { if (r.count > maxCount) maxCount = r.count; }));
+      if (!maxCount) maxCount = cfg.derived.reelCount || 5;
+      const minCount = Math.max(3, maxCount - 3);
+      const counts = [];
+      for (let n = maxCount; n >= minCount; n--) counts.push(n);
+      const cols = [{ width: 2.3 }, { width: 8.9 }, { width: 17.6 }];
+      counts.forEach(() => cols.push({ width: 8.9 }));
+      cols.push({ width: 17.6 });
+      ws.columns = cols;
+      let R = 9;
+      const nCols = 3 + counts.length;   // B..最後連線欄+備註
+      // 一般圖示帶
+      ws.mergeCells(R, 2, R, nCols);
+      _cell(ws, R, 2, '一般圖示', { bold: true, bg: TB_C, fg: 'FFFFFF', h: 'center', size: 12 });
+      ws.getRow(R).height = 16.5; R++;
+      ['編號', '名稱', ...counts.map(n => `${n}連線`), '參考競品賠率'].forEach((h, i) =>
+        _cell(ws, R, i + 2, h, { bold: false, bg: TH_C, fg: TH_FG, h: 'center', size: 12 }));
+      ws.getRow(R).height = 16.5; R++;
+      cfg.normalSyms.forEach(s => {
+        const rowMap = {}; _symPayRows(s).forEach(r => rowMap[r.count] = r.pay);
+        _cell(ws, R, 2, s.number != null ? s.number : '', { h: 'center', size: 12 });
+        _cell(ws, R, 3, s.name || _symId(s), { h: 'center', size: 12 });
+        counts.forEach((n, i) => _cell(ws, R, 4 + i, rowMap[n] != null ? rowMap[n] : '', { h: 'center', size: 12 }));
+        _cell(ws, R, 4 + counts.length, '', { size: 12 });
+        ws.getRow(R).height = 16.5; R++;
+      });
+      // 特殊圖示帶
+      ws.mergeCells(R, 2, R, nCols);
+      _cell(ws, R, 2, '特殊圖示', { bold: true, bg: TB_C, fg: 'FFFFFF', h: 'center', size: 12 });
+      ws.getRow(R).height = 16.5; R++;
+      cfg.specialSyms.forEach(s => {
+        const rowMap = {}; _symPayRows(s).forEach(r => rowMap[r.count] = r.pay);
+        _cell(ws, R, 2, s.number != null ? s.number : '', { h: 'center', size: 12 });
+        _cell(ws, R, 3, s.name || _symId(s), { h: 'center', size: 12 });
+        counts.forEach((n, i) => _cell(ws, R, 4 + i, rowMap[n] != null ? rowMap[n] : '-', { h: 'center', size: 12 }));
+        _cell(ws, R, 4 + counts.length, _symRole(s) || '', { h: 'center', size: 12 });
+        ws.getRow(R).height = 16.5; R++;
+      });
+    }
+
+    // ══════════ 7. 輪盤遊戲(標籤 2E75B6,自第17列起) ══════════
+    if (wheelModes.length) {
+      const ws = wb.addWorksheet('輪盤遊戲');
+      descCols(ws);
+      let R = START_R;
+      R = descRow(ws, R, '彩金計算方式', '押注額 × 輪盤倍數＝獲得彩金。', WH_C);
+      wheelModes.forEach(md => {
+        R = descRow(ws, R, '觸發方式', md.trigger_condition || '', WH_C);
+        const items = Array.isArray(md.items) ? md.items : [];
+        if (items.length) {
+          label(ws, R, 2, 3, `${md.mode} 各項獎值`, WH_C, items.length + 1);
+          ['項目', '數值 / JP', '權重', '升級'].forEach((h, i) => _cell(ws, R, 4 + i, h, { bold: true, bg: LB_C, fg: TH_FG, h: 'center', size: 12 }));
+          ws.getRow(R).height = 24; R++;
+          items.forEach(it => {
+            _cell(ws, R, 4, it.label || '', { h: 'center', size: 12 });
+            _cell(ws, R, 5, it.link_jp ? `JP：${it.link_jp}` : (it.value != null ? it.value : ''), { h: 'center', size: 12 });
+            _cell(ws, R, 6, Number(it.weight) || 0, { h: 'center', size: 12 });
+            _cell(ws, R, 7, it.is_end ? '' : (md.wheel_upgrade_to || ''), { h: 'center', size: 12 });
+            ws.getRow(R).height = 24; R++;
+          });
+        }
+        R++;
+      });
+    }
+
+    // ══════════ 8. 說明文件(標題/圖片預留/編號+中文字) ══════════
+    {
+      const ws = wb.addWorksheet('說明文件');
+      ws.columns = [{ width: 2.1 }, { width: 8 }, { width: 5.1 }, { width: 65.4 }, { width: 13.3 }];
+      let R = 1;
+      _cell(ws, R, 2, '內文：大小寫正常，開頭字母用大寫。', { size: 12, border: false }); R++;
+      _cell(ws, R, 2, '文字內容以翻譯為主。', { size: 12, border: false }); R += 2;
+      function section(title, items) {
+        if (!items.length) return;
+        // 標題列
+        _cell(ws, R, 2, '標題', { bold: true, bg: TH_C, fg: TH_FG, h: 'center', size: 12 });
+        ws.mergeCells(R, 3, R, 5);
+        _cell(ws, R, 3, title, { bold: true, size: 12 });
+        ws.getRow(R).height = 20; R++;
+        // 圖片預留(6 列合併)
+        ws.mergeCells(R, 2, R + 5, 2);
+        _cell(ws, R, 2, '圖片', { bold: true, bg: TH_C, fg: TH_FG, h: 'center', size: 12 });
+        ws.mergeCells(R, 3, R + 5, 5);
+        _cell(ws, R, 3, '', {});
+        R += 6;
+        // 編號 / 中文字
+        _cell(ws, R, 3, '編號', { h: 'center', size: 12 });
+        _cell(ws, R, 4, '中文字', { h: 'center', size: 12 });
+        _cell(ws, R, 5, '翻譯', { h: 'center', size: 12 });
+        R++;
+        items.forEach((t, i) => {
+          _cell(ws, R, 3, i + 1, { h: 'center', size: 12 });
+          _cell(ws, R, 4, t, { size: 12 });
+          _cell(ws, R, 5, '', { size: 12 });
+          R++;
+        });
+        R += 2;
+      }
+      // NG
+      const ngItems = [];
+      const startmd = cfg.modes.find(m => m.mode === startMode);
+      if (startmd && ((meta.mode_desc && meta.mode_desc[startMode]) || startmd.notes)) ngItems.push((meta.mode_desc && meta.mode_desc[startMode]) || startmd.notes);
+      ngItems.push(cfg.derived.isScatterLike
+        ? '彩金計算方式：達標數量圖示 × 圖示賠率。'
+        : '彩金計算方式：押注額 × 圖示賠率 × 倍數＝獲得彩金。');
+      section('一般遊戲說明', ngItems);
+      // FG
+      if (fgModes.length) {
+        const fgItems = [];
+        if (meta.freegame.trigger) fgItems.push(meta.freegame.trigger);
+        if (Number(meta.freegame.min_spins) > 0) fgItems.push(`可獲得${meta.freegame.min_spins}局免費遊戲。`);
+        fgModes.forEach(md => { const d = (meta.mode_desc && meta.mode_desc[md.mode]) || md.notes; if (d) fgItems.push(d); });
+        section('免費遊戲說明', fgItems);
+      }
+      // BONUS
+      if (bonusModes.length) {
+        const bnItems = [];
+        bonusModes.forEach(md => {
+          bnItems.push(`${md.mode}：${_modeKindDesc(md)}${md.trigger_condition ? `；${md.trigger_condition}` : ''}`);
+        });
+        section('BONUS 遊戲說明', bnItems);
+      }
+      // 加押 / 購買
+      const bc = cfg.betConfig || {};
+      const buyItems = [];
+      if (bc.ante_bet_enabled) buyItems.push(`加押：成本 ×${Number(bc.ante_bet_mult) || 0} 注額，觸發倍率 ×${Number(bc.ante_bet_trigger_mult) || 0}。${bc.ante_bet_desc || ''}`);
+      if (bc.buy_feature_enabled && Array.isArray(bc.buy_features)) bc.buy_features.forEach(f => buyItems.push(`購買 ${f.bf_id || ''}：進入 ${f.target_mode || '—'}，成本 ×${Number(f.cost_mult) || 0} 注額。`));
+      section('加押 / 購買說明', buyItems);
+    }
+
+    // ══════════ 9. 演繹流程(公司=純分鏡圖頁 → 留白) ══════════
+    {
+      const ws = wb.addWorksheet('演繹流程');
+      ws.columns = [{ width: 4.8 }];
+    }
+
+    // ══════════ 10. 節奏表(公司標準項目列) ══════════
+    {
+      const ws = wb.addWorksheet('節奏表');
+      const rcols = [{ width: 1.9 }, { width: 8.43 }, { width: 30 }];
+      for (let c = 4; c <= 14; c++) rcols.push({ width: 4.5 });
+      ws.columns = rcols;
+      let R = 2;
+      _cell(ws, R, 2, '每小格單位：0.1 秒。', { size: 12, border: false }); R += 1;
+      const ITEMS = ['AUTO', '轉輪時間(啟動至第1輪停止)', '整體滾輪時間', '未得分局間停頓',
+                     '停輪後中獎停頓', '中獎後出現分數', '分數停留時間', '圖示演繹'];
+      ITEMS.forEach(it => {
+        _cell(ws, R, 3, it, { size: 12 });
+        for (let c = 4; c <= 14; c++) _cell(ws, R, c, '', {});
+        ws.getRow(R).height = 17.2;
+        R++;
+      });
+    }
+
+    // ══════════ 11. 體感(單一頁;表頭=編號/是否得分/是否超過1倍/各圖示) ══════════
+    {
+      const ws = wb.addWorksheet('體感');
+      const symCols = cfg.symbols.map(s => s.name || _symId(s));
+      const cols = [{ width: 6 }, { width: 9 }, { width: 11 }];
+      symCols.forEach(() => cols.push({ width: 10 }));
+      ws.columns = cols;
+      let R = 1;
+      ['編號', '是否得分', '是否超過1倍', ...symCols].forEach((h, i) =>
+        _cell(ws, R, i + 1, h, { bold: false, bg: TH_C, fg: TH_FG, h: 'center', size: 12 }));
+      ws.getRow(R).height = 16.5; R++;
+      for (let n = 1; n <= 30; n++) {
+        _cell(ws, R, 1, n, { h: 'center', size: 12 });
+        for (let c = 2; c <= 3 + symCols.length; c++) _cell(ws, R, c, '', { h: 'center', size: 12 });
+        R++;
+      }
+    }
+
+    return await wb.xlsx.writeBuffer();
+  }
   // ════════════════════════════════════════════════════════════════════
   //  機制文件（Markdown 簡版）
   // ════════════════════════════════════════════════════════════════════
@@ -964,6 +1583,11 @@
     L.push('');
     L.push(`> 由 SlotPlanner Pro 設定檔自動產生　·　${new Date().toLocaleString('zh-TW')}`);
     L.push('');
+    // v8.3 / R1 F-21:佔位數值旗標(公版化流程常態:先出架構、數值後補)
+    if (m.numbers_are_placeholder) {
+      L.push('> ⚠️ **本文件之賠付 / 權重 / 局數等數值皆為佔位**，僅供架構溝通；正式數值以數值組 / 模擬工具產出為準。');
+      L.push('');
+    }
 
     // 基本規格
     L.push('## 基本規格');
@@ -1011,13 +1635,22 @@
       L.push('');
       L.push('> 以下為規格描述，供數值 / 模擬工具落盤遵循；本工具不執行、不計算 RTP。');
       L.push('');
-      L.push('| 模式 | 倍數重置範圍 | 倍數疊加方式 | 封頂 / 上限 |');
-      L.push('| --- | --- | --- | --- |');
+      L.push('| 模式 | 倍數重置範圍 | 倍數疊加方式 | 封頂 / 上限 | 玩家擇一 | Hold&Win Respin |');
+      L.push('| --- | --- | --- | --- | --- | --- |');
       cfg.modes.forEach(md => {
-        L.push(`| ${md.mode} | ${_modeResetDesc(md).replace(/\|/g, '\\|')} | ${_modeStackDesc(md).replace(/\|/g, '\\|')} | ${_modeCapDesc(md).replace(/\|/g, '\\|')} |`);
+        L.push(`| ${md.mode} | ${_modeResetDesc(md).replace(/\|/g, '\\|')} | ${_modeStackDesc(md).replace(/\|/g, '\\|')} | ${_modeCapDesc(md).replace(/\|/g, '\\|')} | ${_modeChoiceDesc(md).replace(/\|/g, '\\|')} | ${_modeRespinDesc(md).replace(/\|/g, '\\|')} |`);
       });
       L.push('');
       L.push('- 倍數疊加優先序：符號層 `mult_stack_mode` > 模式層 `stack_mode` > 全域 `Multipliers.stack_mode`；「繼承全域」表示未於本層覆寫。');
+      // v8.5 / R3:玩家擇一組說明(有組才輸出)
+      {
+        const _grp = {};
+        cfg.modes.forEach(md => { const g = (md.choice_group || '').trim(); if (g) (_grp[g] = _grp[g] || []).push(md.mode); });
+        const gs = Object.entries(_grp);
+        if (gs.length) {
+          L.push('- 玩家擇一：' + gs.map(([g, ms]) => `組「${g}」＝ ${ms.join(' / ')}（${ms.length} 選 1）`).join('；') + '。觸發時由玩家選擇進入其中一個模式。');
+        }
+      }
       L.push('');
     }
 
@@ -1071,21 +1704,37 @@
         L.push(`- **${s.name || _symId(s)}**（${_symRole(s) || '特殊'}）`);
       });
     }
+    // v8.3 / R1 D-12:出現模式宣告(有宣告才輸出;取代「權重 0 繞路」的人話說明)
+    {
+      const scoped = (cfg.symbols || []).filter(s => String(s.mode_scope || '').trim() !== '');
+      if (scoped.length) {
+        L.push('');
+        L.push('僅在特定模式出現的圖示：');
+        scoped.forEach(s => {
+          L.push(`- **${s.name || _symId(s)}**：僅出現於 ${String(s.mode_scope).trim()}（其餘模式不產出此圖示）`);
+        });
+      }
+    }
     L.push('');
 
     // 賠付表
-    L.push('## 賠付表');
+    L.push('## 賠付表' + (m.numbers_are_placeholder ? '（佔位數值）' : ''));
     L.push('');
     // v5.6:動態連線數欄
-    const mdCountSet = new Set();
-    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => mdCountSet.add(r.count)));
-    const mdCounts = [...mdCountSet].sort((a, b) => b - a);
-    if (mdCounts.length === 0) mdCounts.push(5, 4, 3);
+    // v8.3 / R1 A-1:count 區間同賠 → 欄位鍵改 band(單點 "8"、區間 "8–9";依起點降冪)
+    const _bandKey = (r) => (r.count_to > 0 ? `${r.count}–${r.count_to}` : String(r.count));
+    const mdBandMap = new Map();   // key → from(排序用)
+    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => {
+      const k = _bandKey(r);
+      if (!mdBandMap.has(k)) mdBandMap.set(k, Number(r.count) || 0);
+    }));
+    let mdCounts = [...mdBandMap.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    if (mdCounts.length === 0) mdCounts = ['5', '4', '3'];
     L.push('| 編號 | 名稱 | 類型 | ' + mdCounts.map(n => n + '連線').join(' | ') + ' |');
     L.push('| --- | --- | --- | ' + mdCounts.map(() => '---').join(' | ') + ' |');
-    const mdPayCell = (s, n) => {
-      const by = {}; _symPayRows(s).forEach(r => { by[r.count] = r.pay; });
-      return by[n] != null ? by[n] : '—';
+    const mdPayCell = (s, k) => {
+      const by = {}; _symPayRows(s).forEach(r => { by[_bandKey(r)] = r.pay; });
+      return by[k] != null ? by[k] : '—';
     };
     cfg.normalSyms.forEach(s => {
       L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${s.type || ''} | ` + mdCounts.map(n => mdPayCell(s, n)).join(' | ') + ' |');
@@ -1152,6 +1801,15 @@
         multSyms.forEach(s => {
           const parts = s.mult_values.map(v => `×${v.mult}` + (v.weight ? `（權重 ${v.weight}）` : ''));
           L.push(`- ${s.name || _symId(s)} 倍數：${parts.join('、')}`);
+          // v8.3 / R1 D-13:per-mode 權重(各模式值不同時才輸出;如「NG 0 / FG 100」)
+          s.mult_values.forEach(v => {
+            const wbm = (v.weight_by_mode && typeof v.weight_by_mode === 'object') ? v.weight_by_mode : {};
+            const ks = Object.keys(wbm);
+            if (!ks.length) return;
+            const vals = ks.map(k => Number(wbm[k]) || 0);
+            if (new Set(vals).size <= 1) return;   // 全模式同值 → 不贅述
+            L.push(`  - ×${v.mult} 各模式權重：${ks.map(k => `${k} ${Number(wbm[k]) || 0}`).join('、')}`);
+          });
           // v6.4 / 缺漏#1:多倍數疊加方式(相乘 / 相加)
           const sm = _stackModeLabel(_symStackMode(s, m));
           if (sm) L.push(`  - 多倍數疊加方式：${sm}`);
@@ -1212,6 +1870,104 @@
       L.push('');
     }
 
+    // v8.2 / 缺失清單 F-19:特色規則(09_Puzzle_Rules)——結構化規則進 A.xlsx
+    //   卻沒進企劃文件,企劃還得手寫一次 → 補印。純描述,本工具不執行。
+    if (Array.isArray(cfg.rules) && cfg.rules.length) {
+      L.push('## 特色規則');
+      L.push('');
+      L.push('| 規則 | 優先序 | 適用模式 | 觸發 | 條件 | 動作 | 說明 |');
+      L.push('| --- | --- | --- | --- | --- | --- | --- |');
+      const sorted = [...cfg.rules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
+      sorted.forEach(r => {
+        let rid   = _mdCell(r.rule_id || '?') + (r.enabled === false ? '（停用）' : '');
+        // v8.4 / R2 P5:隨機擇一組標示
+        if (r.random_group) rid += `〔隨機組 ${_mdCell(r.random_group)}｜權重 ${Number(r.random_weight) || 100}〕`;
+        const scope = _mdCell(r.mode_scope || 'ALL');
+        const trg   = _RULE_TRIGGER_LABEL[r.trigger] || _mdCell(r.trigger || '');
+        const cond  = _mdCell(r.condition || '') || '—';
+        const acts  = (Array.isArray(r.actions) ? r.actions : []).map(_ruleActionDesc).filter(Boolean);
+        const desc  = _mdCell(r.description || r.notes || '');
+        L.push(`| ${rid} | ${r.priority != null ? r.priority : 100} | ${scope} | ${trg} | ${cond} | ${_mdCell(acts.join('；')) || '—'} | ${desc} |`);
+      });
+      L.push('');
+      L.push('> 特色規則為結構化描述（觸發 / 條件 / 動作），供數值組 / 模擬工具實作時遵循；本工具不執行、不計算 RTP。');
+      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／揭示／分裂／相鄰消除／盤面成長）之執行語意由下游模擬工具實作。');
+      L.push('');
+    }
+    // 棄牌規則(10_Discard_Rules;有資料才輸出)
+    if (Array.isArray(cfg.discards) && cfg.discards.length) {
+      L.push('### 棄牌規則');
+      L.push('');
+      L.push('| 規則 | 類型 | 適用模式 | 條件 | 說明 |');
+      L.push('| --- | --- | --- | --- | --- |');
+      cfg.discards.forEach(d => {
+        L.push(`| ${_mdCell(d.discard_id || '?')} | ${_mdCell(d.discard_kind || '')} | ${_mdCell(d.mode_scope || 'ALL')} | ${_mdCell(d.condition || '') || '—'} | ${_mdCell(d.notes || '')} |`);
+      });
+      L.push('');
+    }
+
+    // v8.2 / 缺失清單 F-20:輪帶總覽(04b;有實體輪帶才輸出)
+    {
+      const rs = cfg.reelStrips || {};
+      const strips = (rs.strips && typeof rs.strips === 'object') ? rs.strips : {};
+      const rows = [];
+      for (const [mode, byReel] of Object.entries(strips)) {
+        if (!byReel || typeof byReel !== 'object') continue;
+        for (const [rid, arr] of Object.entries(byReel)) {
+          if (!Array.isArray(arr) || !arr.length) continue;
+          rows.push({ mode, rid: Number(rid), len: arr.length, dist: _stripDistSummary(arr) });
+        }
+      }
+      if (rows.length) {
+        rows.sort((a, b) => (a.mode === b.mode ? a.rid - b.rid : String(a.mode).localeCompare(String(b.mode))));
+        L.push('## 輪帶總覽');
+        L.push('');
+        L.push(rs.enabled
+          ? '- 實體輪帶：**已啟用**（落盤以輪帶視窗抽樣；權重表僅供對照）。'
+          : '- 實體輪帶：未啟用（以下為存檔中的輪帶描述，落盤採權重表）。');
+        L.push('');
+        L.push('| 模式 | 輪 | 長度 | 符號分佈 |');
+        L.push('| --- | --- | --- | --- |');
+        rows.forEach(r => L.push(`| ${_mdCell(r.mode)} | ${r.rid} | ${r.len} | ${_mdCell(r.dist)} |`));
+        L.push('');
+      }
+    }
+
+    // v8.2 / 缺失清單 F-20:盤面格數分佈(05_Grid_Size_Weights;有資料才輸出)
+    {
+      const gw = cfg.gridWeights || {};
+      const reelCount = Array.isArray(cfg.layout) ? cfg.layout.length : 0;
+      const lines = [];
+      for (const md of cfg.modes) {
+        const mn = md && md.mode; if (!mn) continue;
+        const e = gw[mn];
+        if (!e || !Array.isArray(e.grid_sizes) || !e.grid_sizes.length) continue;
+        for (let r = 1; r <= reelCount; r++) {
+          const parts = [];
+          let total = 0;
+          for (const sz of e.grid_sizes) {
+            const w = e.weights ? Number(e.weights[`${r}-${sz}`]) : 0;
+            if (w > 0) total += w;
+          }
+          for (const sz of e.grid_sizes) {
+            const w = e.weights ? Number(e.weights[`${r}-${sz}`]) : 0;
+            if (w > 0) parts.push(`${sz} 列：${w}${total ? `（${Math.round(w / total * 1000) / 10}%）` : ''}`);
+          }
+          if (parts.length) lines.push(`| ${_mdCell(mn)} | ${r} | ${parts.join(' · ')} |`);
+        }
+      }
+      if (lines.length) {
+        L.push('## 盤面格數分佈');
+        L.push('');
+        L.push('| 模式 | 輪 | 高度：權重（%） |');
+        L.push('| --- | --- | --- |');
+        lines.forEach(x => L.push(x));
+        L.push('');
+        L.push('> 各輪每局有效高度的抽樣分佈（Megaways 類）；百分比為同輪權重正規化。');
+        L.push('');
+      }
+    }
+
     // v6.4 / 缺漏#9+#10:合規數值披露(任一欄有值才輸出)
     {
       const d = m.disclosure || {};
@@ -1254,7 +2010,7 @@
     }
 
     // FREE GAME
-    L.push('## FREE GAME');
+    L.push('## FREE GAME' + (m.numbers_are_placeholder ? '（局數 / 數值為佔位）' : ''));
     L.push('');
     L.push(`- 觸發方式：${m.freegame.trigger || '_（待填）_'}`);
     // v6.4 / 缺漏#4:scatter-pay 觸發給付(觸發即付,非連線賠付)
@@ -1354,6 +2110,7 @@
     saveMeta,
     mergeMeta,
     buildPlanXlsxBuffer,
+    buildCompanyXlsxBuffer,
     buildMechMarkdown,
     behaviorTemplate,
     _jackpotRowsFromConfig,   // v5.1
@@ -1372,6 +2129,7 @@
       <div class="docgen-actions">
         <button class="btn btn-primary" @click="exportMd" :disabled="busy">📝 機制文件 (MD)</button>
         <button class="btn" @click="exportXlsx" :disabled="busy">📊 企劃文件 (Excel)</button>
+        <button class="btn" @click="exportCompanyXlsx" :disabled="busy">📗 企劃書（公司格式）</button>
         <button class="btn" @click="save" :disabled="busy">💾 儲存敘述</button>
       </div>
       <div class="docgen-hint" v-if="hint">{{ hint }}</div>
@@ -1383,6 +2141,9 @@
         <span>設定檔自動帶入{{ meta.inherit_config === false ? '（連動已關閉）' : '' }}</span>
         <label style="font-size:12px; font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
           <input type="checkbox" v-model="meta.inherit_config"> 連動各分頁設定
+        </label>
+        <label style="margin-left:10px;" title="勾選後文件頂部與賠付表/局數段自動標註「佔位」（公版化流程：先出架構、數值後補）">
+          <input type="checkbox" v-model="meta.numbers_are_placeholder"> 數值為佔位
         </label>
       </div>
       <div class="docgen-sum-grid">
@@ -1456,6 +2217,15 @@
         <div v-if="md.mode" class="field-label">模式 {{ md.mode }} 描述</div>
         <input v-if="md.mode" class="input" v-model="meta.mode_desc[md.mode]"
           :placeholder="md.notes || '一句話描述此模式'">
+        <div v-if="md.mode" class="field-label" style="margin-top:6px">模式 {{ md.mode }}　跑馬燈文字</div>
+        <textarea v-if="md.mode" class="input docgen-ta" v-model="meta.mode_marquee[md.mode]"
+          placeholder="此模式跑馬燈輪播文案(每行一句)"></textarea>
+        <div v-if="md.mode" class="field-label">模式 {{ md.mode }}　事件規劃</div>
+        <textarea v-if="md.mode" class="input docgen-ta" v-model="meta.mode_event[md.mode]"
+          placeholder="預報 / 聽牌 / 特殊事件演出規劃"></textarea>
+        <div v-if="md.mode" class="field-label">模式 {{ md.mode }}　快停 / 跳過</div>
+        <textarea v-if="md.mode" class="input docgen-ta" v-model="meta.mode_quickstop[md.mode]"
+          placeholder="快停 / 跳過機制(可留空)"></textarea>
       </template>
     </div>
 
@@ -1672,7 +2442,22 @@
         } finally { busy.value = false; }
       }
 
-      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, refreshConfig,
+      async function exportCompanyXlsx() {
+        if (busy.value) return;
+        busy.value = true;
+        try {
+          save();
+          setHint('產生企劃書（公司格式）中…');
+          const buf = await SP.DocGen.buildCompanyXlsxBuffer(JSON.parse(JSON.stringify(meta)));
+          const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          _download(blob, `${_baseName()}_企劃書.xlsx`);
+          setHint('✔ 企劃書（公司格式）已匯出', 'ok');
+        } catch (e) {
+          console.error(e); setHint(`匯出失敗：${e.message || e}`, 'err');
+        } finally { busy.value = false; }
+      }
+
+      return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, exportCompanyXlsx, refreshConfig,
         addTriggerPay, removeTriggerPay,
         PAYLINE_METHODS, REFILL_METHODS, SCROLL_METHODS, SCORE_FORMULAS };
     },
