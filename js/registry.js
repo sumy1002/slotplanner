@@ -90,6 +90,7 @@
       is_scatter: false,
       image: null,        // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
       mode_scope: '',     // v8.3 / R1 D-12:出現模式宣告(逗號分隔模式名;'' = 所有模式)
+      instance_mult: false, // v8.7 / R6 D-14:per-instance 乘數宣告(每顆實例攜帶自身乘數;規格描述)
     };
   }
 
@@ -121,6 +122,7 @@
       is_scatter: s.is_scatter != null ? s.is_scatter : false,
       image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
       mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
+      instance_mult: s.instance_mult === true,                                      // v8.7 D-14
     };
   }
 
@@ -320,6 +322,7 @@
           is_scatter: !!s.is_scatter,
           image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
       mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
+      instance_mult: s.instance_mult === true,                                      // v8.7 D-14
           swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
@@ -358,6 +361,7 @@
           is_scatter: !!d.is_scatter,
           image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
           mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
+          instance_mult: d.instance_mult === true,                                  // v8.7 D-14
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
@@ -420,6 +424,7 @@
             is_scatter: !!d.is_scatter,
             image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
           mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
+          instance_mult: d.instance_mult === true,                                  // v8.7 D-14
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

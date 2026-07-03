@@ -139,6 +139,9 @@ class GlobalConfig:
     dead_spin_buckets: list[int] = field(default_factory=lambda: [2, 3, 4, 5])
     # v6.4 / 缺漏#5:無傳統彩池時設 False,文件/匯出跳過 JACKPOT 段(不再強塞四級樣板)。
     has_jackpot: bool = True
+    # v8.7 / R6 A-4:雙向 WAYS 去重宣告(規格描述;引擎不消費)。
+    #   True = ways_direction=BOTH 時,同一符號組合左右兩向皆成立僅計分一次。
+    ways_both_dedup: bool = True
     # v6.4 / 缺漏#9+#10:合規數值披露(目標/實測)。None = 未填,由數值組重算後回填。
     disclosure: Optional["ComplianceDisclosure"] = None
 
@@ -328,6 +331,10 @@ class SymbolDef:
     # v8.3 / R1 D-12:符號出現模式宣告(逗號分隔模式名;"" = 所有模式)。
     #   取代「per-mode 權重 0 繞路」的宣告式欄位;純描述,引擎不消費。
     mode_scope: str = ""
+    # v8.7 / R6 D-14:per-instance 乘數宣告(規格描述;引擎不消費)。
+    #   True = 此符號每顆「實例」攜帶自身乘數(xWays/落地各帶倍數式);
+    #   具體取值/疊加行為以規則或 Notes 描述。False = 傳統符號級乘數。
+    instance_mult: bool = False
     # v8.3 / R1 A-1:賠付 count 區間同賠(scatter-pays 8-9/10-11/12-30、大盤 cluster)。
     #   loader 已同步把區間展開進 pay_table(from..to 每個 count 同賠),引擎照舊消費
     #   pay_table 即得正確結果;此欄保留原始區間描述供文件/下游輸出。None = 無區間列。
@@ -410,6 +417,17 @@ class BuyFeatureDef:
     rtp_target:   float = 96.0
     enabled:      bool  = True
     notes:        str   = ""
+    # v8.6 / R5 E-15:購買檔位型式(規格描述;引擎不消費)。
+    #   DIRECT=直接進 feature / BOOST_RATE=提高觸發率型「非直買」(X-iter 式) / SUPER=進階強化版。
+    kind:         str   = "DIRECT"
+
+# v8.6 / R5 E-18:多市場 RTP 出證版本(規格描述;92/94/96 等認證版本 + 市場別注限)
+@dataclass
+class RTPVariant:
+    variant:    str            # 版本/市場名(如 'EU_96' / 'MGA' / '亞洲 92')
+    target_rtp: float = 0.0    # 目標 RTP %
+    max_bet:    float = 0.0    # 市場別注限(幣值或 ×注額;0=未設)
+    notes:      str   = ""
 
 @dataclass
 class BetConfig:
@@ -418,9 +436,32 @@ class BetConfig:
     ante_bet_trigger_mult: float = 2.0
     ante_bet_desc:         str   = ""
     buy_features:          list  = None
+    # v8.6 / R5 E-15:Ante/Buy 互斥宣告(啟用加押時停用購買,Pragmatic 式)+ Feature Drop 折抵
+    #   (BTG 式:累積贏分折抵購買成本;細節自由文字)。規格描述,引擎不消費。
+    ante_buy_exclusive:    bool  = False
+    feature_drop_enabled:  bool  = False
+    feature_drop_desc:     str   = ""
+    # v8.6 / R5 E-18:多市場 RTP 版本表(list[RTPVariant])
+    rtp_variants:          list  = None
     def __post_init__(self):
         if self.buy_features is None:
             self.buy_features = []
+        if self.rtp_variants is None:
+            self.rtp_variants = []
+
+# v8.6 / R5 E-16:比倍(Gamble)設定 — 對應 18_Gamble(KV 式)。純規格描述,引擎不消費。
+@dataclass
+class GambleConfig:
+    enabled:          bool  = False
+    gamble_type:      str   = "CARD_COLOR"  # CARD_COLOR(紅黑×2)/CARD_SUIT(花色×4)/LADDER(階梯)/WHEEL/CUSTOM
+    type_desc:        str   = ""            # 型式補充(LADDER 階梯表 / CUSTOM 描述)
+    win_mult_options: str   = "2"           # 可選倍數(逗號分隔,如 '2,4')
+    max_rounds:       int   = 5             # 最大連續比倍次數(0=無限)
+    cap_mult:         float = 0.0           # 封頂(×注額;0=無)
+    applies_to:       str   = "ALL_WINS"    # ALL_WINS / BELOW_LIMIT(僅低於門檻的贏分可比)
+    applies_limit:    float = 0.0           # BELOW_LIMIT 門檻(×注額)
+    collect_anytime:  bool  = True          # 可隨時收下
+    notes:            str   = ""
 
 # ============================================================
 # Reel 權重 (對應 04_Reel_Weights, 08_Combo_Weights)
@@ -505,6 +546,23 @@ class ConditionLeaf:
     var: str           # "combo_step" / "symbol_count.WILD" / "global.coin_pool"
     op: ConditionOp
     value: Any
+
+# ============================================================
+# 位置型格子屬性 (v8.8 / R4 B-6)
+#   一列 = 一格 × 一屬性。座標 1-based(Reel=reel_id、Row=1..max_rows 局部列),
+#   對齊 06_Paylines 座標慣例。純規格描述:固定格乘數(Cygnus)/enhancer cell/
+#   Fire Frame/金框格(Hold&Win 常見);引擎不消費,行為細節寫 Notes 或規則。
+# ============================================================
+@dataclass
+class CellAttr:
+    attr_id: str                  # 唯一識別(CA1, CA2, ...)
+    reel: int = 1                 # 1-based reel_id
+    row: int = 1                  # 1-based 局部列(1..max_rows)
+    attr: str = "MULT"            # MULT / ENHANCER / FRAME / GOLD / CUSTOM
+    value: str = ""               # 屬性值(MULT=倍數;可含區間字串;其餘型式選填)
+    mode_scope: str = "ALL"       # ALL 或模式名(逗號分隔)
+    notes: str = ""
+
 
 
 @dataclass
@@ -601,6 +659,10 @@ class ModeConfig:
     respin_base: int = 0             # 初始 respin 數(0 = 未啟用 Hold&Win 描述)
     respin_reset_on: str = ""        # "" / NEW_SYMBOL(落新符號重置) / ANY_WIN / NEVER
     respin_stop_cond: str = ""       # 開放式停止條件(自由文字)
+    # v8.7 / R6 A-2:per-mode 賠付模型覆寫(規格描述;引擎不消費)。
+    #   "" = 繼承全域 pay_type;LINE/WAYS/SCATTER/CLUSTER = 此模式改用該賠付模型
+    #   (NG=LINE、FG=SCATTER 混模型遊戲)。
+    pay_type_override: str = ""
 
 
 # ============================================================
@@ -647,6 +709,8 @@ class AConfig:
 
     # v5.3 / v5.4:投注結構 / 倍數系統 / 金幣面額（選用;舊檔 → 預設）
     bet_config: "BetConfig" = field(default_factory=lambda: BetConfig())
+    # v8.6 / R5 E-16:比倍設定(選用;舊檔 → 預設停用)
+    gamble: "GambleConfig" = field(default_factory=lambda: GambleConfig())
     multipliers: "Multipliers" = field(default_factory=lambda: Multipliers())
     coin_values: "CoinValues" = field(default_factory=lambda: CoinValues())
     # v6.0-b:真實輪帶（啟用時引擎視窗抽樣）;reel_strips[mode][reel_id] = [sym,...]
@@ -656,6 +720,10 @@ class AConfig:
     # v7.11:產牌限制 / 生成期約束（選用;對應 07b_Gen_Limits）
     #   本工具僅描述 + 帶資料 + 文件輸出,不在本引擎執行;供下游數據模擬工具消費。
     gen_limits: list["GenLimit"] = field(default_factory=list)
+
+    # v8.8 / R4 B-6:位置型格子屬性（選用;對應 02d_Cell_Attributes）
+    #   固定格乘數(Cygnus)/enhancer cell/Fire Frame/金框格。純描述,引擎不消費。
+    cell_attrs: list["CellAttr"] = field(default_factory=list)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

@@ -59,6 +59,8 @@
     { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
     { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule' },   // v6.2 #0:JP 獨立分頁
     { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule' },
+    // v8.6 / R5 E-16:比倍(Gamble)分頁(D5 拍板:賠付群組尾;TABS scope 豁免比照 v7.10)
+    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule' },
     // ── 權重表 ──
     { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: 'Reel 權重',    icon: '🎲', done: true, group: 'weight' },
     { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight' },
@@ -1823,6 +1825,16 @@
     { id: 'reel_height',           label: 'reel_height',           needsSubkey: true,
       subkeyHint: '輪號(1-based)', valueType: 'number', subkeySource: 'text',
       desc: '某輪目前有效高度;「reel_height.3 == 12」(White Rabbit 加局條件)' },
+    // v8.9 / R2b:空間關係條件(desc 即語意規格,守則 #151;引擎不消費、下游依 desc 實作)
+    { id: 'adjacent_count',        label: 'adjacent_count',        needsSubkey: true,
+      subkeyHint: '符號A.符號B',   valueType: 'number', subkeySource: 'text',
+      desc: '盤面上「與至少一顆 B 正交相鄰(上下左右 4 鄰)」的 A 顆數;subkey 格式「A.B」' +
+            '(如 adjacent_count.WILD.SCAT >= 1 = 存在 WILD 鄰接 SCAT)。' +
+            '相鄰只算主盤活格,洞格(遮罩外)不構成相鄰;斜角不算。' },
+    { id: 'cluster_max',           label: 'cluster_max',           needsSubkey: true,
+      subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
+      desc: '該符號在盤面上的最大 4 鄰連通群大小(cluster_max.PINK >= 5 = ' +
+            '存在 5+ 顆相鄰成群,Reactoonz 式);WILD 是否併入群由規則備註宣告,預設不併。' },
     { id: 'board_symbol_total',    label: 'board_symbol_total',    needsSubkey: false, valueType: 'number',
       desc: '盤面現存符號總數;== 0 即「清空全盤」(Moon Princess +100×)' },
     { id: 'rightmost_reel_in_win', label: 'rightmost_reel_in_win', needsSubkey: false, valueType: 'number',

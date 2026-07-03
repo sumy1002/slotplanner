@@ -22,6 +22,7 @@ A.xlsx 解析器與全分頁交叉驗證
 """
 from __future__ import annotations
 import re
+import warnings
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
@@ -42,6 +43,7 @@ from core.schemas import (
     GenLimit,
     PayType, WaysDirection,
     ConfigValidationError,
+    RTPVariant, GambleConfig, CellAttr,
 )
 from core.condition_parser import parse_condition, parse_actions
 
@@ -121,6 +123,10 @@ def load_a_config(path: str | Path) -> AConfig:
             bet_df = None
     cfg.bet_config = _parse_bet_config(bet_df)
 
+    # v8.6 / R5:14b_RTP_Variants(多市場 RTP 版本)+ 18_Gamble(比倍)。皆選用,舊檔安全降級。
+    cfg.bet_config.rtp_variants = _parse_rtp_variants(sheets.get("14b_RTP_Variants"))
+    cfg.gamble = _parse_gamble(sheets.get("18_Gamble"))
+
     # v5.4:15_Multipliers
     cfg.multipliers = _parse_multipliers(sheets.get('15_Multipliers'))
 
@@ -143,6 +149,9 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # v7.11:07b_Gen_Limits（產牌限制 / 生成期約束;選用,舊檔無 sheet → 空）
     cfg.gen_limits = _parse_gen_limits(sheets.get('07b_Gen_Limits'), symbols, layout)
+
+    # v8.8 / R4 B-6:02d_Cell_Attributes(位置型格子屬性)。選用,舊檔安全降級。
+    cfg.cell_attrs = _parse_cell_attrs(sheets.get('02d_Cell_Attributes'), layout)
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -194,6 +203,8 @@ def _parse_global(df: pd.DataFrame) -> GlobalConfig:
             max_chain_per_rule=int(kv.get("max_chain_per_rule", 50) or 50),
             big_win_thresholds=_parse_csv_floats(kv.get("big_win_thresholds", "100,500")),
             dead_spin_buckets=_parse_csv_ints(kv.get("dead_spin_buckets", "2,3,4,5")),
+            # v8.7 / R6 A-4:雙向 WAYS 去重宣告(缺 key → True;規格描述,引擎不消費)
+            ways_both_dedup=_to_bool(kv.get("ways_both_dedup", True)) if "ways_both_dedup" in kv else True,
         )
     except ValueError as e:
         raise ConfigValidationError(sheet, f"型別解析失敗: {e}")
@@ -442,9 +453,11 @@ def _parse_bet_config(df) -> "BetConfig":
 
     bc = BetConfig()
     kv = {}
-    for i in range(1, min(6, len(df))):
+    # v8.6:KV 收集改「全表掃描」——新 KV 列(互斥/Feature Drop)為維持 BF 區位置(Row6/7+)
+    #   一律附加在 sheet 尾端;掃描 col0 為已知 KV key 者即收。BF 列的 col0 為 BF_ID,不會撞名。
+    for i in range(1, len(df)):
         k = _cell(i, 0)
-        if k:
+        if k is not None and str(k).strip() in _BET_KV_KEYS:
             kv[str(k).strip()] = _cell(i, 1)
     bc.ante_bet_enabled = _bool(kv.get("Ante_Bet_Enabled", False))
     try:
@@ -456,12 +469,27 @@ def _parse_bet_config(df) -> "BetConfig":
     except (ValueError, TypeError):
         pass
     bc.ante_bet_desc = str(kv.get("Ante_Bet_Desc", "") or "")
+    # v8.6 / R5 E-15:互斥 + Feature Drop(尾端 KV;舊檔缺 → 預設)
+    bc.ante_buy_exclusive = _bool(kv.get("Ante_Buy_Exclusive", False))
+    bc.feature_drop_enabled = _bool(kv.get("Feature_Drop_Enabled", False))
+    bc.feature_drop_desc = str(kv.get("Feature_Drop_Desc", "") or "")
 
     for i in range(7, len(df)):
         bf_id = _cell(i, 0)
         if not bf_id or pd.isna(bf_id):
             continue
+        if str(bf_id).strip() in _BET_KV_KEYS:   # v8.6:尾端 KV 列不是 BF 列
+            continue
         try:
+            # v8.6 / R5 E-15:Kind(BF 表尾端第 7 欄;舊檔缺 → DIRECT;非法值 → 報錯)
+            kind_raw = str(_cell(i, 6) or "").strip().upper()
+            bf_kind = kind_raw or "DIRECT"
+            if bf_kind not in _VALID_BF_KINDS:
+                raise ConfigValidationError(
+                    "14_Bet_Config",
+                    f"Buy Feature '{bf_id}' 的 Kind '{kind_raw}' 非合法值"
+                    f"({'/'.join(_VALID_BF_KINDS)} 或留空)",
+                    row=i + 1)
             bc.buy_features.append(BuyFeatureDef(
                 bf_id=str(bf_id).strip(),
                 target_mode=str(_cell(i, 1) or "").strip(),
@@ -469,10 +497,96 @@ def _parse_bet_config(df) -> "BetConfig":
                 rtp_target=float(_cell(i, 3) or 0),
                 enabled=_bool(_cell(i, 4)),
                 notes=str(_cell(i, 5) or "").strip(),
+                kind=bf_kind,
             ))
+        except ConfigValidationError:
+            raise
         except (ValueError, TypeError):
             continue
     return bc
+
+
+# v8.6 / R5:14_Bet_Config KV 區合法 key(掃描式收集用)與 Buy Feature Kind 合法值
+_BET_KV_KEYS = frozenset((
+    "Ante_Bet_Enabled", "Ante_Bet_Mult", "Ante_Bet_Trigger_Mult", "Ante_Bet_Desc",
+    "Ante_Buy_Exclusive", "Feature_Drop_Enabled", "Feature_Drop_Desc",
+))
+_VALID_BF_KINDS = ("DIRECT", "BOOST_RATE", "SUPER")
+_VALID_GAMBLE_TYPES = ("CARD_COLOR", "CARD_SUIT", "LADDER", "WHEEL", "CUSTOM")
+
+
+def _parse_rtp_variants(df) -> list:
+    """v8.6 / R5 E-18:14b_RTP_Variants(多市場 RTP 出證版本;規格描述)。
+    additive 契約:sheet 不存在 → [](安全降級)。by-name 讀。
+    """
+    out = []
+    if df is None:
+        return out
+    sheet = "14b_RTP_Variants"
+    for idx, r in df.iterrows():
+        v = r.get("Variant")
+        if pd.isna(v) or not str(v).strip():
+            continue
+        try:
+            out.append(RTPVariant(
+                variant=str(v).strip(),
+                target_rtp=float(r.get("Target_RTP", 0) or 0),
+                max_bet=float(r.get("Max_Bet", 0) or 0),
+                notes=_to_str(r.get("Notes")),
+            ))
+        except (ValueError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+    return out
+
+
+def _parse_gamble(df) -> "GambleConfig":
+    """v8.6 / R5 E-16:18_Gamble(比倍;KV 式 Key/Value/Notes)。
+    additive 契約:sheet 不存在 → 預設 GambleConfig(停用;安全降級)。by-name 掃 Key 欄。
+    """
+    g = GambleConfig()
+    if df is None or "Key" not in df.columns:
+        return g
+    sheet = "18_Gamble"
+    kv = {}
+    for _, r in df.iterrows():
+        k = r.get("Key")
+        if pd.isna(k) or not str(k).strip():
+            continue
+        kv[str(k).strip()] = r.get("Value")
+
+    def _b(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return False
+        if isinstance(v, bool):
+            return v
+        return str(v).strip().upper() in ("TRUE", "1", "YES", "Y")
+
+    g.enabled = _b(kv.get("Gamble_Enabled"))
+    gt_raw = _to_str(kv.get("Gamble_Type")).strip().upper()
+    g.gamble_type = gt_raw or "CARD_COLOR"
+    if g.gamble_type not in _VALID_GAMBLE_TYPES:
+        raise ConfigValidationError(
+            sheet, f"Gamble_Type '{gt_raw}' 非合法值({'/'.join(_VALID_GAMBLE_TYPES)} 或留空)")
+    g.type_desc = _to_str(kv.get("Type_Desc"))
+    g.win_mult_options = _to_str(kv.get("Win_Mult_Options")) or "2"
+    g.max_rounds = int(kv.get("Max_Rounds", 5) or 0) if not pd.isna(kv.get("Max_Rounds", 5)) else 5
+    try:
+        g.cap_mult = float(kv.get("Cap_Mult", 0) or 0)
+    except (ValueError, TypeError):
+        g.cap_mult = 0.0
+    at_raw = _to_str(kv.get("Applies_To")).strip().upper()
+    g.applies_to = at_raw or "ALL_WINS"
+    if g.applies_to not in ("ALL_WINS", "BELOW_LIMIT"):
+        raise ConfigValidationError(
+            sheet, f"Applies_To '{at_raw}' 非合法值(ALL_WINS/BELOW_LIMIT 或留空)")
+    try:
+        g.applies_limit = float(kv.get("Applies_Limit", 0) or 0)
+    except (ValueError, TypeError):
+        g.applies_limit = 0.0
+    ca = kv.get("Collect_Anytime")
+    g.collect_anytime = True if ca is None or (isinstance(ca, float) and pd.isna(ca)) else _b(ca)
+    g.notes = _to_str(kv.get("Notes"))
+    return g
 
 
 def _parse_multipliers(df) -> "Multipliers":
@@ -732,6 +846,7 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 notes=_to_str(r.get("Notes")),
                 # v8.3 / R1 D-12:出現模式宣告(缺欄/空 → "" = 所有模式;安全降級)
                 mode_scope=_to_str(r.get("Mode_Scope")).strip(),
+                instance_mult=_to_bool(r.get("Instance_Mult")),   # v8.7 R6 D-14(缺欄 → False)
             )
             out[sid] = sym
         except (ValueError, KeyError) as e:
@@ -879,17 +994,19 @@ def _parse_paylines(df: pd.DataFrame, layout: LayoutConfig) -> list[Payline]:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
 
     # ★ 前 3 格重疊偵測 ★
+    #   v8.7 / R6 A-3:由硬錯誤降為 warning——官方線表常見共享前綴(同前 3 格、後段分岔),
+    #   企劃照抄官方線表不應被工具擋。引擎(pay_resolver)實查不消費 prefix 唯一性。
     seen = {}
     for line in out:
         if len(line.path) < 3:
             continue
         prefix = tuple(line.path[:3])
         if prefix in seen:
-            raise ConfigValidationError(
-                sheet,
-                f"Payline {line.line_id} 與 {seen[prefix]} 的前 3 格路徑完全重疊: {prefix}",
-            )
-        seen[prefix] = line.line_id
+            warnings.warn(
+                f"[{sheet}] Payline {line.line_id} 與 {seen[prefix]} 的前 3 格路徑重疊: {prefix}"
+                f"(官方線表常見;僅提醒,不阻擋載入)")
+        else:
+            seen[prefix] = line.line_id
     return out
 
 
@@ -1035,6 +1152,68 @@ def _parse_gen_limits(
     return out
 
 
+_VALID_CELL_ATTRS = ("MULT", "ENHANCER", "FRAME", "GOLD", "CUSTOM")   # v8.8 B-6
+
+
+def _parse_cell_attrs(df, layout: LayoutConfig) -> list:
+    """v8.8 / R4 B-6:02d_Cell_Attributes(位置型格子屬性;規格描述)。
+
+    additive 契約:sheet 不存在 → [](安全降級)。by-name 讀。
+    座標 1-based(Reel=reel_id、Row=1..max_rows 局部列),對齊 06_Paylines 慣例。
+    交叉驗證:Reel 須存在;Row 須在 1..max_rows;落洞(遮罩外)→ 報錯
+    (洞格語義同 ReelLayout.active_local_rows,承 v7.15 座標 lint 單一真相)。
+    """
+    out = []
+    if df is None:
+        return out
+    sheet = "02d_Cell_Attributes"
+    reels = {r.reel_id: r for r in layout.reels}
+    for idx, r in df.iterrows():
+        aid = r.get("Attr_ID")
+        if pd.isna(aid) or not str(aid).strip():
+            continue
+        try:
+            reel = int(r.get("Reel", 0) or 0)
+            row = int(r.get("Row", 0) or 0)
+            if reel not in reels:
+                raise ConfigValidationError(
+                    sheet, f"格子屬性 '{aid}' 的 Reel {reel} 不存在於 02_Layout", row=idx + 2)
+            rl = reels[reel]
+            if row < 1 or row > rl.max_rows:
+                raise ConfigValidationError(
+                    sheet, f"格子屬性 '{aid}' 的 Row {row} 超出 R{reel} 範圍(1–{rl.max_rows})",
+                    row=idx + 2)
+            if (row - 1) not in rl.active_local_rows():
+                raise ConfigValidationError(
+                    sheet, f"格子屬性 '{aid}' 的 ({reel},{row}) 落在洞格(遮罩外)", row=idx + 2)
+            attr_raw = _to_str(r.get("Attr")).strip().upper()
+            attr = attr_raw or "MULT"
+            if attr not in _VALID_CELL_ATTRS:
+                raise ConfigValidationError(
+                    sheet,
+                    f"格子屬性 '{aid}' 的 Attr '{attr_raw}' 非合法值({'/'.join(_VALID_CELL_ATTRS)})",
+                    row=idx + 2)
+            _v_raw = r.get("Value")
+            if isinstance(_v_raw, float) and not pd.isna(_v_raw) and _v_raw == int(_v_raw):
+                _v = str(int(_v_raw))          # Excel 數字格 2 → pandas 2.0 → 還原 '2'
+            else:
+                _v = _to_str(_v_raw).strip()
+            out.append(CellAttr(
+                attr_id=str(aid).strip(),
+                reel=reel,
+                row=row,
+                attr=attr,
+                value=_v,
+                mode_scope=_to_str(r.get("Mode_Scope")).strip() or "ALL",
+                notes=_to_str(r.get("Notes")),
+            ))
+        except ConfigValidationError:
+            raise
+        except (ValueError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+    return out
+
+
 def _parse_combo_weights(
     df: pd.DataFrame | None, symbols: dict[str, SymbolDef], layout: LayoutConfig
 ) -> list[ComboWeightOverride]:
@@ -1142,6 +1321,7 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
 # v7.14:合法玩法種類(SPIN=旋轉;其餘=bonus 小遊戲)
 _VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION")
 _VALID_RESPIN_RESET = ("NEW_SYMBOL", "ANY_WIN", "NEVER")   # v8.5:Respin_Reset_On 合法值(另可留空)
+_VALID_PAY_TYPES = ("LINE", "WAYS", "SCATTER", "CLUSTER")   # v8.7 A-2:Pay_Type_Override 合法值(另可留空=繼承)
 
 
 def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
@@ -1200,6 +1380,14 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                     row=idx + 2)
             respin_reset_on = rr_raw
             respin_stop_cond = _to_str(r.get("Respin_Stop_Cond")).strip()
+            # v8.7 / R6 A-2:per-mode 賠付模型覆寫(by-name;缺欄/空 → 繼承全域;非法值 → 報錯)
+            pto_raw = _to_str(r.get("Pay_Type_Override")).strip().upper()
+            if pto_raw and pto_raw not in _VALID_PAY_TYPES:
+                raise ConfigValidationError(
+                    sheet,
+                    f"Pay_Type_Override '{pto_raw}' 非合法值({'/'.join(_VALID_PAY_TYPES)} 或留空=繼承全域)",
+                    row=idx + 2)
+            pay_type_override = pto_raw
             out[mode] = ModeConfig(
                 mode=mode,
                 trigger_condition=cond,
@@ -1219,6 +1407,7 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 respin_base=respin_base,
                 respin_reset_on=respin_reset_on,
                 respin_stop_cond=respin_stop_cond,
+                pay_type_override=pay_type_override,
             )
         except ConfigValidationError:
             raise

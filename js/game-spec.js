@@ -171,8 +171,13 @@
       reelLabels: Array.from({ length: reelCount }, (_, i) => 'R' + (i + 1)),
       subReelLabels: subReels.map((s) => s.label),
       // 連線型玩法（LINE/WAYS/MEGAWAYS）賠付連線數的上限 = 盤面輪數；
-      // 群集/任意(SCATTER/CLUSTER)則不受輪數限制（上限放寬到 20）。
-      maxLineLength: (payModel === 'SCATTER' || payModel === 'CLUSTER') ? 20 : reelCount,
+      // 群集/任意(SCATTER/CLUSTER)則不受輪數限制。
+      // v8.3 / R1 A-1:群集/任意上限由硬鎖 20 改為「盤面總格數」(7×7=49、8×8=64
+      //   等大盤 cluster 的高 size 檔位放得下);不低於 20 保底(不比既有行為更緊)。
+      maxLineLength: (payModel === 'SCATTER' || payModel === 'CLUSTER')
+        ? Math.max(20, (Array.isArray(layout) ? layout : [])
+            .reduce((sum, r) => sum + (Number(r && r.max_rows) || 0), 0))
+        : reelCount,
       isLineLike: (payModel === 'LINE' || payModel === 'WAYS' || payModel === 'MEGAWAYS'),
     };
   }

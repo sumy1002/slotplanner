@@ -165,6 +165,8 @@
     const multipliers = _readLS('slotplanner.aconfig.multipliers.v1', {});
     const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
     const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
+    const gamble      = _readLS('slotplanner.aconfig.gamble.v1', {});       // v8.6 R5:比倍(唯讀)
+    const cellAttrs   = _readLS('slotplanner.aconfig.cellattrs.v1', []);    // v8.8 R4:格子屬性(唯讀)
     // v8.2 / 缺失清單 F-19/F-20:機制文件補印 特色規則 / 棄牌 / 輪帶 / 格數分佈
     //   (皆為既有 LS 的唯讀取出;純描述輸出,本工具不執行、不計算 RTP)
     const discards    = _readLS('slotplanner.aconfig.discards.v1', []);
@@ -212,6 +214,8 @@
       // v5.6:
       jackpots: Array.isArray(jackpots) ? jackpots : [],
       betConfig: (betConfig && typeof betConfig === 'object') ? betConfig : {},
+      gamble: (gamble && typeof gamble === 'object') ? gamble : {},          // v8.6 R5
+      cellAttrs: Array.isArray(cellAttrs) ? cellAttrs : [],                   // v8.8 R4
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
       coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
       genLimits: Array.isArray(genLimits) ? genLimits : [],   // v7.11
@@ -775,11 +779,12 @@
     // ── Sheet 3：模式明細 ──
     const wsM = wb.addWorksheet('模式明細');
     // v8.5 / R3:尾端 additive 加「玩家擇一 / Hold&Win Respin」兩欄(前 9 欄不動)
+    // v8.7 / R6 A-2:再尾端加「賠付覆寫」欄(前 11 欄不動)
     wsM.columns = [{ width: 10 }, { width: 32 }, { width: 10 }, { width: 12 }, { width: 30 },
                    { width: 22 }, { width: 16 }, { width: 18 }, { width: 14 },
-                   { width: 14 }, { width: 30 }];
+                   { width: 14 }, { width: 30 }, { width: 12 }];
     ['模式', '觸發條件', '局數', '繼承全域', '說明', '倍數重置範圍', '倍數疊加', '封頂 / 上限', '玩法',
-     '玩家擇一', 'Hold&Win Respin'].forEach((h, i) =>
+     '玩家擇一', 'Hold&Win Respin', '賠付覆寫'].forEach((h, i) =>
       _cell(wsM, 1, i + 1, h, { bold: true, bg: C.band, fg: C.bandFg, h: 'center' }));
     cfg.modes.forEach((md, idx) => {
       const r = idx + 2;
@@ -796,6 +801,7 @@
       _cell(wsM, r, 9, _modeKindDesc(md), { h: 'center' });
       _cell(wsM, r, 10, _modeChoiceDesc(md), { h: 'center' });   // v8.5 R3
       _cell(wsM, r, 11, _modeRespinDesc(md));                       // v8.5 R3
+      _cell(wsM, r, 12, (md.pay_type_override || '').toUpperCase() || '—', { h: 'center' });   // v8.7 R6 A-2
     });
 
     // ── Sheet 4：機制備註 ──
@@ -850,6 +856,25 @@
       XR++;
     }
 
+    // v8.8 / R4 B-6:格子屬性(有資料才建表)
+    if (Array.isArray(cfg.cellAttrs) && cfg.cellAttrs.length) {
+      const _al = { MULT: '固定格乘數', ENHANCER: '強化格', FRAME: '火框', GOLD: '金框格', CUSTOM: '自訂' };
+      XR++;
+      xBand('格子屬性（位置型）');
+      ['ID', '位置', '型式', '值', '模式', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+      XR++;
+      cfg.cellAttrs.forEach(ca => {
+        if (!ca || !String(ca.attr_id || '').trim()) return;
+        _cell(wsX, XR, 1, ca.attr_id, { h: 'center' });
+        _cell(wsX, XR, 2, `(R${Number(ca.reel) || '?'}, ${Number(ca.row) || '?'})`, { h: 'center' });
+        _cell(wsX, XR, 3, _al[String(ca.attr || 'MULT').toUpperCase()] || ca.attr, { h: 'center' });
+        _cell(wsX, XR, 4, (ca.value || '').trim() || '—', { h: 'center' });
+        _cell(wsX, XR, 5, (ca.mode_scope && ca.mode_scope !== 'ALL') ? ca.mode_scope : '全部', { h: 'center' });
+        _cell(wsX, XR, 6, ca.notes || '');
+        XR++;
+      });
+    }
+
     // v7.11:產牌限制 / 生成期約束(有資料才建表)
     if (Array.isArray(cfg.genLimits) && cfg.genLimits.length) {
       const _zl = (z) => {
@@ -885,7 +910,10 @@
     const cvc = cfg.coinValues || {};
     // v6.3:已遷移時倍數/彩金以「符號」為單一真相;未遷移才回退 legacy 物件。
     const smv = _symbolMultView(cfg);
-    const hasBet  = bc.ante_bet_enabled || (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length);
+    // v8.6 / R5:RTP 版本 / 比倍有資料時也要輸出商業 band(不被加押/購買開關擋住)
+    const _hasRV  = Array.isArray(bc.rtp_variants) && bc.rtp_variants.some(v => v && String(v.variant || '').trim());
+    const _hasGm  = !!(cfg.gamble && cfg.gamble.enabled);
+    const hasBet  = bc.ante_bet_enabled || (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length) || _hasRV || _hasGm;
     const hasMul  = smv.migrated ? (smv.multSyms.length > 0)
                                  : (mpc.wild_mult_enabled || mpc.progress_enabled || mpc.random_enabled);
     const hasCoin = smv.migrated ? (smv.prizeSyms.length > 0)
@@ -909,15 +937,43 @@
           VR++;
         }
         if (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length) {
-          vHead(['Buy Feature', '目標模式', '成本×注額', 'RTP目標', '備註']);
+          // v8.6 / R5:備註欄前插「檔位」語意 → 維持 5 欄版面,檔位併進備註欄前綴
+          vHead(['Buy Feature', '目標模式', '成本×注額', 'RTP目標', '檔位 / 備註']);
+          const _kindLabel = { DIRECT: '直接購買', BOOST_RATE: '提升觸發率', SUPER: '進階版' };
           bc.buy_features.forEach(f => {
             _cell(wsV, VR, 1, f.bf_id || '', { h: 'center' });
             _cell(wsV, VR, 2, f.target_mode || '', { h: 'center' });
             _cell(wsV, VR, 3, Number(f.cost_mult) || 0, { h: 'center' });
             _cell(wsV, VR, 4, (Number(f.rtp_target) || 0) + '%', { h: 'center' });
-            _cell(wsV, VR, 5, f.notes || '');
+            _cell(wsV, VR, 5, `〔${_kindLabel[f.kind] || f.kind || '直接購買'}〕${f.notes || ''}`);
             VR++;
           });
+          if (bc.ante_buy_exclusive) { _cell(wsV, VR, 1, '互斥', { h: 'center', bold: true }); _cell(wsV, VR, 5, '啟用加押時停用購買'); VR++; }
+          if (bc.feature_drop_enabled) { _cell(wsV, VR, 1, 'Feature Drop', { h: 'center', bold: true }); _cell(wsV, VR, 5, bc.feature_drop_desc || '累積贏分折抵購買成本'); VR++; }
+        }
+        // v8.6 / R5 E-18:多市場 RTP 版本
+        const _rvs = Array.isArray(bc.rtp_variants) ? bc.rtp_variants.filter(v => v && String(v.variant || '').trim()) : [];
+        if (_rvs.length) {
+          vHead(['RTP 版本', '目標 RTP', '注限', '', '備註']);
+          _rvs.forEach(v => {
+            _cell(wsV, VR, 1, v.variant, { h: 'center' });
+            _cell(wsV, VR, 2, (Number(v.target_rtp) || 0) + '%', { h: 'center' });
+            _cell(wsV, VR, 3, Number(v.max_bet) || '—', { h: 'center' });
+            _cell(wsV, VR, 5, v.notes || '');
+            VR++;
+          });
+        }
+        // v8.6 / R5 E-16:比倍
+        const gm = cfg.gamble || {};
+        if (gm.enabled) {
+          vHead(['比倍', '型式', '倍數', '次數/封頂', '說明']);
+          const gtL = { CARD_COLOR: '猜牌色', CARD_SUIT: '猜花色', LADDER: '階梯', WHEEL: '轉輪', CUSTOM: '自訂' };
+          _cell(wsV, VR, 1, '啟用', { h: 'center' });
+          _cell(wsV, VR, 2, gtL[gm.gamble_type] || gm.gamble_type || '', { h: 'center' });
+          _cell(wsV, VR, 3, '×' + (gm.win_mult_options || '2'), { h: 'center' });
+          _cell(wsV, VR, 4, (Number(gm.max_rounds) > 0 ? `${gm.max_rounds} 次` : '無限') + (Number(gm.cap_mult) > 0 ? ` / 封頂 ×${gm.cap_mult}` : ''), { h: 'center' });
+          _cell(wsV, VR, 5, [gm.type_desc, gm.applies_to === 'BELOW_LIMIT' ? `僅 <×${Number(gm.applies_limit) || 0} 可比` : '', gm.collect_anytime !== false ? '可隨時收下' : '', gm.notes].filter(Boolean).join('；'));
+          VR++;
         }
         VR++;
       }
@@ -1651,6 +1707,13 @@
           L.push('- 玩家擇一：' + gs.map(([g, ms]) => `組「${g}」＝ ${ms.join(' / ')}（${ms.length} 選 1）`).join('；') + '。觸發時由玩家選擇進入其中一個模式。');
         }
       }
+      // v8.7 / R6 A-2:per-mode 賠付模型覆寫說明(有覆寫才輸出)
+      {
+        const ovr = cfg.modes.filter(md => (md.pay_type_override || '').trim());
+        if (ovr.length) {
+          L.push('- 賠付模型覆寫：' + ovr.map(md => `${md.mode} 改用 **${String(md.pay_type_override).toUpperCase()}**`).join('；') + '。其餘模式沿用全域賠付模型。');
+        }
+      }
       L.push('');
     }
 
@@ -1695,6 +1758,54 @@
       }
     }
 
+    // v8.6 / R5:商業設定(加押 / 購買 / 比倍 / 多市場 RTP;有資料才輸出;規格描述)
+    {
+      const bc = cfg.betConfig || {};
+      const gm = cfg.gamble || {};
+      const biz = [];
+      if (bc.ante_bet_enabled) {
+        let s = `- **加押（Extra Bet）**：成本 ×${Number(bc.ante_bet_mult) || 0} 注額，特色觸發率 ×${Number(bc.ante_bet_trigger_mult) || 0}`;
+        if (bc.ante_bet_desc) s += `。${bc.ante_bet_desc}`;
+        if (bc.ante_buy_exclusive) s += '。**啟用加押時停用購買（互斥）**';
+        biz.push(s + '。');
+      }
+      if (bc.buy_feature_enabled && Array.isArray(bc.buy_features) && bc.buy_features.length) {
+        const kindLabel = { DIRECT: '直接購買', BOOST_RATE: '提升觸發率（非直買）', SUPER: '進階強化版' };
+        bc.buy_features.forEach(f => {
+          biz.push(`- **購買 ${f.bf_id || ''}**〔${kindLabel[f.kind] || f.kind || '直接購買'}〕：進入 ${f.target_mode || '—'}，成本 ×${Number(f.cost_mult) || 0} 注額${Number(f.rtp_target) ? `，RTP 目標 ${f.rtp_target}%` : ''}${f.notes ? `。${f.notes}` : ''}`);
+        });
+        if (bc.feature_drop_enabled) biz.push(`- **Feature Drop 折抵**：${bc.feature_drop_desc || '累積贏分折抵購買成本（細節待補）'}`);
+      }
+      if (gm.enabled) {
+        const gtLabel = { CARD_COLOR: '猜牌色（×2）', CARD_SUIT: '猜花色（×4）', LADDER: '階梯比倍', WHEEL: '轉輪比倍', CUSTOM: '自訂' };
+        const gp = [`型式 ${gtLabel[gm.gamble_type] || gm.gamble_type}`];
+        if (gm.type_desc) gp.push(gm.type_desc);
+        if (gm.win_mult_options) gp.push(`可選倍數 ${gm.win_mult_options}`);
+        gp.push(Number(gm.max_rounds) > 0 ? `最多連續 ${gm.max_rounds} 次` : '次數無限');
+        if (Number(gm.cap_mult) > 0) gp.push(`封頂 ×${gm.cap_mult} 注額`);
+        gp.push(gm.applies_to === 'BELOW_LIMIT' ? `僅低於 ×${Number(gm.applies_limit) || 0} 注額的贏分可比` : '所有贏分可比');
+        if (gm.collect_anytime !== false) gp.push('可隨時收下');
+        biz.push(`- **比倍（Gamble）**：${gp.join('；')}${gm.notes ? `。${gm.notes}` : ''}`);
+      }
+      const rvs = Array.isArray(bc.rtp_variants) ? bc.rtp_variants.filter(v => v && String(v.variant || '').trim()) : [];
+      if (biz.length || rvs.length) {
+        L.push('## 商業設定（加押 / 購買 / 比倍 / RTP 版本）');
+        L.push('');
+        L.push('> 規格描述，供數值 / 認證流程遵循；本工具不執行、不計算 RTP。');
+        L.push('');
+        biz.forEach(b => L.push(b));
+        if (rvs.length) {
+          L.push('');
+          L.push('**多市場 RTP 出證版本**：');
+          L.push('');
+          L.push('| 版本 / 市場 | 目標 RTP | 注限 | 備註 |');
+          L.push('| --- | --- | --- | --- |');
+          rvs.forEach(v => L.push(`| ${_mdCell(v.variant)} | ${Number(v.target_rtp) || 0}% | ${Number(v.max_bet) ? _mdCell(String(v.max_bet)) : '—'} | ${_mdCell(v.notes || '')} |`));
+        }
+        L.push('');
+      }
+    }
+
     // 圖示定義
     L.push('## 圖示定義');
     L.push('');
@@ -1712,6 +1823,17 @@
         L.push('僅在特定模式出現的圖示：');
         scoped.forEach(s => {
           L.push(`- **${s.name || _symId(s)}**：僅出現於 ${String(s.mode_scope).trim()}（其餘模式不產出此圖示）`);
+        });
+      }
+    }
+    // v8.7 / R6 D-14:per-instance 乘數宣告(有宣告才輸出)
+    {
+      const inst = (cfg.symbols || []).filter(s => s.instance_mult === true);
+      if (inst.length) {
+        L.push('');
+        L.push('每顆實例攜帶自身乘數的圖示（xWays / 落地各帶倍數式）：');
+        inst.forEach(s => {
+          L.push(`- **${s.name || _symId(s)}**：每顆實例各自攜帶乘數；取值與疊加行為見規則 / 備註。`);
         });
       }
     }
@@ -1755,6 +1877,14 @@
       L.push(`- 滾動方式：${parts.join('；')}`);
     }
     L.push(`- 計分方式：${m.score_formula}`);
+    // v8.7 / R6 A-4:雙向 WAYS 去重宣告(方向=BOTH 且賠付=WAYS 時輸出)
+    {
+      const gg = cfg.global || {};
+      const dir = String(gg.payline_direction || gg.ways_direction || 'LTR').toUpperCase();
+      if (dir === 'BOTH' && String(gg.pay_type).toUpperCase() === 'WAYS') {
+        L.push(`- 雙向計分去重：${gg.ways_both_dedup !== false ? '同一符號組合左右兩向皆成立時僅計分一次' : '左右兩向各自計分（不去重）'}（規格宣告，供數值端遵循）`);
+      }
+    }
     if (!cfg.derived.isWaysLike && Array.isArray(cfg.paylines) && cfg.paylines.length) {
       L.push(`- 中獎線數：${cfg.paylines.length} 條`);
     }
@@ -1800,7 +1930,9 @@
         L.push('');
         multSyms.forEach(s => {
           const parts = s.mult_values.map(v => `×${v.mult}` + (v.weight ? `（權重 ${v.weight}）` : ''));
-          L.push(`- ${s.name || _symId(s)} 倍數：${parts.join('、')}`);
+          // v8.7 / R6 D-14:per-instance 乘數宣告(每顆實例攜帶自身乘數;xWays 式)
+          const instTag = s.instance_mult === true ? '【每顆實例各帶乘數】' : '';
+          L.push(`- ${s.name || _symId(s)} 倍數${instTag}：${parts.join('、')}`);
           // v8.3 / R1 D-13:per-mode 權重(各模式值不同時才輸出;如「NG 0 / FG 100」)
           s.mult_values.forEach(v => {
             const wbm = (v.weight_by_mode && typeof v.weight_by_mode === 'object') ? v.weight_by_mode : {};
@@ -1842,6 +1974,25 @@
         L.push(beh || '_（待填）_');
         L.push('');
       });
+    }
+
+    // v8.8 / R4 B-6:格子屬性(有資料才輸出;規格描述)
+    if (Array.isArray(cfg.cellAttrs) && cfg.cellAttrs.length) {
+      const _attrLabel = { MULT: '固定格乘數', ENHANCER: '強化格', FRAME: '火框 / 特殊框', GOLD: '金框格', CUSTOM: '自訂' };
+      L.push('## 格子屬性');
+      L.push('');
+      L.push('| 位置 | 型式 | 值 | 適用模式 | 備註 |');
+      L.push('| --- | --- | --- | --- | --- |');
+      cfg.cellAttrs.forEach(ca => {
+        if (!ca || !String(ca.attr_id || '').trim()) return;
+        const at = String(ca.attr || 'MULT').toUpperCase();
+        const scope = (ca.mode_scope && ca.mode_scope !== 'ALL') ? ca.mode_scope : '全部';
+        const notes = String(ca.notes || '').replace(/\|/g, '\\|');
+        L.push(`| (R${Number(ca.reel) || '?'}, 列 ${Number(ca.row) || '?'}) | ${_attrLabel[at] || at} | ${(ca.value || '').trim() ? _mdCell(String(ca.value)) : '—'} | ${scope} | ${notes} |`);
+      });
+      L.push('');
+      L.push('> 位置型格子屬性：固定盤面座標上的乘數 / 強化 / 框格宣告，供實作端遵循；本工具不執行。');
+      L.push('');
     }
 
     // v7.11:產牌限制 / 生成期約束(有資料才輸出)

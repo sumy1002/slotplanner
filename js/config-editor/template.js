@@ -1098,6 +1098,54 @@
           </div><!-- /cfg-layout-v2-preview -->
 
         </div><!-- /cfg-layout-v2-body -->
+
+        <!-- v8.8 / R4 B-6:位置型格子屬性(02d_Cell_Attributes;規格描述,引擎不消費) -->
+        <div class="cfg-section cfg-section-card" style="flex-shrink:0; margin-top:10px;">
+          <div class="cfg-section-title">
+            <span class="cfg-section-title-text">格子屬性 <span class="cfg-key">02d_Cell_Attributes</span></span>
+          </div>
+          <div class="cfg-hint">位置型格子屬性：固定格乘數(Cygnus) / 強化格 / 火框 / 金框格。座標與中獎線同慣例(R 輪, 列 1..該輪列數)；純規格描述,行為細節寫備註或規則。</div>
+          <div v-if="cellAttrs.length === 0" class="cfg-hint" style="margin-bottom:6px;">尚未定義格子屬性。</div>
+          <div v-for="(ca, ci) in cellAttrs" :key="'ca' + ci" class="cfg-bf-row">
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">ID</label>
+              <input class="input input-w-id cfg-mono" type="text" v-model.trim="ca.attr_id" placeholder="CA1">
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">Reel</label>
+              <select class="input input-w-num" v-model.number="ca.reel">
+                <option v-for="r in layout" :key="'car'+r.reel_id" :value="r.reel_id">R{{ r.reel_id }}</option>
+              </select>
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">列 <span class="cfg-key">1-based</span></label>
+              <input class="input input-w-num input-center" type="number" min="1" step="1" v-model.number="ca.row">
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">型式</label>
+              <select class="input input-w-name" v-model="ca.attr">
+                <option v-for="o in CELL_ATTR_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">值 <span class="cfg-key">MULT=倍數</span></label>
+              <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="ca.value" placeholder="2">
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">適用模式</label>
+              <input class="input input-w-id cfg-mono" type="text" v-model.trim="ca.mode_scope" placeholder="ALL">
+            </div>
+            <div class="cfg-bf-cell cfg-bf-cell-grow">
+              <label class="cfg-label">備註</label>
+              <input class="input input-w-name" type="text" v-model.trim="ca.notes" placeholder="落在此格的贏分 ×2">
+            </div>
+            <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeCellAttr(ci)" title="刪除">✕</button>
+          </div>
+          <button class="cfg-mode-add-btn" @click="addCellAttr">
+            <span style="font-size:16px">+</span>
+            <span>新增格子屬性</span>
+          </button>
+        </div>
       </div>
 
       <!-- ═══════ 03_Symbols 符號清單(整合自 SymbolPage)═══════ -->
@@ -4351,6 +4399,11 @@
               <input type="checkbox" v-model="g.longest_line_once">
               <span>最長連線僅計分一次 <span class="cfg-hint" style="display:inline;">（雙向時,同一條最長連線不重複左右各算一次）</span></span>
             </label>
+            <!-- v8.7 / R6 A-4:雙向 WAYS 去重宣告(規格描述) -->
+            <label class="cfg-checkbox-row" v-if="curScanDir === 'BOTH' && (g.pay_type === 'WAYS')" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+              <input type="checkbox" v-model="g.ways_both_dedup">
+              <span>雙向 WAYS 同組合僅計分一次 <span class="cfg-hint" style="display:inline;">（同一符號組合左右兩向皆成立時不重複計分；規格宣告,供數值端遵循）</span></span>
+            </label>
           </div>
 
           <div class="cfg-field" v-if="g.pay_type === 'CLUSTER'">
@@ -4746,6 +4799,18 @@
                              v-model.trim="m.respin_stop_cond" :disabled="!(Number(m.respin_base) > 0)">
                       <div class="cfg-hint">符號落地即鎖、respin 計數的 Hold&Win 描述(Money Train / Lucky Wagon);0 = 未啟用。開放式停止條件(Toro「直到某符號出現」)寫在停止條件欄。</div>
                     </div>
+                    <!-- v8.7 / R6 A-2:per-mode 賠付模型覆寫(規格描述) -->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">賠付模型覆寫(可選) <span class="cfg-key">pay_type_override</span></label>
+                      <select class="input input-w-name" v-model="m.pay_type_override">
+                        <option value="">（繼承全域）</option>
+                        <option value="LINE">LINE（固定中獎線）</option>
+                        <option value="WAYS">WAYS（相鄰全路徑）</option>
+                        <option value="SCATTER">SCATTER（任意位置散佈）</option>
+                        <option value="CLUSTER">CLUSTER（相鄰成群）</option>
+                      </select>
+                      <div class="cfg-hint">混賠付模型遊戲用（NG 走 LINE、FG 走 SCATTER 等）；留空 = 沿用全域賠付模型。純描述,計分實作歸下游。</div>
+                    </div>
                   </div>
 
                   <!-- v7.14:bonus 小遊戲編輯器(mode_kind != SPIN)-->
@@ -5004,6 +5069,15 @@
               <input class="input input-w-name" type="text" v-model.trim="betConfig.ante_bet_desc"
                      placeholder="啟用後 SCAT 觸發率提升 ×2，費用 ×1.25 注額">
             </div>
+            <!-- v8.6 / R5 E-15:Ante/Buy 互斥宣告(規格描述) -->
+            <div class="cfg-field" style="margin-top:4px;">
+              <label class="chk">
+                <input type="checkbox" v-model="betConfig.ante_buy_exclusive">
+                <span class="box"></span>
+                <span>與購買互斥 <span class="cfg-key">ante_buy_exclusive</span></span>
+              </label>
+              <div class="cfg-hint">啟用加押時停用購買功能（Pragmatic 式）；寫進規格書供實作遵循。</div>
+            </div>
           </template>
           <div v-else class="cfg-section-off-hint">加押功能未啟用 —— 玩家可支付額外成本換取更高特色觸發率。開啟開關以設定。</div>
           </div><!-- /cfg-card-body -->
@@ -5054,6 +5128,14 @@
                   <input class="input input-w-num input-center" type="number" min="0" max="102" step="0.1"
                          v-model.number="bf.rtp_target">
                 </div>
+                <!-- v8.6 / R5 E-15:購買檔位型式 -->
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">檔位 <span class="cfg-key">kind</span></label>
+                  <select class="input input-w-id" v-model="bf.kind"
+                          title="DIRECT=直接進 feature;BOOST_RATE=提升觸發率(非直買);SUPER=進階強化版">
+                    <option v-for="k in BF_KIND_OPTIONS" :key="k.value" :value="k.value">{{ k.label }}</option>
+                  </select>
+                </div>
                 <div class="cfg-bf-cell cfg-bf-cell-grow">
                   <label class="cfg-label">備註</label>
                   <input class="input input-w-name" type="text" v-model.trim="bf.notes"
@@ -5074,12 +5156,123 @@
               <span style="font-size:16px">+</span>
               <span>新增 Buy Feature</span>
             </button>
+
+            <!-- v8.6 / R5 E-15:Feature Drop 折抵(BTG 式;規格描述) -->
+            <div class="cfg-field" style="margin-top:10px;">
+              <label class="chk">
+                <input type="checkbox" v-model="betConfig.feature_drop_enabled">
+                <span class="box"></span>
+                <span>Feature Drop 折抵 <span class="cfg-key">feature_drop</span></span>
+              </label>
+              <div class="cfg-hint">累積贏分折抵購買成本（BTG 式）；細節描述於下欄。</div>
+              <input v-if="betConfig.feature_drop_enabled" class="input" type="text" style="margin-top:6px;"
+                     placeholder="折抵細節（如：每局贏分自動折抵購買價,折至 0 即免費進入）"
+                     v-model.trim="betConfig.feature_drop_desc">
+            </div>
           </template>
           <div v-else class="cfg-section-off-hint">購買功能未啟用 —— 玩家可付費直接進入指定模式。開啟開關以定義各模式的購買成本與 RTP 目標。</div>
           </div><!-- /cfg-card-body -->
         </div>
 
+        <!-- v8.6 / R5 E-18:多市場 RTP 出證版本 + 市場別注限(規格描述;存於 betconfig.v1) -->
+        <div class="cfg-section cfg-section-card">
+          <div class="cfg-section-title">
+            <span class="cfg-section-title-text">多市場 RTP 版本 <span class="cfg-key">14b_RTP_Variants</span></span>
+          </div>
+          <div class="cfg-hint">出證用 RTP 版本（如 96.5 / 94 / 92）與市場別注限；純規格描述,供數值 / 認證流程遵循。</div>
+          <div v-if="(betConfig.rtp_variants || []).length === 0" class="cfg-hint" style="margin-bottom:6px;">尚未定義版本。</div>
+          <div v-for="(rv, ri) in (betConfig.rtp_variants || [])" :key="'rv' + ri" class="cfg-bf-row">
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">版本 / 市場</label>
+              <input class="input input-w-id cfg-mono" type="text" v-model.trim="rv.variant" placeholder="EU_96">
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">目標 RTP <span class="cfg-key">%</span></label>
+              <input class="input input-w-num input-center" type="number" min="0" max="120" step="0.1" v-model.number="rv.target_rtp">
+            </div>
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">注限 <span class="cfg-key">0=未設</span></label>
+              <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="rv.max_bet">
+            </div>
+            <div class="cfg-bf-cell cfg-bf-cell-grow">
+              <label class="cfg-label">備註</label>
+              <input class="input input-w-name" type="text" v-model.trim="rv.notes" placeholder="MGA 出證 / 亞洲市場">
+            </div>
+            <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeRtpVariant(ri)" title="刪除">✕</button>
+          </div>
+          <button class="cfg-mode-add-btn" @click="addRtpVariant">
+            <span style="font-size:16px">+</span>
+            <span>新增 RTP 版本</span>
+          </button>
+        </div>
+
       </div><!-- /bet_config -->
+
+      <!-- ─── v8.6 / R5 E-16:18_Gamble 比倍（規格描述,執行歸下游）─── -->
+      <div v-else-if="active === 'gamble'" class="cfg-form cfg-betconfig-form">
+        <div class="cfg-section cfg-section-card">
+          <div class="cfg-section-title cfg-section-title-switch">
+            <span class="cfg-section-title-text">比倍 <span class="cfg-key">18_Gamble</span></span>
+            <button type="button" class="cfg-section-switch" :class="{ on: gamble.enabled }"
+                    role="switch" :aria-checked="gamble.enabled"
+                    @click.stop="gamble.enabled = !gamble.enabled"
+                    :title="gamble.enabled ? '已啟用（點擊關閉）' : '已關閉（點擊啟用）'">
+              <span class="cfg-section-switch-knob"></span>
+            </button>
+          </div>
+          <template v-if="gamble.enabled">
+            <div class="cfg-hint">贏分後可選擇比倍（Gamble / Double-Up）。純規格描述：本工具不執行、不計算 RTP。</div>
+            <div class="cfg-field">
+              <label class="cfg-label">型式 <span class="cfg-key">gamble_type</span></label>
+              <select class="input input-w-name" v-model="gamble.gamble_type">
+                <option v-for="t in GAMBLE_TYPE_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </div>
+            <div class="cfg-field" v-if="gamble.gamble_type === 'LADDER' || gamble.gamble_type === 'WHEEL' || gamble.gamble_type === 'CUSTOM'">
+              <label class="cfg-label">型式補充 <span class="cfg-key">type_desc</span></label>
+              <input class="input" type="text" v-model.trim="gamble.type_desc"
+                     placeholder="階梯表 / 轉輪分段 / 自訂規則描述">
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label">可選倍數 <span class="cfg-key">win_mult_options</span></label>
+              <input class="input input-w-name cfg-mono" type="text" v-model.trim="gamble.win_mult_options" placeholder="2,4">
+              <div class="cfg-hint">逗號分隔（猜牌色=2；含花色=2,4）。</div>
+            </div>
+            <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+              <div class="cfg-field">
+                <label class="cfg-label">最大次數 <span class="cfg-key">0=無限</span></label>
+                <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="gamble.max_rounds">
+              </div>
+              <div class="cfg-field">
+                <label class="cfg-label">封頂 <span class="cfg-key">×注額,0=無</span></label>
+                <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="gamble.cap_mult">
+              </div>
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label">適用範圍 <span class="cfg-key">applies_to</span></label>
+              <select class="input input-w-name" v-model="gamble.applies_to">
+                <option value="ALL_WINS">所有贏分可比</option>
+                <option value="BELOW_LIMIT">僅低於門檻的贏分可比</option>
+              </select>
+              <input v-if="gamble.applies_to === 'BELOW_LIMIT'" class="input input-w-num input-center" type="number"
+                     min="0" step="any" style="margin-top:6px;" v-model.number="gamble.applies_limit"
+                     placeholder="門檻 ×注額">
+            </div>
+            <div class="cfg-field">
+              <label class="chk">
+                <input type="checkbox" v-model="gamble.collect_anytime">
+                <span class="box"></span>
+                <span>可隨時收下 <span class="cfg-key">collect_anytime</span></span>
+              </label>
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label">備註 <span class="cfg-key">notes</span></label>
+              <input class="input" type="text" v-model.trim="gamble.notes" placeholder="免費局贏分不可比倍…">
+            </div>
+          </template>
+          <div v-else class="cfg-section-off-hint">比倍未啟用 —— 贏分後猜牌色 / 花色 / 階梯翻倍。開啟開關以設定。</div>
+        </div>
+      </div><!-- /gamble -->
 
       <!-- ─── 04b:真實輪帶（v6.0-b）─── -->
       <div v-else-if="active === 'reel_strips'" class="cfg-form cfg-strips-form">

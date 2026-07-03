@@ -69,6 +69,9 @@
   SP.ConfigEditor.setup = function (props, { emit }) {
       const active   = ref('rules');  // v7.10:01_Global 已併入規則頁;落地改規則頁(模式子分頁)
       const g        = reactive(loadGlobal());
+      // v8.7 / R6 A-4:全域 additive 欄位正規化(DEFAULT_GLOBAL 在 helpers,不在 scope;此處補預設)。
+      //   ways_both_dedup:雙向 WAYS 同組合僅計一次(規格描述)。01_Global 匯出走 Object.entries(g) 自動帶。
+      if (g.ways_both_dedup == null) g.ways_both_dedup = true;
 
       // ──────────────────────────────────────────────────────────
       //  v5.0-b:主題單源化 — C12 重複實作已移除
@@ -172,7 +175,10 @@
       // v7.10:盤面規則 vs 通用規則分流(選項 A,依 action type 黑白判定)。
       //   規則只要含任一「盤面/符號幾何」action → 盤面規則;完全不含 → 通用規則。一條規則唯一歸屬。
       const BOARD_ACTION_TYPES = new Set([
-        'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY', 'MOVE', 'SWAP', 'STICKY', 'LOCK_REEL'
+        'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY', 'MOVE', 'SWAP', 'STICKY', 'LOCK_REEL',
+        // v8.9.1 bug 修復:v8.4 新增七枚盤面/圖示 action 漏收 → 曾被錯分到「通用規則」
+        //   子分頁(違反分流守則 #119 語義:盤面操作歸盤面)。
+        'EXPAND_REEL', 'NUDGE', 'WALK', 'REVEAL_AS', 'SPLIT', 'DESTROY_ADJACENT', 'GROW_BOARD',
       ]);
       function isBoardRule(r) {
         if (!r || !Array.isArray(r.actions)) return false;
@@ -1038,6 +1044,8 @@
         if (m.respin_base == null) m.respin_base = 0;
         if (m.respin_reset_on == null) m.respin_reset_on = '';   // '' | NEW_SYMBOL | ANY_WIN | NEVER
         if (m.respin_stop_cond == null) m.respin_stop_cond = '';
+        // v8.7 / R6 A-2:per-mode 賠付模型覆寫('' = 繼承全域)
+        if (m.pay_type_override == null) m.pay_type_override = '';
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1120,6 +1128,7 @@
         if (m.cap_enabled === 'Y' && (m.cap_value || '')) return true;
         if ((m.trigger_pays || []).length > 0) return true;
         if ((m.choice_group || '') || Number(m.respin_base) > 0) return true;   // v8.5 R3
+        if ((m.pay_type_override || '')) return true;                            // v8.7 R6 A-2
         return false;
       }
       // 玩法設定收合摘要:精要描述
@@ -1136,6 +1145,7 @@
         // v8.5 / R3
         if (m.choice_group) parts.push('擇一組 ' + m.choice_group);
         if (Number(m.respin_base) > 0) parts.push('Respin ' + m.respin_base);
+        if (m.pay_type_override) parts.push('賠付 ' + m.pay_type_override);   // v8.7 R6 A-2
         return parts.join(' · ');
       }
       // v8.0:關聯 Bonus 子卡已移除(bonus 併入 mode 玩法種類);modeBn* helpers 一併移除。
@@ -3010,7 +3020,57 @@
       //   (watch 於 selectedPaylineIdx 宣告後註冊,見下方)
 
       // ── v5.3:投注結構(14_Bet_Config)──
-      const betConfig = reactive(loadBetConfig());
+      // v8.6 / R5:betConfig additive 欄位正規化(檔位/互斥/Feature Drop/RTP 版本;
+      //   defaultBetConfig 在 helpers,不在 scope;此處補預設,舊資料載入即預設,向後相容)。
+      function _ensureBetConfigFields(bc) {
+        if (!bc || typeof bc !== 'object') return bc;
+        if (bc.ante_buy_exclusive == null) bc.ante_buy_exclusive = false;
+        if (bc.feature_drop_enabled == null) bc.feature_drop_enabled = false;
+        if (bc.feature_drop_desc == null) bc.feature_drop_desc = '';
+        if (!Array.isArray(bc.rtp_variants)) bc.rtp_variants = [];
+        for (const bf of (Array.isArray(bc.buy_features) ? bc.buy_features : [])) {
+          if (bf && bf.kind == null) bf.kind = 'DIRECT';   // DIRECT / BOOST_RATE / SUPER
+        }
+        return bc;
+      }
+      const betConfig = reactive(_ensureBetConfigFields(loadBetConfig()));
+      const BF_KIND_OPTIONS = [
+        { value: 'DIRECT',     label: '直接購買(直接進 feature)' },
+        { value: 'BOOST_RATE', label: '提升觸發率(非直買,X-iter 式)' },
+        { value: 'SUPER',      label: '進階強化版(Super Buy)' },
+      ];
+      function addRtpVariant() {
+        _ensureBetConfigFields(betConfig);
+        betConfig.rtp_variants.push({ variant: '', target_rtp: 96, max_bet: 0, notes: '' });
+      }
+      function removeRtpVariant(idx) {
+        if (Array.isArray(betConfig.rtp_variants)) betConfig.rtp_variants.splice(idx, 1);
+      }
+
+      // ── v8.6 / R5 E-16:比倍(18_Gamble)──
+      //   新 LS key slotplanner.aconfig.gamble.v1(已納 aconfig-xlsx 快照/還原兩處);
+      //   規格描述,引擎不消費。load/save 內聯(不動 helpers 純函式區)。
+      const GAMBLE_LS_KEY = 'slotplanner.aconfig.gamble.v1';
+      function _defaultGamble() {
+        return { enabled: false, gamble_type: 'CARD_COLOR', type_desc: '',
+                 win_mult_options: '2', max_rounds: 5, cap_mult: 0,
+                 applies_to: 'ALL_WINS', applies_limit: 0, collect_anytime: true, notes: '' };
+      }
+      function _loadGamble() {
+        try {
+          const raw = localStorage.getItem(GAMBLE_LS_KEY);
+          if (!raw) return _defaultGamble();
+          return { ..._defaultGamble(), ...JSON.parse(raw) };
+        } catch (e) { return _defaultGamble(); }
+      }
+      const gamble = reactive(_loadGamble());
+      const GAMBLE_TYPE_OPTIONS = [
+        { value: 'CARD_COLOR', label: '猜牌色(紅/黑,×2)' },
+        { value: 'CARD_SUIT',  label: '猜花色(×4)' },
+        { value: 'LADDER',     label: '階梯比倍(Ladder)' },
+        { value: 'WHEEL',      label: '轉輪比倍' },
+        { value: 'CUSTOM',     label: '自訂(於補充描述)' },
+      ];
       function addBuyFeature() {
         const usedModes = new Set(betConfig.buy_features.map(bf => bf.target_mode));
         const unusedMode = modes.find(m => m.mode && !usedModes.has(m.mode));
@@ -3159,6 +3219,12 @@
           modes.push(nm);
           taken.add(g.bonus_id);
           added++;
+        }
+        // v8.9.1 bug 修復:此函式在 watch(modes) 掛載「之前」執行 → 遷移的 modes 變更
+        //   不會被自動存檔;而舊 key 已刪 → 使用者重整一次即永久遺失 bonus 資料。
+        //   修法:遷移成功即「先主動落盤、再刪舊 key」(原子順序,中途中斷也不丟資料)。
+        if (added) {
+          try { saveModes(modes.map(x => ({ ...x }))); } catch (e) { return; }   // 落盤失敗則保留舊 key,下次再遷
         }
         localStorage.removeItem('slotplanner.aconfig.bonusgames.v1');
         if (added) emit('status', {
@@ -3662,7 +3728,7 @@
         }
         // 檢查重疊
         if (paylineOverlapIdxs.value.has(selectedPaylineIdx.value)) {
-          return { kind: 'warn', msg: '前 3 格與其他中獎線重疊,匯出時會被擋掉' };
+          return { kind: 'warn', msg: '前 3 格與其他中獎線重疊(官方線表常見;僅提醒,不阻擋匯出/載入)' };   // v8.7 A-3 降級
         }
         return { kind: 'ok', msg: `✓ 路徑有效,共 ${v.points.length} 個點` };
       });
@@ -3966,6 +4032,34 @@
       const genLimits = reactive(loadGenLimits());
       // 掛上共享參考(symbol.js 透過 SP.genLimits 讀寫同一陣列;reactivity 跨元件同步)
       SP.genLimits = genLimits;
+
+      // ── v8.8 / R4 B-6:位置型格子屬性(02d_Cell_Attributes)──
+      //   新 LS key slotplanner.aconfig.cellattrs.v1(已納 aconfig-xlsx 快照/還原兩處);
+      //   規格描述,引擎不消費。load/save 內聯(不動 helpers 純函式區,比照 gamble)。
+      const CELLATTRS_LS_KEY = 'slotplanner.aconfig.cellattrs.v1';
+      function _loadCellAttrs() {
+        try {
+          const raw = localStorage.getItem(CELLATTRS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+      }
+      const cellAttrs = reactive(_loadCellAttrs());
+      const CELL_ATTR_OPTIONS = [
+        { value: 'MULT',     label: '固定格乘數(MULT)' },
+        { value: 'ENHANCER', label: '強化格(ENHANCER)' },
+        { value: 'FRAME',    label: '火框 / 特殊框(FRAME)' },
+        { value: 'GOLD',     label: '金框格(GOLD)' },
+        { value: 'CUSTOM',   label: '自訂(於備註描述)' },
+      ];
+      function addCellAttr() {
+        const taken = new Set(cellAttrs.map(c => c.attr_id).filter(Boolean));
+        let i = cellAttrs.length + 1;
+        while (taken.has('CA' + i)) i++;
+        cellAttrs.push({ attr_id: 'CA' + i, reel: 1, row: 1, attr: 'MULT',
+                         value: '', mode_scope: 'ALL', notes: '' });
+      }
+      function removeCellAttr(idx) { cellAttrs.splice(idx, 1); }
       function _nextGenLimitId() {
         const taken = new Set(genLimits.map(g => g.limit_id).filter(Boolean));
         let i = genLimits.length + 1;
@@ -6024,12 +6118,14 @@
       const actionsByGroup = computed(() => {
         const numericTypes = new Set(['ADJUST_MULTIPLIER', 'UPDATE_GLOBAL', 'UPDATE_LOCAL']);
         const flowTypes    = new Set(['EMIT_EVENT', 'SWITCH_MODE', 'AWARD_FREE_SPIN', 'HALT_RESOLUTION']);
-        const boardTypes   = new Set(['BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY',
-                                       'MOVE', 'SWAP', 'STICKY', 'LOCK_REEL']);
+        // v8.9.1 bug 修復:此處原為硬編碼 boardTypes 白名單,v8.4 七枚新 action
+        //   (EXPAND_REEL/NUDGE/WALK/REVEAL_AS/SPLIT/DESTROY_ADJACENT/GROW_BOARD)不在名單
+        //   → 動作下拉完全選不到、UI 無法新增。改為「非 numeric/flow 一律歸盤面/圖示組」,
+        //   之後 ACTION_CATALOG 新增 action 自動出現在下拉(防再犯)。
         return {
           numeric: ACTION_CATALOG.filter(a => numericTypes.has(a.type)),
           flow:    ACTION_CATALOG.filter(a => flowTypes.has(a.type)),
-          board:   ACTION_CATALOG.filter(a => boardTypes.has(a.type)),
+          board:   ACTION_CATALOG.filter(a => !numericTypes.has(a.type) && !flowTypes.has(a.type)),
         };
       });
 
@@ -6339,6 +6435,16 @@
               const c1 = asStr(row.getCell(1).value).trim();
               if (!c1) return;                        // 空行分隔
               if (c1 === 'BF_ID') { inBF = true; return; } // Buy Feature 區表頭
+              // v8.6:互斥/Feature Drop KV 附加在 sheet 尾端(BF 列之後)——以 key 名攔截,
+              //   不論位於 BF 區前後皆正確歸位(與 Python loader 掃描式對齊)。
+              const _tailKV = ['Ante_Buy_Exclusive', 'Feature_Drop_Enabled', 'Feature_Drop_Desc'];
+              if (_tailKV.includes(c1)) {
+                const v = row.getCell(2).value;
+                if (c1 === 'Ante_Buy_Exclusive')        base.ante_buy_exclusive   = asBool(v);
+                else if (c1 === 'Feature_Drop_Enabled') base.feature_drop_enabled = asBool(v);
+                else if (c1 === 'Feature_Drop_Desc')    base.feature_drop_desc    = asStr(v);
+                return;
+              }
               if (!inBF) {
                 // Ante Bet 區:Key / Value
                 const v = row.getCell(2).value;
@@ -6355,13 +6461,69 @@
                 f.rtp_target  = asNum(row.getCell(4).value, 0);
                 f.enabled     = asBool(row.getCell(5).value);
                 f.notes       = asStr(row.getCell(6).value);
+                f.kind        = asStr(row.getCell(7).value).trim().toUpperCase() || 'DIRECT';   // v8.6 E-15(舊檔缺 → DIRECT)
                 bf.push(f);
               }
             });
             base.buy_features = bf;
             for (const k of Object.keys(betConfig)) delete betConfig[k];
-            Object.assign(betConfig, base);
+            Object.assign(betConfig, _ensureBetConfigFields(base));
           } else warnings.push('找不到 14_Bet_Config(舊檔?押注設定未更新)');
+
+          // ── v8.8 / R4 B-6:02d_Cell_Attributes(舊檔無 → 保持;有 sheet 即覆蓋)──
+          const ws02d = wb.getWorksheet('02d_Cell_Attributes');
+          if (ws02d) {
+            const cas = [];
+            ws02d.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const aid = asStr(row.getCell(1).value).trim();
+              if (!aid) return;
+              cas.push({ attr_id: aid, reel: asNum(row.getCell(2).value, 1),
+                         row: asNum(row.getCell(3).value, 1),
+                         attr: asStr(row.getCell(4).value).trim().toUpperCase() || 'MULT',
+                         value: asStr(row.getCell(5).value).trim(),
+                         mode_scope: asStr(row.getCell(6).value).trim() || 'ALL',
+                         notes: asStr(row.getCell(7).value) });
+            });
+            cellAttrs.splice(0, cellAttrs.length, ...cas);
+          }
+
+          // ── v8.6 / R5 E-18:14b_RTP_Variants(舊檔無 → 清空;有 sheet 即覆蓋)──
+          const ws14b = wb.getWorksheet('14b_RTP_Variants');
+          if (ws14b) {
+            const rvs = [];
+            ws14b.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const v = asStr(row.getCell(1).value).trim();
+              if (!v) return;
+              rvs.push({ variant: v, target_rtp: asNum(row.getCell(2).value, 0),
+                         max_bet: asNum(row.getCell(3).value, 0), notes: asStr(row.getCell(4).value) });
+            });
+            betConfig.rtp_variants = rvs;
+          }
+
+          // ── v8.6 / R5 E-16:18_Gamble(KV;舊檔無 → 維持現值)──
+          const ws18 = wb.getWorksheet('18_Gamble');
+          if (ws18) {
+            const g = _defaultGamble();
+            ws18.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const k = asStr(row.getCell(1).value).trim();
+              const v = row.getCell(2).value;
+              if (!k) return;
+              if (k === 'Gamble_Enabled')        g.enabled = asBool(v);
+              else if (k === 'Gamble_Type')      g.gamble_type = asStr(v).trim().toUpperCase() || 'CARD_COLOR';
+              else if (k === 'Type_Desc')        g.type_desc = asStr(v);
+              else if (k === 'Win_Mult_Options') g.win_mult_options = asStr(v) || '2';
+              else if (k === 'Max_Rounds')       g.max_rounds = asNum(v, 5);
+              else if (k === 'Cap_Mult')         g.cap_mult = asNum(v, 0);
+              else if (k === 'Applies_To')       g.applies_to = asStr(v).trim().toUpperCase() || 'ALL_WINS';
+              else if (k === 'Applies_Limit')    g.applies_limit = asNum(v, 0);
+              else if (k === 'Collect_Anytime')  g.collect_anytime = asBool(v);
+              else if (k === 'Notes')            g.notes = asStr(v);
+            });
+            Object.assign(gamble, g);
+          }
 
           // ── v8.0:舊 A.xlsx 的 17_Bonus_Games 先解析成暫存,待 11/11c 匯入 modes 後再遷移進 modes。
           //   (11_Mode_Config 匯入會 replace modes 陣列,故不能在此直接塞。)
@@ -6432,6 +6594,8 @@
                 respin_base:      asNum(row.getCell(16).value, 0),
                 respin_reset_on:  asStr(row.getCell(17).value).trim().toUpperCase(),
                 respin_stop_cond: asStr(row.getCell(18).value).trim(),
+                // v8.7 / R6 A-2:Pay_Type_Override(19);舊檔無 → ''(繼承全域)
+                pay_type_override: asStr(row.getCell(19).value).trim().toUpperCase(),
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -6768,6 +6932,7 @@
             const colIsWild   = headers['Is_Wild']          || null;
             const colIsScat   = headers['Is_Scatter']       || null;
             const colModeScope = headers['Mode_Scope']      || null;   // v8.3 / R1 D-12(缺欄→null,舊檔安全)
+            const colInstMult  = headers['Instance_Mult']   || null;   // v8.7 / R6 D-14(缺欄→null,舊檔安全)
 
             let updated = 0;
             let skipped = 0;
@@ -6795,6 +6960,7 @@
               if (colIsWild) matched.is_wild   = asBool(row.getCell(colIsWild).value);
               if (colIsScat) matched.is_scatter= asBool(row.getCell(colIsScat).value);
               if (colModeScope) matched.mode_scope = asStr(row.getCell(colModeScope).value).trim();   // v8.3 D-12
+              if (colInstMult)  matched.instance_mult = asBool(row.getCell(colInstMult).value);        // v8.7 D-14
               updated++;
             });
             // 把更新後的 symbols 套回 registry(觸發 changed)
@@ -7686,12 +7852,14 @@
         '中獎線':     'paylines',
         '硬約束':     'constraints',
         '產牌限制':   'rules',            // v7.11:產牌限制為規則頁子分頁,dirty 掛規則 tab
+        '格子屬性':   'layout',           // v8.8 R4:02d 格子屬性住盤面結構分頁
         'Reel 權重':  'reel_weights',
         '格數權重':   'grid_size_weights',
         '連爆權重':   'combo_weights',
         '棄牌規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '腳本規則':   'rules',            // v3.1:09+10 已合併為 'rules' tab
         '投注結構':   'bet_config',         // v5.3:14_Bet_Config 獨立分頁
+        '比倍':       'gamble',             // v8.6 R5:18_Gamble
         '真實輪帶':   'reel_strips',        // v6.0-b:04b_Reel_Strips
         '倍數系統':   'multipliers',        // v5.4:15_Multipliers
         '金幣面額':   'coin_values',        // v5.4:16_Coin_Values
@@ -7729,12 +7897,14 @@
           case '中獎線':   return () => savePaylines(paylines.map(p => ({ ...p })));
           case '硬約束':   return () => saveConstraints(constraints.map(c => ({ ...c })));
           case '產牌限制': return () => saveGenLimits(genLimits.map(g => ({ ...g })));
+          case '格子屬性': return () => { try { localStorage.setItem(CELLATTRS_LS_KEY, JSON.stringify(cellAttrs.map(c => ({ ...c })))); } catch (e) {} };
           case 'Reel 權重': return () => saveReelWeights(JSON.parse(JSON.stringify(reelWeights)));
           case '格數權重': return () => saveGridWeights(JSON.parse(JSON.stringify(gridWeights)));
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
           case '棄牌規則': return () => saveDiscards(discards.map(d => ({ ...d })));
           case '腳本規則': return () => saveRules(rules.map(r => ({ ...r })));
-          case '投注結構': return () => saveBetConfig({ ...betConfig, buy_features: betConfig.buy_features.map(bf => ({ ...bf })) });
+          case '投注結構': return () => saveBetConfig({ ...betConfig, buy_features: betConfig.buy_features.map(bf => ({ ...bf })), rtp_variants: (betConfig.rtp_variants || []).map(v => ({ ...v })) });
+          case '比倍':     return () => { try { localStorage.setItem(GAMBLE_LS_KEY, JSON.stringify({ ...gamble })); } catch (e) {} };
           case '真實輪帶': return () => saveReelStrips({ enabled: reelStrips.enabled, strips: JSON.parse(JSON.stringify(reelStrips.strips)) });
           case '倍數系統': return () => saveMultipliers(JSON.parse(JSON.stringify(multipliers)));
           case '金幣面額': return () => saveCoinValues(JSON.parse(JSON.stringify(coinValues)));
@@ -7777,12 +7947,14 @@
       watch(paylines,     () => scheduleSave('中獎線'),   { deep: true });
       watch(constraints,  () => scheduleSave('硬約束'),   { deep: true });
       watch(genLimits,    () => scheduleSave('產牌限制'), { deep: true });
+      watch(cellAttrs,    () => scheduleSave('格子屬性'), { deep: true });   // v8.8 R4
       watch(reelWeights,  () => scheduleSave('Reel 權重'), { deep: true });
       watch(gridWeights,  () => scheduleSave('格數權重'), { deep: true });
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
       watch(discards,     () => scheduleSave('棄牌規則'), { deep: true });
       watch(rules,        () => scheduleSave('腳本規則'), { deep: true });
       watch(betConfig,    () => scheduleSave('投注結構'), { deep: true });
+      watch(gamble,       () => scheduleSave('比倍'),     { deep: true });   // v8.6 R5
       watch(reelStrips,   () => scheduleSave('真實輪帶'), { deep: true });
       watch(multipliers,  () => scheduleSave('倍數系統'), { deep: true });
       watch(coinValues,   () => scheduleSave('金幣面額'), { deep: true });
@@ -7824,6 +7996,13 @@
       }
       // 回傳 null(合法) / '格式' / '越界' / '落洞';coord = [reel0, row0](0-based)
       function _coordIssue(coord) {
+        // v8.9.1 bug 修復:UI 的 pos 欄(text input)存的是「字串」(如 '[0,1]'),
+        //   v7.15 此函式只認陣列 → 實際透過 UI 填的座標一律被誤報「格式非法」。
+        //   修法:字串先 JSON.parse(並容忍 '0,1' 無括號寫法);已是陣列直通。
+        if (typeof coord === 'string') {
+          const s = coord.trim();
+          try { coord = JSON.parse(s.startsWith('[') ? s : '[' + s + ']'); } catch (e) { return '格式'; }
+        }
         if (!Array.isArray(coord) || coord.length < 2) return '格式';
         const reel0 = Number(coord[0]), row0 = Number(coord[1]);
         if (!Number.isInteger(reel0) || !Number.isInteger(row0)) return '格式';
@@ -7899,6 +8078,96 @@
           const _startM = modes.find(mm => (mm.mode || '').trim() === ((g && g.starting_mode) || '').trim());
           if (_startM && String(_startM.choice_group || '').trim()) {
             add('error', 'rules', `起始模式「${_startM.mode}」不可屬擇一組(開局模式不是被選出來的)`);
+          }
+        } catch (e) { /* 靜默 */ }
+
+        // ─── v8.9 / R2b:空間關係條件檢查(adjacent_count / cluster_max)───
+        try {
+          const _symSet = new Set((registry ? registry.symbols() : []).map(s => (s.symbol_id && s.symbol_id.trim()) || s.name).filter(Boolean));
+          for (const r of rules) {
+            const rows = builderRowsMap[r.rule_id] || [];
+            for (const row of rows) {
+              if (row.category === 'adjacent_count') {
+                const parts = String(row.subkey || '').split('.').map(s => s.trim()).filter(Boolean);
+                if (parts.length !== 2) {
+                  add('warn', 'rules', `規則「${r.rule_id}」的 adjacent_count 需要「符號A.符號B」兩段(目前:「${row.subkey || ''}」)`);
+                } else {
+                  parts.forEach(p => { if (_symSet.size && !_symSet.has(p)) add('warn', 'rules', `規則「${r.rule_id}」的 adjacent_count 引用不存在的符號「${p}」`); });
+                }
+              } else if (row.category === 'cluster_max') {
+                const p = String(row.subkey || '').trim();
+                if (!p) add('warn', 'rules', `規則「${r.rule_id}」的 cluster_max 未填符號`);
+                else if (_symSet.size && !_symSet.has(p)) add('warn', 'rules', `規則「${r.rule_id}」的 cluster_max 引用不存在的符號「${p}」`);
+              }
+            }
+          }
+        } catch (e) { /* 靜默 */ }
+
+        // ─── v8.8 / R4 B-6:格子屬性檢查 ───
+        try {
+          const _caIds = {};
+          for (const ca of cellAttrs) {
+            const aid = String(ca.attr_id || '').trim();
+            if (!aid) { add('warn', 'layout', '有格子屬性未填 Attr_ID'); continue; }
+            if (_caIds[aid]) add('warn', 'layout', `格子屬性 ID「${aid}」重複`);
+            _caIds[aid] = true;
+            const rlById = layout.find(r => r.reel_id === Number(ca.reel));
+            if (!rlById) { add('error', 'layout', `格子屬性「${aid}」的 R${ca.reel} 不存在`); continue; }
+            const rowN = Number(ca.row) || 0;
+            if (rowN < 1 || rowN > rlById.max_rows) {
+              add('error', 'layout', `格子屬性「${aid}」的列 ${ca.row} 超出 R${ca.reel} 範圍(1–${rlById.max_rows})`);
+            } else if (!_reelActiveRows(rlById).includes(rowN - 1)) {
+              add('error', 'layout', `格子屬性「${aid}」的 (${ca.reel},${ca.row}) 落在洞格(遮罩外)`);
+            }
+            if (!['MULT', 'ENHANCER', 'FRAME', 'GOLD', 'CUSTOM'].includes(String(ca.attr || '').toUpperCase())) {
+              add('warn', 'layout', `格子屬性「${aid}」的型式「${ca.attr}」非合法值`);
+            }
+            if (String(ca.attr).toUpperCase() === 'MULT' && !(ca.value || '').trim()) {
+              add('warn', 'layout', `格子屬性「${aid}」為固定格乘數但未填倍數值`);
+            }
+          }
+        } catch (e) { /* 靜默 */ }
+
+        // ─── v8.7 / R6 A-2:per-mode 賠付覆寫檢查 ───
+        try {
+          for (const m of modes) {
+            const pto = String(m.pay_type_override || '').trim().toUpperCase();
+            if (pto && !['LINE', 'WAYS', 'SCATTER', 'CLUSTER'].includes(pto)) {
+              add('warn', 'rules', `模式「${m.mode}」的賠付覆寫「${pto}」非合法值(LINE/WAYS/SCATTER/CLUSTER 或留空=繼承)`);
+            }
+            if (pto === 'LINE' && String(g.pay_type).toUpperCase() !== 'LINE' && !(paylines || []).length) {
+              add('warn', 'rules', `模式「${m.mode}」覆寫為 LINE 賠付,但 06_Paylines 尚無任何中獎線`);
+            }
+          }
+        } catch (e) { /* 靜默 */ }
+
+        // ─── v8.6 / R5:商業層檢查(比倍 / RTP 版本 / 購買檔位)───
+        try {
+          if (gamble.enabled) {
+            if (!['CARD_COLOR', 'CARD_SUIT', 'LADDER', 'WHEEL', 'CUSTOM'].includes(gamble.gamble_type)) {
+              add('warn', 'gamble', `比倍型式「${gamble.gamble_type}」非合法值`);
+            }
+            if ((gamble.gamble_type === 'LADDER' || gamble.gamble_type === 'CUSTOM') && !(gamble.type_desc || '').trim()) {
+              add('warn', 'gamble', '比倍型式為階梯/自訂,建議在「型式補充」描述規則');
+            }
+            if (gamble.applies_to === 'BELOW_LIMIT' && !(Number(gamble.applies_limit) > 0)) {
+              add('warn', 'gamble', '比倍適用範圍為「低於門檻」但未填門檻值');
+            }
+            if (Number(gamble.cap_mult) < 0 || Number(gamble.max_rounds) < 0) {
+              add('error', 'gamble', '比倍封頂 / 最大次數不可為負值');
+            }
+          }
+          const _rvNames = {};
+          (betConfig.rtp_variants || []).forEach(rv => {
+            const nm = (rv.variant || '').trim();
+            if (!nm) return;
+            if (_rvNames[nm]) add('warn', 'bet_config', `RTP 版本「${nm}」重複`);
+            _rvNames[nm] = true;
+            const rtp = Number(rv.target_rtp) || 0;
+            if (rtp && (rtp < 50 || rtp > 120)) add('warn', 'bet_config', `RTP 版本「${nm}」目標 ${rtp}% 超出常理範圍(50–120)`);
+          });
+          if (betConfig.ante_buy_exclusive && betConfig.ante_bet_enabled && betConfig.buy_feature_enabled) {
+            add('warn', 'bet_config', '已宣告加押/購買互斥:兩者同時啟用時,實際遊戲須擇一(規格描述,請於說明欄補充切換行為)');
           }
         } catch (e) { /* 靜默 */ }
 
@@ -9004,6 +9273,9 @@
         modeExpandedKey, isModeExpanded, toggleModeExpanded,
         isModeGpOpen, toggleModeGp,
         modeGpHasContent, modeGpSummary,
+        // v8.6 / R5:商業層
+        gamble, GAMBLE_TYPE_OPTIONS, BF_KIND_OPTIONS, addRtpVariant, removeRtpVariant,
+        cellAttrs, CELL_ATTR_OPTIONS, addCellAttr, removeCellAttr,   // v8.8 R4 B-6
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
         betConfig, addBuyFeature, removeBuyFeature,

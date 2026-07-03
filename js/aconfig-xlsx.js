@@ -210,6 +210,9 @@
       ['12_Distribution_Bins', '分佈區間'],
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
       ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
+      ['02d_Cell_Attributes', '位置型格子屬性(v8.8;固定格乘數/enhancer/金框;規格描述)'],
+      ['14b_RTP_Variants', '多市場 RTP 出證版本 + 市場別注限(v8.6;規格描述)'],
+      ['18_Gamble', '比倍設定(v8.6;規格描述,執行歸下游)'],
       ['15_Multipliers', '倍數系統(v5.4:Wild/Progress/Random;選用;引擎讀取)'],
       ['15b_Symbol_Mults', '符號倍數/彩金 權威表(v6.3:Kind=MULT/PRIZE;選用;前端權威)'],
       ['16_Coin_Values', '金幣面額(v5.4:Hold&Win;選用;引擎讀取)'],
@@ -276,6 +279,21 @@
     boldHdr(wsSS); setCols(wsSS, [18, 16]);
 
     // 03_Symbols(含擴充欄位)
+    // v8.8 / R4 B-6:02d_Cell_Attributes(位置型格子屬性;additive 新 sheet)
+    //   一列 = 一格 × 一屬性;座標 1-based 對齊 06_Paylines。舊檔無此 sheet → loader 安全降級 []。
+    //   LS key:slotplanner.aconfig.cellattrs.v1(v8.8 新增,已納快照)。
+    {
+      const cas = readLS('slotplanner.aconfig.cellattrs.v1', []) || [];
+      const wsCA = wb.addWorksheet('02d_Cell_Attributes');
+      wsCA.addRow(['Attr_ID', 'Reel', 'Row', 'Attr', 'Value', 'Mode_Scope', 'Notes']);
+      for (const ca of (Array.isArray(cas) ? cas : [])) {
+        if (!ca || !String(ca.attr_id || '').trim()) continue;
+        wsCA.addRow([ca.attr_id, Number(ca.reel) || 1, Number(ca.row) || 1,
+                     ca.attr || 'MULT', ca.value || '', ca.mode_scope || 'ALL', ca.notes || '']);
+      }
+      boldHdr(wsCA); setCols(wsCA, [10, 8, 8, 12, 14, 14, 30]);
+    }
+
     const wsS = wb.addWorksheet('03_Symbols');
     wsS.addRow([
       'Symbol_ID', 'Display_Name', 'Number', 'Type',
@@ -283,6 +301,7 @@
       'Mega_W', 'Mega_H', 'Is_Wild', 'Is_Scatter',
       'Weight', 'Max_Count', 'Use_Max', 'Reel_Limit',
       'Mode_Scope',   // v8.3 / R1 D-12:出現模式宣告(逗號分隔;空=所有模式);尾端 additive
+      'Instance_Mult',// v8.7 / R6 D-14:per-instance 乘數宣告;尾端 additive
     ]);
     const syms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     // v4.0 / #13:停用(enabled === false)的符號不匯出;同時建立啟用 id 集合供 04/08 過濾,
@@ -303,9 +322,10 @@
         s.weight || 0, s.max_count || 0, !!s.use_max,
         Array.isArray(s.reel_limit) ? s.reel_limit.join(',') : '',
         (s.mode_scope != null ? String(s.mode_scope) : ''),   // v8.3 D-12
+        s.instance_mult === true,                              // v8.7 D-14
       ]);
     }
-    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14]);
+    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14, 12]);
 
     // 03c_Paytable(v5.3:動態賠付表)
     // v8.3 / R1 A-1:尾端 additive 加 Count_From / Count_To(count 區間同賠)。
@@ -517,11 +537,13 @@
     //        前 7 欄順序/內容不動;loader 一律 by-name(.get),欄序不影響讀取。
     // v8.5 / R3:尾端 additive 加 Choice_Group / Respin_Base / Respin_Reset_On / Respin_Stop_Cond
     //          (玩家擇一 + Hold&Win respin 描述;前 14 欄順序/內容不動)。
+    // v8.7 / R6 A-2:再尾端 additive 加 Pay_Type_Override(per-mode 賠付模型覆寫;前 18 欄不動)。
     wsM.addRow(['Mode', 'Trigger_Condition', 'Spin_Count', 'Inherit_Globals',
                 'On_Enter_Reset_Vars', 'Notes', 'Reset_Scope',
                 'Cap_Enabled', 'Cap_Value', 'Stack_Mode',
                 'Mode_Kind', 'Wheel_Upgrade_To', 'Pick_Count', 'Collect_Target',
-                'Choice_Group', 'Respin_Base', 'Respin_Reset_On', 'Respin_Stop_Cond']);
+                'Choice_Group', 'Respin_Base', 'Respin_Reset_On', 'Respin_Stop_Cond',
+                'Pay_Type_Override']);
     for (const m of modes) {
       wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
                   m.on_enter_reset_vars, m.notes, m.reset_scope || '',
@@ -529,9 +551,10 @@
                   m.mode_kind || 'SPIN', m.wheel_upgrade_to || '',
                   Number(m.pick_count) || 0, Number(m.collect_target) || 0,
                   m.choice_group || '', Number(m.respin_base) || 0,
-                  m.respin_reset_on || '', m.respin_stop_cond || '']);
+                  m.respin_reset_on || '', m.respin_stop_cond || '',
+                  m.pay_type_override || '']);
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22, 16]);
 
     // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
     //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
@@ -593,13 +616,50 @@
     wsBet.addRow(['Ante_Bet_Desc',         bc.ante_bet_desc || '',           '企劃說明']);
     wsBet.addRow([]);   // 空行分隔
     // ── Buy Feature 清單 ──
-    wsBet.addRow(['BF_ID', 'Target_Mode', 'Cost_Mult', 'RTP_Target', 'Enabled', 'Notes']);
+    //   v8.6 / R5 E-15:表頭尾端 +Kind(DIRECT/BOOST_RATE/SUPER;前 6 欄不動)。
+    wsBet.addRow(['BF_ID', 'Target_Mode', 'Cost_Mult', 'RTP_Target', 'Enabled', 'Notes', 'Kind']);
     for (const bf of (Array.isArray(bc.buy_features) ? bc.buy_features : [])) {
       if (!bf || !bf.bf_id) continue;
       wsBet.addRow([bf.bf_id, bf.target_mode || '', Number(bf.cost_mult) || 0,
-                   Number(bf.rtp_target) || 0, bf.enabled !== false, bf.notes || '']);
+                   Number(bf.rtp_target) || 0, bf.enabled !== false, bf.notes || '',
+                   bf.kind || 'DIRECT']);
     }
-    boldHdr(wsBet); setCols(wsBet, [22, 16, 12, 12, 10, 28]);
+    // v8.6 / R5 E-15:互斥 + Feature Drop——為維持 BF 區位置(Row6 表頭/Row7+ 列)不移動,
+    //   新 KV 列一律附加在 sheet 尾端(空行分隔);loader 兩端(JS 匯入/Python)皆以 key 名攔截。
+    wsBet.addRow([]);
+    wsBet.addRow(['Ante_Buy_Exclusive',   !!bc.ante_buy_exclusive,   '加押與購買互斥(啟用加押時停用購買)']);
+    wsBet.addRow(['Feature_Drop_Enabled', !!bc.feature_drop_enabled, 'Feature Drop 折抵購買成本']);
+    wsBet.addRow(['Feature_Drop_Desc',    bc.feature_drop_desc || '', '折抵細節(自由文字)']);
+    boldHdr(wsBet); setCols(wsBet, [22, 16, 12, 12, 10, 28, 12]);
+
+    // v8.6 / R5 E-18:14b_RTP_Variants(多市場 RTP 出證版本 + 市場別注限;additive 新子表)
+    //   舊檔無此 sheet → loader 安全降級為空清單。資料存於 betconfig.v1 內(無新 LS key)。
+    const wsRV = wb.addWorksheet('14b_RTP_Variants');
+    wsRV.addRow(['Variant', 'Target_RTP', 'Max_Bet', 'Notes']);
+    for (const rv of (Array.isArray(bc.rtp_variants) ? bc.rtp_variants : [])) {
+      if (!rv || !String(rv.variant || '').trim()) continue;
+      wsRV.addRow([rv.variant, Number(rv.target_rtp) || 0, Number(rv.max_bet) || 0, rv.notes || '']);
+    }
+    boldHdr(wsRV); setCols(wsRV, [18, 12, 12, 32]);
+
+    // v8.6 / R5 E-16:18_Gamble(比倍;KV 式 Key/Value/Notes;additive 新 sheet)
+    //   舊檔無此 sheet → loader 安全降級(預設停用)。LS key:slotplanner.aconfig.gamble.v1(v8.6 新增,已納快照)。
+    {
+      const gm = readLS('slotplanner.aconfig.gamble.v1', {}) || {};
+      const wsG = wb.addWorksheet('18_Gamble');
+      wsG.addRow(['Key', 'Value', 'Notes']);
+      wsG.addRow(['Gamble_Enabled',   !!gm.enabled,                       'true/false']);
+      wsG.addRow(['Gamble_Type',      gm.gamble_type || 'CARD_COLOR',     'CARD_COLOR/CARD_SUIT/LADDER/WHEEL/CUSTOM']);
+      wsG.addRow(['Type_Desc',        gm.type_desc || '',                 '型式補充(LADDER 階梯 / CUSTOM 描述)']);
+      wsG.addRow(['Win_Mult_Options', gm.win_mult_options || '2',         '可選倍數(逗號分隔,如 2,4)']);
+      wsG.addRow(['Max_Rounds',       Number(gm.max_rounds) || 0,         '最大連續比倍次數(0=無限)']);
+      wsG.addRow(['Cap_Mult',         Number(gm.cap_mult) || 0,           '封頂 ×注額(0=無)']);
+      wsG.addRow(['Applies_To',       gm.applies_to || 'ALL_WINS',        'ALL_WINS/BELOW_LIMIT']);
+      wsG.addRow(['Applies_Limit',    Number(gm.applies_limit) || 0,      'BELOW_LIMIT 門檻 ×注額']);
+      wsG.addRow(['Collect_Anytime',  gm.collect_anytime !== false,       '可隨時收下']);
+      wsG.addRow(['Notes',            gm.notes || '',                     '']);
+      boldHdr(wsG); setCols(wsG, [20, 22, 40]);
+    }
 
     // 15_Multipliers(v5.4:三段 — WILD / PROGRESS / RANDOM。引擎讀取;選用分頁)
     //   v6.3 / Q3:來源改由符號/模式反推;符號無資料時 fallback 舊 multipliers 物件(遷移前相容)。
@@ -774,6 +834,8 @@
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
       genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
+      gamble:       'slotplanner.aconfig.gamble.v1',        // v8.6:比倍(R5 E-16)
+      cellattrs:    'slotplanner.aconfig.cellattrs.v1',     // v8.8:格子屬性(R4 B-6)
       registry:     'slotplanner.registry.v1',
     };
     const out = {};
@@ -810,6 +872,8 @@
       multipliers:  'slotplanner.aconfig.multipliers.v1',  // v5.4
       coinvalues:   'slotplanner.aconfig.coinvalues.v1',   // v5.4
       genlimits:    'slotplanner.aconfig.genLimits.v1',     // v7.11:產牌限制
+      gamble:       'slotplanner.aconfig.gamble.v1',        // v8.6:比倍(R5 E-16)
+      cellattrs:    'slotplanner.aconfig.cellattrs.v1',     // v8.8:格子屬性(R4 B-6)
       registry:     'slotplanner.registry.v1',
     };
     for (const [k, lsKey] of Object.entries(keys)) {

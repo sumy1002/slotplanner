@@ -408,6 +408,12 @@
             <span class="sym-card-collapse" :class="{ open: cardOpen.mult }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.mult">
+          <!-- v8.7 / R6 D-14:per-instance 乘數宣告(規格描述;行為細節寫規則/備註) -->
+          <label class="chk" style="margin-bottom:8px;">
+            <input type="checkbox" v-model="form.instance_mult" @change="onFieldEdit">
+            <span class="box"></span>
+            <span>每顆實例攜帶自身乘數 <span class="sym-hint-inline">（xWays / 落地各帶倍數式；取值與疊加行為請寫在規則或備註）</span></span>
+          </label>
           <!-- 倍數 ×N(× 在數字前) -->
           <div class="sym-mult-grp">
             <div class="sym-mult-sublabel">
@@ -630,6 +636,7 @@
         mega_h: 1,
         can_expand: false,   // v6.2 #10:可擴張標籤
         mode_scope: '',      // v8.3 / R1 D-12:出現模式(逗號分隔;'' = 所有模式)
+        instance_mult: false, // v8.7 / R6 D-14:per-instance 乘數宣告
         is_wild: false,
         is_scatter: false,
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
@@ -698,6 +705,7 @@
         form.weight = s.weight;
         form.use_max = s.use_max;
         form.mode_scope = (s.mode_scope != null ? String(s.mode_scope) : '');   // v8.3 D-12
+        form.instance_mult = s.instance_mult === true;                          // v8.7 D-14
         form.max_count = s.max_count;
         form.reel_limit = [...s.reel_limit];
         form.subreel_limit = (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {};
@@ -824,6 +832,7 @@
           use_max: !!form.use_max,
           max_count: form.use_max ? Math.max(1, Number(form.max_count) || 1) : Number(form.max_count) || 0,
           mode_scope: (form.mode_scope || '').trim(),   // v8.3 D-12
+          instance_mult: form.instance_mult === true,   // v8.7 D-14
           reel_limit: [...form.reel_limit],
           subreel_limit: { ...form.subreel_limit },
           // 擴充欄位
