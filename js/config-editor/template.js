@@ -440,7 +440,9 @@
     <!-- 行動版下鑽返回列(桌面/平板由 CSS 隱藏;只在 ≤767 詳細視圖顯示)-->
     <!-- v7.6.1:分頁列開啟改用頂部漢堡鈕;關閉用拖曳/遮罩。原 cfg-mobile-back 返回列移除以免重複 -->
 
-    <div class="cfg-content" :class="{ 'cfg-content-fullpane': activeTab.kind === 'fullpane' }">
+    <div class="cfg-content" :class="{ 'cfg-content-fullpane': activeTab.kind === 'fullpane',
+                                       'cfg-content--fit': isFitTab,
+                                       'has-pinned-inspector': !!pinnedTest }">
 
       <!-- v3.4 / B5:當前 tab 的 issues sticky banner(只有有 issue 才顯示)-->
       <div v-if="activeTab.kind !== 'fullpane' && activeTabIssues().length > 0"
@@ -3420,8 +3422,9 @@
              class="cfg-rules-section cfg-rules-section-puzzle"
              style="display:flex;flex-direction:column;height:100%;min-height:0;">
         <div class="cfg-form-header" style="flex-shrink:0;">
+          <!-- v8.15 #1:標題動態跟隨子分頁(盤面/圖示規則 · 通用規則 · 棄牌規則) -->
           <div class="cfg-form-title">
-            🧩 規則 · 拼圖規則 + 棄牌規則
+            {{ rulesSectionMeta.icon }} {{ rulesSectionMeta.label }}
             <button class="cfg-preset-btn" @click="presetDrawerOpen = !presetDrawerOpen"
                     :class="{ active: presetDrawerOpen }"
                     title="從規則庫中插入常用 slot 機制 preset(僅適用於拼圖規則)">
@@ -3507,98 +3510,91 @@
                      v-model.trim="rulesListSearch"
                      placeholder="🔍 搜尋 ID / 描述 / 動作"
                      style="flex:1 1 auto; min-width:0;">
-              <template v-if="rulesSection === 'discard'">
-                <button class="cfg-chip cfg-chip-sm cfg-chip-hard" style="flex:0 0 auto; white-space:nowrap;"
-                        :class="{ active: rulesListFilter === 'hard' }"
-                        @click="rulesListFilter = rulesListFilter === 'hard' ? 'all' : 'hard'"
-                        title="只看 HARD 棄牌(風控);再點取消">HARD</button>
-                <button class="cfg-chip cfg-chip-sm cfg-chip-soft" style="flex:0 0 auto; white-space:nowrap;"
-                        :class="{ active: rulesListFilter === 'soft' }"
-                        @click="rulesListFilter = rulesListFilter === 'soft' ? 'all' : 'soft'"
-                        title="只看 SOFT 棄牌(體感);再點取消">SOFT</button>
-              </template>
+              <!-- v8.15 #4:HARD/SOFT 過濾 chips 退役(類別以列表徽章呈現;搜尋為唯一過濾器) -->
             </div>
 
             <div class="cfg-split-list-body">
-              <!-- 拼圖規則(可拖曳排序;只在 filter=all 或 filter=puzzle 時顯示;v7.10 再依子分頁 board/general 分流;棄牌子分頁不顯示拼圖)-->
-              <template v-if="rulesSection !== 'discard' && (rulesListFilter === 'all' || rulesListFilter === 'puzzle')">
-                <div v-if="rules.filter(r => ruleInSection(r) && ruleMatchesSearch(r)).length > 0" class="cfg-rules-group-header">
-                  <span class="cfg-rules-group-icon">{{ rulesSection === 'board' ? '🎰' : '🧩' }}</span>
-                  <span>{{ rulesSection === 'board' ? '盤面 / 圖示規則' : '通用規則' }}</span>
-                  <span class="cfg-rules-group-count">{{ rules.filter(r => ruleInSection(r) && ruleMatchesSearch(r)).length }}</span>
+              <!-- v8.15 #2:三群合併清單 — 盤面/通用/棄牌恆列;當前子分頁的群置頂,
+                   點到別群項目會自動切換子分頁並選中(清單隨之重排)。
+                   拼圖類群保留 #17 拖曳排序(it.idx 為 rules 全域索引,排序語義不變)。 -->
+              <template v-for="grp in rulesListGroups" :key="grp.key">
+                <div v-if="grp.items.length > 0" class="cfg-rules-group-header">
+                  <span class="cfg-rules-group-icon">{{ grp.icon }}</span>
+                  <span>{{ grp.label }}</span>
+                  <span class="cfg-rules-group-count">{{ grp.items.length }}</span>
                 </div>
-                <template v-for="(r, idx) in rules" :key="'puzzle-' + (r.rule_id || ('idx-' + idx))">
-                <div v-if="ruleInSection(r) && ruleMatchesSearch(r)"
-                     class="cfg-split-item cfg-split-item-draggable cfg-split-item-puzzle"
-                     :class="{
-                       active: selectedKind === 'puzzle' && selectedRuleIdx === idx,
-                       'is-duplicate': ruleDuplicateIds.has(r.rule_id) && r.rule_id,
-                       'is-dragging': rulesDragState.draggingIdx === idx,
-                       'drop-before': rulesDragState.dragOverIdx === idx && rulesDragState.dropPosition === 'before',
-                       'drop-after':  rulesDragState.dragOverIdx === idx && rulesDragState.dropPosition === 'after',
-                     }"
-                     :title="humanizeRule(r)"
-                     draggable="true"
-                     @click="selectItem('puzzle', idx)"
-                     @dragstart="onRuleDragStart(idx, $event)"
-                     @dragover="onRuleDragOver(idx, $event)"
-                     @dragleave="onRuleDragLeave(idx)"
-                     @drop="onRuleDrop(idx, $event)"
-                     @dragend="onRuleDragEnd">
-                  <span class="cfg-rule-drag-handle" title="拖曳重排">⋮⋮</span>
-                  <span class="cfg-split-item-id">{{ r.rule_id || '?' }}</span>
-                  <span class="cfg-split-item-sub">
-                    {{ r.trigger || '–' }}
-                    · {{ (r.actions && r.actions[0] && r.actions[0].atype) || '(無動作)' }}
-                    <span v-if="r.actions && r.actions.length > 1">+{{ r.actions.length - 1 }}</span>
-                    <span v-if="r.enabled === false" class="cfg-split-item-disabled" title="此規則已停用">⊘</span>
-                  </span>
-                  <!-- 最近一次模擬的觸發徽章 -->
-                  <template v-if="getRuleSimBadge(r.rule_id)">
-                    <span v-if="getRuleSimBadge(r.rule_id).dead"
-                          class="cfg-rule-sim-badge cfg-rule-sim-badge-dead"
-                          title="最近一次模擬此規則未觸發 — 可能是 dead code">0</span>
-                    <span v-else
-                          class="cfg-rule-sim-badge"
-                          :title="'觸發 ' + getRuleSimBadge(r.rule_id).count.toLocaleString() + ' 次' + (Math.abs(getRuleSimBadge(r.rule_id).rtp) > 0.0001 ? ' · RTP 貢獻 ' + getRuleSimBadge(r.rule_id).rtp.toFixed(2) : '')">
-                      {{ getRuleSimBadge(r.rule_id).count >= 1000
-                          ? (getRuleSimBadge(r.rule_id).count / 1000).toFixed(1) + 'k'
-                          : getRuleSimBadge(r.rule_id).count }}
+                <template v-if="grp.kind === 'puzzle'">
+                  <div v-for="it in grp.items" :key="grp.key + '-' + (it.obj.rule_id || ('idx-' + it.idx))"
+                       class="cfg-split-item cfg-split-item-draggable cfg-split-item-puzzle"
+                       :class="{
+                         active: selectedKind === 'puzzle' && selectedRuleIdx === it.idx,
+                         'is-duplicate': ruleDuplicateIds.has(it.obj.rule_id) && it.obj.rule_id,
+                         'is-dragging': rulesDragState.draggingIdx === it.idx,
+                         'drop-before': rulesDragState.dragOverIdx === it.idx && rulesDragState.dropPosition === 'before',
+                         'drop-after':  rulesDragState.dragOverIdx === it.idx && rulesDragState.dropPosition === 'after',
+                       }"
+                       :title="humanizeRule(it.obj)"
+                       draggable="true"
+                       @click="selectRuleFromList(grp.key, 'puzzle', it.idx)"
+                       @dragstart="onRuleDragStart(it.idx, $event)"
+                       @dragover="onRuleDragOver(it.idx, $event)"
+                       @dragleave="onRuleDragLeave(it.idx)"
+                       @drop="onRuleDrop(it.idx, $event)"
+                       @dragend="onRuleDragEnd">
+                    <span class="cfg-rule-drag-handle" title="拖曳重排">⋮⋮</span>
+                    <span class="cfg-split-item-id">{{ it.obj.rule_id || '?' }}</span>
+                    <!-- v8.15 #5:第二行改「模式 · 觸發點」白話資訊(舊 trigger·atype 技術字串退場) -->
+                    <span class="cfg-split-item-sub">
+                      {{ ruleListSub(it.obj) }}
+                      <span v-if="it.obj.enabled === false" class="cfg-split-item-disabled" title="此規則已停用">⊘</span>
                     </span>
-                  </template>
-                  <span v-if="!r.rule_id.trim() || (ruleDuplicateIds.has(r.rule_id) && r.rule_id)"
-                        class="cfg-split-item-warn" title="編號錯誤或重複"></span>
-                </div>
+                    <!-- 最近一次模擬的觸發徽章 -->
+                    <template v-if="getRuleSimBadge(it.obj.rule_id)">
+                      <span v-if="getRuleSimBadge(it.obj.rule_id).dead"
+                            class="cfg-rule-sim-badge cfg-rule-sim-badge-dead"
+                            title="最近一次模擬此規則未觸發 — 可能是 dead code">0</span>
+                      <span v-else
+                            class="cfg-rule-sim-badge"
+                            :title="'觸發 ' + getRuleSimBadge(it.obj.rule_id).count.toLocaleString() + ' 次' + (Math.abs(getRuleSimBadge(it.obj.rule_id).rtp) > 0.0001 ? ' · RTP 貢獻 ' + getRuleSimBadge(it.obj.rule_id).rtp.toFixed(2) : '')">
+                        {{ getRuleSimBadge(it.obj.rule_id).count >= 1000
+                            ? (getRuleSimBadge(it.obj.rule_id).count / 1000).toFixed(1) + 'k'
+                            : getRuleSimBadge(it.obj.rule_id).count }}
+                      </span>
+                    </template>
+                    <span v-if="!it.obj.rule_id.trim() || (ruleDuplicateIds.has(it.obj.rule_id) && it.obj.rule_id)"
+                          class="cfg-split-item-warn" title="編號錯誤或重複"></span>
+                  </div>
                 </template>
-              </template>
-
-              <!-- 棄牌規則(v7.10:只在「棄牌規則」子分頁顯示;依 filter 決定顯示哪些)-->
-              <template v-if="rulesSection === 'discard' && (rulesListFilter === 'all' || rulesListFilter === 'hard' || rulesListFilter === 'soft')">
-                <div v-if="discards.length > 0" class="cfg-rules-group-header">
-                  <span class="cfg-rules-group-icon">🗑</span>
-                  <span>棄牌規則</span>
-                  <span class="cfg-rules-group-count">{{ discards.length }}</span>
-                </div>
-                <template v-for="(d, idx) in discards" :key="'discard-' + idx">
-                  <div v-if="(rulesListFilter === 'all' ||
-                             (rulesListFilter === 'hard' && d.discard_kind === 'HARD') ||
-                             (rulesListFilter === 'soft' && d.discard_kind === 'SOFT')) && discardMatchesSearch(d)"
+                <template v-else-if="grp.kind === 'discard'">
+                  <div v-for="it in grp.items" :key="'discard-' + it.idx"
                        class="cfg-split-item"
                        :class="{
-                         active: selectedKind === 'discard' && selectedDiscardIdx === idx,
-                         'cfg-split-item-hard': d.discard_kind === 'HARD',
-                         'cfg-split-item-soft': d.discard_kind === 'SOFT',
-                         'is-duplicate': discardDuplicateIds.has(d.discard_id) && d.discard_id,
+                         active: selectedKind === 'discard' && selectedDiscardIdx === it.idx,
+                         'cfg-split-item-hard': it.obj.discard_kind === 'HARD',
+                         'cfg-split-item-soft': it.obj.discard_kind === 'SOFT',
+                         'is-duplicate': discardDuplicateIds.has(it.obj.discard_id) && it.obj.discard_id,
                        }"
-                       :title="humanizeDiscard(d)"
-                       @click="selectItem('discard', idx)">
-                    <span class="cfg-split-item-id">{{ d.discard_id || '?' }}</span>
-                    <span v-if="d.discard_kind" class="cfg-split-item-badge"
-                          :class="d.discard_kind === 'HARD' ? 'hard' : 'soft'">
-                      {{ d.discard_kind }}
+                       :title="humanizeDiscard(it.obj)"
+                       @click="selectRuleFromList('discard', 'discard', it.idx)">
+                    <span class="cfg-split-item-id">{{ it.obj.discard_id || '?' }}</span>
+                    <!-- v8.15 #5:模式資訊(HARD/SOFT 保留徽章呈現) -->
+                    <span class="cfg-split-item-sub">{{ discardListSub(it.obj) }}</span>
+                    <span v-if="it.obj.discard_kind" class="cfg-split-item-badge"
+                          :class="it.obj.discard_kind === 'HARD' ? 'hard' : 'soft'">
+                      {{ it.obj.discard_kind }}
                     </span>
-                    <span v-if="!d.discard_id.trim() || (discardDuplicateIds.has(d.discard_id) && d.discard_id)"
+                    <span v-if="!it.obj.discard_id.trim() || (discardDuplicateIds.has(it.obj.discard_id) && it.obj.discard_id)"
                           class="cfg-split-item-warn" title="編號錯誤或重複"></span>
+                  </div>
+                </template>
+                <!-- v8.15 批2 #F:產牌限制群 — 點擊跳「產牌限制」子分頁並選中該列 -->
+                <template v-else>
+                  <div v-for="it in grp.items" :key="'gl-' + it.idx"
+                       class="cfg-split-item"
+                       :title="humanizeGenLimit(it.obj)"
+                       @click="selectGenLimitFromList(it.idx)">
+                    <span class="cfg-split-item-id">{{ it.obj.limit_id || '?' }}</span>
+                    <span class="cfg-split-item-sub">{{ genListSub(it.obj) }}</span>
                   </div>
                 </template>
               </template>
@@ -3606,6 +3602,9 @@
               <!-- 空狀態 -->
               <div v-if="rules.length === 0 && discards.length === 0" class="cfg-rules-list-empty">
                 尚無規則,從下方「+ 新增」開始
+              </div>
+              <div v-else-if="rulesListGroups.every(g => g.items.length === 0)" class="cfg-rules-list-empty">
+                沒有符合「{{ rulesListSearch }}」的規則
               </div>
             </div>
 
@@ -3624,17 +3623,18 @@
                   <span class="cfg-rules-add-menu-label">拼圖規則</span>
                   <span class="cfg-rules-add-menu-sub">trigger + condition + actions</span>
                 </button>
+                <!-- v8.15 批2:HARD/SOFT 合併為單一入口(彈窗內選類型;清單 HARD 置前) -->
                 <button class="cfg-rules-add-menu-item"
-                        @click="addRuleFromMenu('hard')">
-                  <span class="cfg-rules-add-menu-icon cfg-text-hard">⛔</span>
-                  <span class="cfg-rules-add-menu-label">棄牌 HARD</span>
-                  <span class="cfg-rules-add-menu-sub">風控:整局排除於統計</span>
+                        @click="addRuleFromMenu('discard')">
+                  <span class="cfg-rules-add-menu-icon">🗑</span>
+                  <span class="cfg-rules-add-menu-label">棄牌規則</span>
+                  <span class="cfg-rules-add-menu-sub">HARD(風控)/ SOFT(體感)於彈窗內選</span>
                 </button>
                 <button class="cfg-rules-add-menu-item"
-                        @click="addRuleFromMenu('soft')">
-                  <span class="cfg-rules-add-menu-icon cfg-text-soft">⚠</span>
-                  <span class="cfg-rules-add-menu-label">棄牌 SOFT</span>
-                  <span class="cfg-rules-add-menu-sub">體感:仍計入但獨立追蹤</span>
+                        @click="addRuleFromMenu('genlimit')">
+                  <span class="cfg-rules-add-menu-icon">🎲</span>
+                  <span class="cfg-rules-add-menu-label">產牌限制</span>
+                  <span class="cfg-rules-add-menu-sub">符號在各區域的出現數量上下限</span>
                 </button>
               </div>
               <!-- #17 自動重設 priority 開關(只對拼圖規則有意義)-->
@@ -3658,10 +3658,12 @@
               <!-- 標題列 -->
               <div class="cfg-split-detail-header">
                 <div style="flex:1;">
+                  <!-- v8.15 批2 #E:標題欄補提示(原本只剩一個無說明輸入框) -->
+                  <label class="cfg-split-id-lbl">條件名稱 <span class="cfg-key">rule_id</span><span class="cfg-split-id-hint">規則的唯一編號,清單與 A.xlsx 都用它</span></label>
                   <input class="input cfg-mode-name-input cfg-split-id-input input-w-id"
                          :class="{ err: !rules[selectedRuleIdx].rule_id.trim() || (ruleDuplicateIds.has(rules[selectedRuleIdx].rule_id) && rules[selectedRuleIdx].rule_id) }"
                          v-model.trim="rules[selectedRuleIdx].rule_id"
-                         placeholder="P001"
+                         placeholder="例:P001 / FG觸發"
                          maxlength="20"
                          @change="renameRuleBuilderState($event.target._oldVal, rules[selectedRuleIdx].rule_id)"
                          @focus="$event.target._oldVal = $event.target.value">
@@ -3734,13 +3736,11 @@
             <label class="cfg-label">
               觸發點 <span class="cfg-key">trigger</span>
             </label>
-            <div class="cfg-chip-row">
-              <button v-for="t in TRIGGER_CATALOG" :key="t.type"
-                      class="cfg-chip cfg-chip-sm"
-                      :class="{ active: rules[selectedRuleIdx].trigger === t.type }"
-                      :title="t.desc"
-                      @click="rules[selectedRuleIdx].trigger = t.type">{{ t.label }}</button>
-            </div>
+            <!-- v8.15 #4:元件契約 — 穩定集合 >6 選項用下拉(原 10 顆 chip 快選改 select;
+                 新增彈窗屬精靈流程例外,維持 chip 快選) -->
+            <select class="input cfg-trigger-select" v-model="rules[selectedRuleIdx].trigger">
+              <option v-for="t in TRIGGER_CATALOG" :key="t.type" :value="t.type">{{ t.label }} — {{ t.type }}</option>
+            </select>
             <div class="cfg-hint" v-if="TRIGGER_BY_TYPE[rules[selectedRuleIdx].trigger]">
               💬 {{ TRIGGER_BY_TYPE[rules[selectedRuleIdx].trigger].desc }}
             </div>
@@ -3753,10 +3753,10 @@
               <div class="cfg-puzzle-mode-toggle">
                 <button class="cfg-chip cfg-chip-sm"
                         :class="{ active: (ruleEditMode[rules[selectedRuleIdx].rule_id] || 'builder') !== 'raw' }"
-                        @click="setRuleEditMode(r, 'builder')">🧩 拼圖模式</button>
+                        @click="setRuleEditMode(rules[selectedRuleIdx], 'builder')">🧩 拼圖模式</button>
                 <button class="cfg-chip cfg-chip-sm"
                         :class="{ active: ruleEditMode[rules[selectedRuleIdx].rule_id] === 'raw' }"
-                        @click="setRuleEditMode(r, 'raw')">⌨ 原始 DSL</button>
+                        @click="setRuleEditMode(rules[selectedRuleIdx], 'raw')">⌨ 原始 DSL</button>
               </div>
             </div>
 
@@ -3771,40 +3771,58 @@
                 尚無條件;按下方按鈕新增第一片拼圖
               </div>
 
-              <div v-else class="cfg-puzzle-rows">
-                <template v-for="(row, ri) in builderRowsMap[rules[selectedRuleIdx].rule_id]" :key="ri">
+              <!-- v8.15 批2 #B:或分組視圖(方案 C + 語義規範)—
+                   以 OR 為斷點切「觸發組」:組內全部必要(且),任一組整組成立即觸發(或)。
+                   語義單一真相 = condition_parser 優先序(AND 綁得比 OR 緊),純顯示層重排。 -->
+              <div v-else class="cfg-cond-groups">
+                <div v-if="condRowGroups(builderRowsMap[rules[selectedRuleIdx].rule_id]).length > 1"
+                     class="cfg-cond-groups-hint">符合以下<strong>任一組</strong>,即觸發:</div>
+                <template v-for="(gp, gi) in condRowGroups(builderRowsMap[rules[selectedRuleIdx].rule_id])" :key="'g' + gi">
+                  <button v-if="gi > 0" class="cfg-cond-or-sep"
+                          title="「或」:任一組成立即觸發。點擊可把此組併回上一組(改為 且)"
+                          @click="gp[0].row.combinator = 'AND'; rebuildConditionForRule(selectedRuleIdx)">或</button>
+                  <div class="cfg-puzzle-rows cfg-puzzle-pills cfg-cond-group">
+                    <span v-if="condRowGroups(builderRowsMap[rules[selectedRuleIdx].rule_id]).length > 1"
+                          class="cfg-cond-group-tag">第 {{ gi + 1 }} 組</span>
+                    <template v-for="it in gp" :key="it.ri">
 
-                  <!-- AND/OR 連接器(第一列不顯示)-->
-                  <div v-if="ri > 0" class="cfg-puzzle-combinator">
-                    <button class="cfg-chip cfg-chip-sm"
-                            :class="{ active: row.combinator === 'AND' }"
-                            @click="row.combinator = 'AND'; rebuildConditionForRule(selectedRuleIdx)">AND</button>
-                    <button class="cfg-chip cfg-chip-sm"
-                            :class="{ active: row.combinator === 'OR' }"
-                            @click="row.combinator = 'OR'; rebuildConditionForRule(selectedRuleIdx)">OR</button>
-                  </div>
+                  <!-- 組內連接符恆為「且」(必要);點擊改「或」= 從此拆出新組 -->
+                  <button v-if="it.ri > gp[0].ri" class="cfg-cond-connector"
+                          title="「且」:必要條件,同組內全部成立才觸發。點擊改為「或」(拆出新的擇一組)"
+                          @click="it.row.combinator = 'OR'; rebuildConditionForRule(selectedRuleIdx)">
+                    且
+                  </button>
 
-                  <!-- 拼圖列 -->
-                  <div class="cfg-puzzle-row">
+                  <!-- 收合態:白話膠囊 -->
+                  <button v-if="!isCondRowOpen('rule:' + rules[selectedRuleIdx].rule_id, it.ri)"
+                          class="cfg-cond-pill"
+                          title="點擊展開編輯這片條件"
+                          @click="toggleCondRow('rule:' + rules[selectedRuleIdx].rule_id, it.ri)">
+                    <span class="cfg-cond-pill-text">{{ humanizeCondRow(it.row) }}</span>
+                    <span class="cfg-cond-pill-edit">✎</span>
+                  </button>
+
+                  <!-- 展開態:四欄編輯列(緊湊寬度,不再撐滿) -->
+                  <div v-else class="cfg-puzzle-row cfg-puzzle-row-compact">
 
                     <!-- 變數類別 -->
                     <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
                       <label class="cfg-puzzle-piece-label">變數</label>
                       <select class="cfg-puzzle-select"
-                              :value="row.category"
-                              @change="changeRowCategory(selectedRuleIdx, ri, $event.target.value)">
-                        <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
+                              :value="it.row.category"
+                              @change="changeRowCategory(selectedRuleIdx, it.ri, $event.target.value)">
+                        <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ varCatLabel(cat.id) }}</option>
                       </select>
                     </div>
 
                     <!-- 子鍵(若需要)-->
-                    <div v-if="rowCategoryMeta(row).needsSubkey"
+                    <div v-if="rowCategoryMeta(it.row).needsSubkey"
                          class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
-                      <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(row).subkeyHint }}</label>
+                      <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(it.row).subkeyHint }}</label>
                       <!-- symbol_count 用下拉,其他用文字 -->
-                      <select v-if="rowCategoryMeta(row).subkeySource === 'symbols' && symbolNames.length > 0"
+                      <select v-if="rowCategoryMeta(it.row).subkeySource === 'symbols' && symbolNames.length > 0"
                               class="cfg-puzzle-select"
-                              v-model="row.subkey"
+                              v-model="it.row.subkey"
                               @change="rebuildConditionForRule(selectedRuleIdx)">
                         <option value="">(選擇)</option>
                         <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
@@ -3812,86 +3830,90 @@
                       <input v-else
                              class="cfg-puzzle-input cfg-mono"
                              type="text"
-                             v-model.trim="row.subkey"
+                             v-model.trim="it.row.subkey"
                              @input="rebuildConditionForRule(selectedRuleIdx)"
-                             :placeholder="rowCategoryMeta(row).subkeyHint">
+                             :placeholder="rowCategoryMeta(it.row).subkeyHint">
                     </div>
 
                     <!-- 運算子 -->
                     <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
                       <label class="cfg-puzzle-piece-label">運算</label>
                       <select class="cfg-puzzle-select cfg-puzzle-op"
-                              v-model="row.op"
+                              v-model="it.row.op"
                               @change="rebuildConditionForRule(selectedRuleIdx)">
-                        <option v-for="o in OP_TYPES" :key="o" :value="o">{{ o }}</option>
+                        <option v-for="o in OP_TYPES" :key="o" :value="o">{{ opLabel(o) }}</option>
                       </select>
                     </div>
 
                     <!-- 值 -->
                     <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
                       <label class="cfg-puzzle-piece-label">
-                        {{ OP_IS_LIST.has(row.op) ? '值清單(逗號分隔)' : '值' }}
+                        {{ OP_IS_LIST.has(it.row.op) ? '值清單(逗號分隔)' : '值' }}
                       </label>
                       <!-- in/not_in:強制文字輸入(可放多值) -->
-                      <input v-if="OP_IS_LIST.has(row.op)"
+                      <input v-if="OP_IS_LIST.has(it.row.op)"
                              class="cfg-puzzle-input cfg-mono"
                              type="text"
-                             v-model.trim="row.value"
+                             v-model.trim="it.row.value"
                              @input="rebuildConditionForRule(selectedRuleIdx)"
                              placeholder="FG1, FG2, FG3">
                       <!-- valueType = mode:用 chip 列出模式 -->
-                      <select v-else-if="rowCategoryMeta(row).valueType === 'mode' && modeNames.length > 0"
+                      <select v-else-if="rowCategoryMeta(it.row).valueType === 'mode' && modeNames.length > 0"
                               class="cfg-puzzle-select"
-                              v-model="row.value"
+                              v-model="it.row.value"
                               @change="rebuildConditionForRule(selectedRuleIdx)">
                         <option v-for="m in modeNames" :key="m" :value="m">{{ m }}</option>
                       </select>
-                      <input v-else-if="rowCategoryMeta(row).valueType === 'number'"
+                      <input v-else-if="rowCategoryMeta(it.row).valueType === 'number'"
                              class="cfg-puzzle-input cfg-mono"
                              type="number"
                              step="any"
-                             v-model="row.value"
+                             v-model="it.row.value"
                              @input="rebuildConditionForRule(selectedRuleIdx)"
                              placeholder="0">
                       <input v-else
                              class="cfg-puzzle-input cfg-mono"
                              type="text"
-                             v-model.trim="row.value"
+                             v-model.trim="it.row.value"
                              @input="rebuildConditionForRule(selectedRuleIdx)"
                              placeholder="值">
                     </div>
 
-                    <!-- 刪除此列 -->
+                    <!-- v8.15 #6:完成(收合為膠囊)+ 刪除 -->
+                    <button class="cfg-cond-row-done"
+                            @click="toggleCondRow('rule:' + rules[selectedRuleIdx].rule_id, it.ri)"
+                            title="完成,收合為白話膠囊">✓</button>
                     <button class="cfg-puzzle-row-del"
-                            @click="removeBuilderRow(selectedRuleIdx, ri)"
+                            @click="removeBuilderRow(selectedRuleIdx, it.ri)"
                             title="移除此片拼圖">✕</button>
+                  </div>
+                    </template>
                   </div>
                 </template>
               </div>
 
               <!-- 新增列按鈕(若已有列,顯示「AND / OR」兩個) -->
               <div class="cfg-puzzle-add">
+                <!-- v8.15:修復舊版引用不存在的 idx(v-for 殘留)→ 走 UI 包裝,新列自動展開 -->
                 <button v-if="!builderRowsMap[rules[selectedRuleIdx].rule_id] || builderRowsMap[rules[selectedRuleIdx].rule_id].length === 0"
                         class="cfg-mode-add-btn cfg-puzzle-add-btn"
-                        @click="addBuilderRow(idx, 'AND')">
+                        @click="addBuilderRowUI('AND')">
                   <span style="font-size: 14px;">+</span>
                   <span>新增第一片條件</span>
                 </button>
                 <template v-else>
-                  <button class="cfg-puzzle-add-and" @click="addBuilderRow(idx, 'AND')">
-                    + AND 條件
+                  <!-- v8.15 批2 #B:語義化命名 — 必要(且)加入最後一組;擇一(或)另開新組 -->
+                  <button class="cfg-puzzle-add-and" @click="addBuilderRowUI('AND')"
+                          title="加到最後一組:同組內全部成立才觸發">
+                    + 必要條件(且)
                   </button>
-                  <button class="cfg-puzzle-add-or" @click="addBuilderRow(idx, 'OR')">
-                    + OR 條件
+                  <button class="cfg-puzzle-add-or" @click="addBuilderRowUI('OR')"
+                          title="另開一組:任一組整組成立即觸發(如 3 或 4 或 5 個 SCAT 都能觸發)">
+                    + 擇一組(或)
                   </button>
                 </template>
               </div>
 
-              <!-- 生成的 DSL 預覽 -->
-              <div class="cfg-puzzle-dsl">
-                <span class="cfg-puzzle-dsl-label">生成的 DSL:</span>
-                <code class="cfg-puzzle-dsl-code">{{ rules[selectedRuleIdx].condition || '(空)' }}</code>
-              </div>
             </div>
 
             <!-- ── 原始 DSL 模式 ── -->
@@ -3912,15 +3934,17 @@
               </div>
             </div>
 
-            <!-- ── #5 釘到 inspector(原折疊測試區改為頁底固定面板)── -->
-            <div class="cfg-puzzle-pin">
-              <button class="cfg-puzzle-pin-btn"
+            <!-- v8.15 批2 #A:DSL + 釘選 合併單行 footer(區塊 4 段 → 2 段) -->
+            <div class="cfg-cond-footer">
+              <span class="cfg-cond-footer-lbl">DSL</span>
+              <code class="cfg-cond-footer-code">{{ rules[selectedRuleIdx].condition || '(空)' }}</code>
+              <button class="cfg-puzzle-pin-btn cfg-cond-footer-pin"
                       :class="{ active: pinnedTest && pinnedTest.kind === 'rule' && pinnedTest.id === rules[selectedRuleIdx].rule_id }"
                       @click="pinTest('rule', rules[selectedRuleIdx].rule_id, rules[selectedRuleIdx].rule_id)"
                       title="把這條規則釘到右下角的 Test Inspector,即時看條件評估結果">
                 <span>🧪</span>
-                <span v-if="pinnedTest && pinnedTest.kind === 'rule' && pinnedTest.id === rules[selectedRuleIdx].rule_id">已釘住 — 看右下 inspector</span>
-                <span v-else>釘到 Test Inspector</span>
+                <span v-if="pinnedTest && pinnedTest.kind === 'rule' && pinnedTest.id === rules[selectedRuleIdx].rule_id">已釘住</span>
+                <span v-else>釘到 inspector</span>
               </button>
             </div>
           </div>
@@ -3950,11 +3974,25 @@
               </div>
 
               <!-- 每個 action 一張卡片 -->
+              <!-- v8.15 #6:動作卡收合 — 標頭一行白話(humanizeAction),點 caret 展開才見型別與參數;
+                   未選型的空動作恆展開,避免無法選型。 -->
               <div v-for="(act, ai) in rules[selectedRuleIdx].actions" :key="ai"
-                   class="cfg-action-card">
+                   class="cfg-action-card"
+                   :class="{ 'is-collapsed': !isActionOpen(rules[selectedRuleIdx].rule_id, ai, act) }">
                 <div class="cfg-action-card-header">
+                  <button class="cfg-action-card-caret"
+                          :class="{ open: isActionOpen(rules[selectedRuleIdx].rule_id, ai, act) }"
+                          :disabled="!act.atype"
+                          @click="toggleActionOpen(rules[selectedRuleIdx].rule_id, ai)"
+                          title="展開 / 收合此動作">▸</button>
                   <span class="cfg-action-card-idx">#{{ ai + 1 }}</span>
-                  <select class="cfg-action-card-select cfg-mono"
+                  <span v-if="!isActionOpen(rules[selectedRuleIdx].rule_id, ai, act)"
+                        class="cfg-action-card-summary"
+                        title="點擊展開編輯"
+                        @click="toggleActionOpen(rules[selectedRuleIdx].rule_id, ai)">
+                    {{ actionMeta(act.atype) ? actionMeta(act.atype).icon + ' ' : '' }}{{ humanizeAction(act) }}
+                  </span>
+                  <select v-else class="cfg-action-card-select cfg-mono"
                           :value="act.atype"
                           @change="changeActionAtType(selectedRuleIdx, ai, $event.target.value)">
                     <option value="">(選擇動作類型)</option>
@@ -3982,6 +4020,7 @@
                   <button class="cfg-action-card-del" @click="removeAction(selectedRuleIdx, ai)" title="刪除">✕</button>
                 </div>
 
+                <template v-if="isActionOpen(rules[selectedRuleIdx].rule_id, ai, act)">
                 <div v-if="actionMeta(act.atype)" class="cfg-action-desc">
                   💬 {{ actionMeta(act.atype).desc }}
                 </div>
@@ -4032,7 +4071,7 @@
                       <button v-for="opt in param.options" :key="opt"
                               class="cfg-chip cfg-chip-sm"
                               :class="{ active: actParamValue(act, param.key) === opt }"
-                              @click="setActParam(act, param.key, opt)">{{ opt }}</button>
+                              @click="setActParam(act, param.key, opt)">{{ enumOptLabel(opt) }}</button>
                     </div>
 
                     <!-- bool:toggle chip -->
@@ -4076,24 +4115,22 @@
 
                 <div v-else-if="actionMeta(act.atype) && actionMeta(act.atype).params.length === 0"
                      class="cfg-hint">此動作不需要參數</div>
+                </template>
               </div>
 
               <!-- 新增 action 按鈕 -->
+              <!-- v8.15 #4:元件契約 — 快捷 atype 一鍵鈕退役(與型別下拉重疊的第二套選擇機制);
+                   統一走「+ 新增動作」→ 型別下拉。 -->
               <div class="cfg-action-add-row">
-                <button class="cfg-action-add-btn" @click="addAction(selectedRuleIdx, '')">
+                <button class="cfg-action-add-btn" @click="addActionUI('')">
                   <span>+</span><span>新增動作</span>
                 </button>
-                <!-- 快捷:常用幾個 atype 直接一鍵新增 -->
-                <button class="cfg-action-add-quick" @click="addAction(selectedRuleIdx, 'EMIT_EVENT')" title="EMIT_EVENT">📢 EMIT</button>
-                <button class="cfg-action-add-quick" @click="addAction(selectedRuleIdx, 'ADJUST_MULTIPLIER')" title="ADJUST_MULTIPLIER">✖️ MULT</button>
-                <button class="cfg-action-add-quick" @click="addAction(selectedRuleIdx, 'UPDATE_GLOBAL')" title="UPDATE_GLOBAL">🌐 GLOBAL</button>
-                <button class="cfg-action-add-quick" @click="addAction(selectedRuleIdx, 'SWITCH_MODE')" title="SWITCH_MODE">🔀 MODE</button>
               </div>
 
-              <!-- 預覽生成的 DSL(複製貼進 xlsx Actions 欄會直接被後端 parse_actions 認得)-->
-              <div class="cfg-puzzle-dsl">
-                <span class="cfg-puzzle-dsl-label">編譯成 Actions DSL:</span>
-                <code class="cfg-puzzle-dsl-code">{{ buildActionsDSL(rules[selectedRuleIdx].actions) || '(空)' }}</code>
+              <!-- v8.15 批2 #A:Actions DSL 併入單行 footer -->
+              <div class="cfg-cond-footer">
+                <span class="cfg-cond-footer-lbl">DSL</span>
+                <code class="cfg-cond-footer-code">{{ buildActionsDSL(rules[selectedRuleIdx].actions) || '(空)' }}</code>
               </div>
             </div>
 
@@ -4167,10 +4204,11 @@
               <!-- 標題列 -->
               <div class="cfg-split-detail-header">
                 <div style="flex:1;">
+                  <label class="cfg-split-id-lbl">條件名稱 <span class="cfg-key">discard_id</span><span class="cfg-split-id-hint">棄牌規則的唯一編號</span></label>
                   <input class="input cfg-mode-name-input cfg-split-id-input input-w-id"
                          :class="{ err: !discards[selectedDiscardIdx].discard_id.trim() || (discardDuplicateIds.has(discards[selectedDiscardIdx].discard_id) && discards[selectedDiscardIdx].discard_id) }"
                          v-model.trim="discards[selectedDiscardIdx].discard_id"
-                         placeholder="D001"
+                         placeholder="例:D001 / 死局上限"
                          maxlength="20">
                 </div>
                 <button class="cfg-split-detail-dup"
@@ -4249,32 +4287,48 @@
                     <div v-if="!condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])] || condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])].length === 0"
                          class="cfg-puzzle-empty">尚無條件;按下方按鈕新增第一片拼圖</div>
 
-                    <div v-else class="cfg-puzzle-rows">
-                      <template v-for="(row, ri) in condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])]" :key="ri">
-                        <div v-if="ri > 0" class="cfg-puzzle-combinator">
-                          <button class="cfg-chip cfg-chip-sm"
-                                  :class="{ active: row.combinator === 'AND' }"
-                                  @click="row.combinator = 'AND'; discardCond.rebuild(discards[selectedDiscardIdx])">AND</button>
-                          <button class="cfg-chip cfg-chip-sm"
-                                  :class="{ active: row.combinator === 'OR' }"
-                                  @click="row.combinator = 'OR'; discardCond.rebuild(discards[selectedDiscardIdx])">OR</button>
-                        </div>
+                    <!-- v8.15 批2 #B:棄牌條件同款或分組視圖 -->
+                    <div v-else class="cfg-cond-groups">
+                      <div v-if="condRowGroups(condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])]).length > 1"
+                           class="cfg-cond-groups-hint">符合以下<strong>任一組</strong>,即棄牌:</div>
+                      <template v-for="(gp, gi) in condRowGroups(condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])])" :key="'dg' + gi">
+                        <button v-if="gi > 0" class="cfg-cond-or-sep"
+                                title="「或」:任一組成立即棄牌。點擊可把此組併回上一組(改為 且)"
+                                @click="gp[0].row.combinator = 'AND'; discardCond.rebuild(discards[selectedDiscardIdx])">或</button>
+                        <div class="cfg-puzzle-rows cfg-puzzle-pills cfg-cond-group">
+                          <span v-if="condRowGroups(condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])]).length > 1"
+                                class="cfg-cond-group-tag">第 {{ gi + 1 }} 組</span>
+                          <template v-for="it in gp" :key="it.ri">
 
-                        <div class="cfg-puzzle-row">
+                        <button v-if="it.ri > gp[0].ri" class="cfg-cond-connector"
+                                title="「且」:必要條件,同組內全部成立才棄牌。點擊改為「或」(拆出新的擇一組)"
+                                @click="it.row.combinator = 'OR'; discardCond.rebuild(discards[selectedDiscardIdx])">
+                          且
+                        </button>
+
+                        <button v-if="!isCondRowOpen(discardCond.key(discards[selectedDiscardIdx]), it.ri)"
+                                class="cfg-cond-pill"
+                                title="點擊展開編輯這片條件"
+                                @click="toggleCondRow(discardCond.key(discards[selectedDiscardIdx]), it.ri)">
+                          <span class="cfg-cond-pill-text">{{ humanizeCondRow(it.row) }}</span>
+                          <span class="cfg-cond-pill-edit">✎</span>
+                        </button>
+
+                        <div v-else class="cfg-puzzle-row cfg-puzzle-row-compact">
                           <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
                             <label class="cfg-puzzle-piece-label">變數</label>
                             <select class="cfg-puzzle-select"
-                                    :value="row.category"
-                                    @change="discardCond.changeCat(discards[selectedDiscardIdx], ri, $event.target.value)">
-                              <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
+                                    :value="it.row.category"
+                                    @change="discardCond.changeCat(discards[selectedDiscardIdx], it.ri, $event.target.value)">
+                              <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ varCatLabel(cat.id) }}</option>
                             </select>
                           </div>
 
-                          <div v-if="rowCategoryMeta(row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
-                            <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(row).subkeyHint }}</label>
-                            <select v-if="rowCategoryMeta(row).subkeySource === 'symbols' && symbolNames.length > 0"
+                          <div v-if="rowCategoryMeta(it.row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
+                            <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(it.row).subkeyHint }}</label>
+                            <select v-if="rowCategoryMeta(it.row).subkeySource === 'symbols' && symbolNames.length > 0"
                                     class="cfg-puzzle-select"
-                                    v-model="row.subkey"
+                                    v-model="it.row.subkey"
                                     @change="discardCond.rebuild(discards[selectedDiscardIdx])">
                               <option value="">(選擇)</option>
                               <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
@@ -4282,45 +4336,50 @@
                             <input v-else
                                    class="cfg-puzzle-input cfg-mono"
                                    type="text"
-                                   v-model.trim="row.subkey"
+                                   v-model.trim="it.row.subkey"
                                    @input="discardCond.rebuild(discards[selectedDiscardIdx])"
-                                   :placeholder="rowCategoryMeta(row).subkeyHint">
+                                   :placeholder="rowCategoryMeta(it.row).subkeyHint">
                           </div>
 
                           <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
                             <label class="cfg-puzzle-piece-label">運算</label>
                             <select class="cfg-puzzle-select cfg-puzzle-op"
-                                    v-model="row.op"
+                                    v-model="it.row.op"
                                     @change="discardCond.rebuild(discards[selectedDiscardIdx])">
-                              <option v-for="o in OP_TYPES" :key="o" :value="o">{{ o }}</option>
+                              <option v-for="o in OP_TYPES" :key="o" :value="o">{{ opLabel(o) }}</option>
                             </select>
                           </div>
 
                           <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
                             <label class="cfg-puzzle-piece-label">值</label>
-                            <select v-if="rowCategoryMeta(row).valueType === 'mode' && modeNames.length > 0"
+                            <select v-if="rowCategoryMeta(it.row).valueType === 'mode' && modeNames.length > 0"
                                     class="cfg-puzzle-select"
-                                    v-model="row.value"
+                                    v-model="it.row.value"
                                     @change="discardCond.rebuild(discards[selectedDiscardIdx])">
                               <option v-for="m in modeNames" :key="m" :value="m">{{ m }}</option>
                             </select>
-                            <input v-else-if="rowCategoryMeta(row).valueType === 'number'"
+                            <input v-else-if="rowCategoryMeta(it.row).valueType === 'number'"
                                    class="cfg-puzzle-input cfg-mono"
                                    type="number" step="any"
-                                   v-model="row.value"
+                                   v-model="it.row.value"
                                    @input="discardCond.rebuild(discards[selectedDiscardIdx])"
                                    placeholder="0">
                             <input v-else
                                    class="cfg-puzzle-input cfg-mono"
                                    type="text"
-                                   v-model.trim="row.value"
+                                   v-model.trim="it.row.value"
                                    @input="discardCond.rebuild(discards[selectedDiscardIdx])"
                                    placeholder="值">
                           </div>
 
+                          <button class="cfg-cond-row-done"
+                                  @click="toggleCondRow(discardCond.key(discards[selectedDiscardIdx]), ri)"
+                                  title="完成,收合為白話膠囊">✓</button>
                           <button class="cfg-puzzle-row-del"
-                                  @click="discardCond.removeRow(discards[selectedDiscardIdx], ri)"
+                                  @click="discardCond.removeRow(discards[selectedDiscardIdx], it.ri)"
                                   title="移除此片拼圖">✕</button>
+                        </div>
+                          </template>
                         </div>
                       </template>
                     </div>
@@ -4328,20 +4387,18 @@
                     <div class="cfg-puzzle-add">
                       <button v-if="!condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])] || condBuilderState.rows[discardCond.key(discards[selectedDiscardIdx])].length === 0"
                               class="cfg-mode-add-btn cfg-puzzle-add-btn"
-                              @click="discardCond.addRow(discards[selectedDiscardIdx], 'AND')">
+                              @click="discardAddRowUI(discards[selectedDiscardIdx], 'AND')">
                         <span style="font-size: 14px;">+</span>
                         <span>新增第一片條件</span>
                       </button>
                       <template v-else>
-                        <button class="cfg-puzzle-add-and" @click="discardCond.addRow(discards[selectedDiscardIdx], 'AND')">+ AND 條件</button>
-                        <button class="cfg-puzzle-add-or" @click="discardCond.addRow(discards[selectedDiscardIdx], 'OR')">+ OR 條件</button>
+                        <button class="cfg-puzzle-add-and" @click="discardAddRowUI(discards[selectedDiscardIdx], 'AND')"
+                                title="加到最後一組:同組內全部成立才棄牌">+ 必要條件(且)</button>
+                        <button class="cfg-puzzle-add-or" @click="discardAddRowUI(discards[selectedDiscardIdx], 'OR')"
+                                title="另開一組:任一組整組成立即棄牌">+ 擇一組(或)</button>
                       </template>
                     </div>
 
-                    <div class="cfg-puzzle-dsl">
-                      <span class="cfg-puzzle-dsl-label">生成的 DSL:</span>
-                      <code class="cfg-puzzle-dsl-code">{{ discards[selectedDiscardIdx].condition || '(空)' }}</code>
-                    </div>
                   </div>
 
                   <!-- 原始模式 -->
@@ -4357,16 +4414,18 @@
                       ⚠ 條件為空,此規則永遠不會觸發
                     </div>
                   </div>
-                  <!-- ── #5 釘到 inspector ── -->
-                  <div class="cfg-puzzle-pin">
-                    <button class="cfg-puzzle-pin-btn"
+                  <!-- v8.15 批2 #A:DSL + 釘選 合併單行 footer -->
+                  <div class="cfg-cond-footer">
+                    <span class="cfg-cond-footer-lbl">DSL</span>
+                    <code class="cfg-cond-footer-code">{{ discards[selectedDiscardIdx].condition || '(空)' }}</code>
+                    <button class="cfg-puzzle-pin-btn cfg-cond-footer-pin"
                             :class="{ active: pinnedTest && pinnedTest.kind === 'discard' && pinnedTest.id === discards[selectedDiscardIdx].discard_id }"
                             @click="pinTest('discard', discards[selectedDiscardIdx].discard_id, discards[selectedDiscardIdx].discard_id)"
                             :disabled="!discards[selectedDiscardIdx].discard_id"
                             title="把這條棄牌規則釘到右下角的 Test Inspector,即時看條件評估結果">
                       <span>🧪</span>
-                      <span v-if="pinnedTest && pinnedTest.kind === 'discard' && pinnedTest.id === discards[selectedDiscardIdx].discard_id">已釘住 — 看右下 inspector</span>
-                      <span v-else>釘到 Test Inspector</span>
+                      <span v-if="pinnedTest && pinnedTest.kind === 'discard' && pinnedTest.id === discards[selectedDiscardIdx].discard_id">已釘住</span>
+                      <span v-else>釘到 inspector</span>
                     </button>
                   </div>
                 </div>
@@ -4387,6 +4446,277 @@
             </template>
           </div>
 
+        </div>
+
+        <!-- ═══ v8.15 #3:新增規則彈窗(拼圖=兩步;棄牌=單步;沿用 v8.14 cfg-modedlg 視覺)═══ -->
+        <div v-if="ruleDlg.open" class="cfg-modedlg-mask"
+             @click.self="ruleDlg.open = false"
+             @keydown.esc="ruleDlg.open = false">
+          <div class="cfg-modedlg cfg-modedlg-wide" role="dialog" aria-label="新增規則">
+            <div class="cfg-modedlg-title">
+              {{ ruleDlg.kind === 'discard' ? '新增棄牌規則' : '新增規則' }}
+              <span v-if="ruleDlg.kind === 'puzzle'" class="cfg-ruledlg-step">步驟 {{ ruleDlg.step }} / 2</span>
+            </div>
+
+            <!-- ── 第一步:條件設定 ── -->
+            <template v-if="ruleDlg.step === 1">
+              <!-- 條件名稱(唯一鍵 = rule_id / discard_id;撞名防呆) -->
+              <div class="cfg-modedlg-field">
+                <label class="cfg-label">條件名稱 <span class="cfg-key">必填 · 即規則編號</span></label>
+                <input class="input cfg-ruledlg-name"
+                       :class="{ err: ruleDlgNameTaken }"
+                       type="text" v-model.trim="ruleDlg.name"
+                       :placeholder="ruleDlg.kind === 'discard' ? '例:D001 / 死局上限' : '例:P001 / FG觸發'"
+                       maxlength="20"
+                       @keyup.enter="ruleDlg.kind === 'discard' ? confirmRuleDlg() : dlgStepNext()">
+                <div v-if="ruleDlgNameTaken" class="cfg-warn cfg-warn-inline">⚠ 已有同名規則(不分大小寫),請換一個名稱</div>
+              </div>
+
+              <!-- 棄牌類型(僅棄牌) -->
+              <div v-if="ruleDlg.kind === 'discard'" class="cfg-modedlg-field">
+                <label class="cfg-label">棄牌類型 <span class="cfg-key">discard_kind</span></label>
+                <div class="cfg-chip-row">
+                  <button v-for="k in DISCARD_KINDS" :key="k"
+                          class="cfg-chip"
+                          :class="{ active: ruleDlg.hardness === k,
+                                    'cfg-chip-hard': k === 'HARD' && ruleDlg.hardness === k,
+                                    'cfg-chip-soft': k === 'SOFT' && ruleDlg.hardness === k }"
+                          @click="ruleDlg.hardness = k">{{ k }}</button>
+                </div>
+                <div class="cfg-hint"><strong>HARD</strong>(風控):整局排除於統計;<strong>SOFT</strong>(體感):仍計入但獨立追蹤</div>
+              </div>
+
+              <!-- 套用模式(單選;複選涉及 compose/extract/a_loader 契約,遞延 v8.16) -->
+              <div class="cfg-modedlg-field">
+                <label class="cfg-label">套用模式 <span class="cfg-key">mode_scope</span></label>
+                <div class="cfg-chip-row">
+                  <button v-for="s in allModeScopes" :key="s"
+                          class="cfg-chip cfg-chip-sm"
+                          :class="{ active: ruleDlg.mode === s }"
+                          @click="ruleDlg.mode = s">{{ s }}</button>
+                </div>
+                <div class="cfg-hint">ALL = 所有模式;或指定某個模式</div>
+              </div>
+
+              <!-- 觸發點(僅拼圖;精靈流程例外維持 chip 快選) -->
+              <div v-if="ruleDlg.kind === 'puzzle'" class="cfg-modedlg-field">
+                <label class="cfg-label">觸發點 <span class="cfg-key">trigger</span></label>
+                <div class="cfg-chip-row">
+                  <button v-for="t in TRIGGER_CATALOG" :key="t.type"
+                          class="cfg-chip cfg-chip-sm"
+                          :class="{ active: ruleDlg.trigger === t.type }"
+                          :title="t.desc"
+                          @click="ruleDlg.trigger = t.type">{{ t.label }}</button>
+                </div>
+                <div class="cfg-hint" v-if="TRIGGER_BY_TYPE[ruleDlg.trigger]">💬 {{ TRIGGER_BY_TYPE[ruleDlg.trigger].desc }}</div>
+              </div>
+
+              <!-- 觸發條件(拼圖式;恆展開緊湊列;無 test inspector 釘選) -->
+              <div class="cfg-modedlg-field">
+                <label class="cfg-label">觸發條件 <span class="cfg-key">condition</span></label>
+                <div v-if="ruleDlg.rows.length === 0" class="cfg-puzzle-empty">
+                  尚無條件(可留空 = 觸發點發生即執行);按下方按鈕新增第一片拼圖
+                </div>
+                <div v-else class="cfg-cond-groups">
+                  <div v-if="condRowGroups(ruleDlg.rows).length > 1" class="cfg-cond-groups-hint">符合以下<strong>任一組</strong>,即觸發:</div>
+                  <template v-for="(gp, gi) in condRowGroups(ruleDlg.rows)" :key="'dlgg' + gi">
+                    <button v-if="gi > 0" class="cfg-cond-or-sep"
+                            title="「或」:任一組成立即觸發。點擊可把此組併回上一組(改為 且)"
+                            @click="gp[0].row.combinator = 'AND'">或</button>
+                    <div class="cfg-puzzle-rows cfg-puzzle-pills cfg-cond-group">
+                      <span v-if="condRowGroups(ruleDlg.rows).length > 1" class="cfg-cond-group-tag">第 {{ gi + 1 }} 組</span>
+                      <template v-for="it in gp" :key="it.ri">
+                    <button v-if="it.ri > gp[0].ri" class="cfg-cond-connector"
+                            title="「且」:必要條件。點擊改為「或」(拆出新的擇一組)"
+                            @click="it.row.combinator = 'OR'">
+                      且
+                    </button>
+                    <div class="cfg-puzzle-row cfg-puzzle-row-compact">
+                      <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
+                        <label class="cfg-puzzle-piece-label">變數</label>
+                        <select class="cfg-puzzle-select"
+                                :value="it.row.category"
+                                @change="dlgChangeCat(it.ri, $event.target.value)">
+                          <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ varCatLabel(cat.id) }}</option>
+                        </select>
+                      </div>
+                      <div v-if="rowCategoryMeta(it.row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
+                        <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(it.row).subkeyHint }}</label>
+                        <select v-if="rowCategoryMeta(it.row).subkeySource === 'symbols' && symbolNames.length > 0"
+                                class="cfg-puzzle-select" v-model="it.row.subkey">
+                          <option value="">(選擇)</option>
+                          <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
+                        </select>
+                        <input v-else class="cfg-puzzle-input cfg-mono" type="text"
+                               v-model.trim="it.row.subkey" :placeholder="rowCategoryMeta(it.row).subkeyHint">
+                      </div>
+                      <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
+                        <label class="cfg-puzzle-piece-label">運算</label>
+                        <select class="cfg-puzzle-select cfg-puzzle-op" v-model="it.row.op">
+                          <option v-for="o in OP_TYPES" :key="o" :value="o">{{ opLabel(o) }}</option>
+                        </select>
+                      </div>
+                      <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
+                        <label class="cfg-puzzle-piece-label">{{ OP_IS_LIST.has(it.row.op) ? '值清單(逗號分隔)' : '值' }}</label>
+                        <input v-if="OP_IS_LIST.has(it.row.op)"
+                               class="cfg-puzzle-input cfg-mono" type="text"
+                               v-model.trim="it.row.value" placeholder="A, B, C">
+                        <select v-else-if="rowCategoryMeta(it.row).valueType === 'mode' && modeNames.length > 0"
+                                class="cfg-puzzle-select" v-model="it.row.value">
+                          <option v-for="m in modeNames" :key="m" :value="m">{{ m }}</option>
+                        </select>
+                        <input v-else-if="rowCategoryMeta(it.row).valueType === 'number'"
+                               class="cfg-puzzle-input cfg-mono" type="number" step="any"
+                               v-model="it.row.value" placeholder="0">
+                        <input v-else class="cfg-puzzle-input cfg-mono" type="text"
+                               v-model.trim="it.row.value" placeholder="值">
+                      </div>
+                      <button class="cfg-puzzle-row-del" @click="dlgRemoveRow(it.ri)" title="移除此片拼圖">✕</button>
+                    </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <div class="cfg-puzzle-add">
+                  <button v-if="ruleDlg.rows.length === 0"
+                          class="cfg-mode-add-btn cfg-puzzle-add-btn" @click="dlgAddRow('AND')">
+                    <span style="font-size: 14px;">+</span><span>新增第一片條件</span>
+                  </button>
+                  <template v-else>
+                    <button class="cfg-puzzle-add-and" @click="dlgAddRow('AND')"
+                            title="加到最後一組:同組內全部成立才觸發">+ 必要條件(且)</button>
+                    <button class="cfg-puzzle-add-or" @click="dlgAddRow('OR')"
+                            title="另開一組:任一組整組成立即觸發(如 3 或 4 或 5 個 SCAT 都能觸發)">+ 擇一組(或)</button>
+                  </template>
+                </div>
+              </div>
+
+              <div class="cfg-modedlg-actions">
+                <button class="btn-pill" @click="ruleDlg.open = false">取消</button>
+                <button v-if="ruleDlg.kind === 'puzzle'"
+                        class="btn-pill cfg-modedlg-confirm"
+                        :disabled="!ruleDlg.name.trim() || ruleDlgNameTaken"
+                        @click="dlgStepNext">下一步</button>
+                <button v-else
+                        class="btn-pill cfg-modedlg-confirm"
+                        :disabled="!ruleDlg.name.trim() || ruleDlgNameTaken"
+                        @click="confirmRuleDlg">建立棄牌規則</button>
+              </div>
+            </template>
+
+            <!-- ── 第二步(僅拼圖):動作事件 ── -->
+            <template v-else>
+              <!-- 唯讀回顧:條件名稱 + 口語化觸發條件 -->
+              <div class="cfg-ruledlg-ro">
+                <span class="cfg-ruledlg-ro-lbl">條件名稱</span>
+                <span class="cfg-ruledlg-ro-val">{{ ruleDlg.name }}</span>
+              </div>
+              <div class="cfg-ruledlg-ro">
+                <span class="cfg-ruledlg-ro-lbl">觸發條件</span>
+                <span class="cfg-ruledlg-ro-val">{{ ruleDlgCondHuman }}</span>
+              </div>
+
+              <div class="cfg-ruledlg-subtitle">動作事件</div>
+
+              <!-- 事件名稱(→ description;防呆:不得與條件名稱 / 其他規則描述完全一樣) -->
+              <div class="cfg-modedlg-field">
+                <label class="cfg-label">事件名稱 <span class="cfg-key">description</span></label>
+                <input class="input"
+                       :class="{ err: !!ruleDlgEventClash }"
+                       type="text" v-model.trim="ruleDlg.eventName"
+                       placeholder="例:觸發免費遊戲 / 全盤倍數提升"
+                       maxlength="60">
+                <div v-if="ruleDlgEventClash" class="cfg-warn cfg-warn-inline">⚠ {{ ruleDlgEventClash }}</div>
+              </div>
+
+              <!-- 執行動作(下拉;#4 契約)+ 動態參數(不含附加資料/備註欄) -->
+              <div class="cfg-modedlg-field">
+                <label class="cfg-label">執行動作 <span class="cfg-key">actions[0]</span></label>
+                <select class="cfg-action-card-select cfg-mono"
+                        :value="ruleDlg.action.atype"
+                        @change="dlgChangeActionType($event.target.value)">
+                  <option value="">(選擇動作類型;可先不選,之後在編輯區補)</option>
+                  <optgroup label="倍數 / 變數">
+                    <option v-for="a in actionsByGroup.numeric" :key="a.type" :value="a.type">{{ a.icon }} {{ a.label }} — {{ a.type }}</option>
+                  </optgroup>
+                  <optgroup label="流程控制">
+                    <option v-for="a in actionsByGroup.flow" :key="a.type" :value="a.type">{{ a.icon }} {{ a.label }} — {{ a.type }}</option>
+                  </optgroup>
+                  <optgroup label="盤面操作">
+                    <option v-for="a in actionsByGroup.board" :key="a.type" :value="a.type">{{ a.icon }} {{ a.label }} — {{ a.type }}</option>
+                  </optgroup>
+                </select>
+                <div v-if="actionMeta(ruleDlg.action.atype)" class="cfg-action-desc">💬 {{ actionMeta(ruleDlg.action.atype).desc }}</div>
+
+                <div v-if="actionMeta(ruleDlg.action.atype) && actionMeta(ruleDlg.action.atype).params.length > 0"
+                     class="cfg-action-params">
+                  <div v-for="param in actionMeta(ruleDlg.action.atype).params" :key="param.key"
+                       class="cfg-field cfg-field-compact">
+                    <label class="cfg-label">
+                      {{ param.label }} <span class="cfg-key">{{ param.key }}</span>
+                      <span v-if="param.required" class="cfg-required">*</span>
+                    </label>
+                    <select v-if="param.type === 'mode'" class="input cfg-mono"
+                            :value="actParamValue(ruleDlg.action, param.key)"
+                            @change="setActParam(ruleDlg.action, param.key, $event.target.value)">
+                      <option value="">(選擇模式)</option>
+                      <option v-for="m in modeNames" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                    <template v-else-if="param.type === 'symbol'">
+                      <select v-if="symbolNames.length > 0" class="input cfg-mono"
+                              :value="actParamValue(ruleDlg.action, param.key)"
+                              @change="setActParam(ruleDlg.action, param.key, $event.target.value)">
+                        <option value="">(選擇符號)</option>
+                        <option v-for="sv in (param.sentinels || [])" :key="'sv'+sv" :value="sv">{{ sv }}（{{ sv === 'BEST' ? '取最有利' : '隨機挑選' }}）</option>
+                        <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                      <input v-else class="input cfg-mono" type="text"
+                             :value="actParamValue(ruleDlg.action, param.key)"
+                             @input="setActParam(ruleDlg.action, param.key, $event.target.value)"
+                             :placeholder="param.placeholder">
+                    </template>
+                    <div v-else-if="param.type === 'enum'" class="cfg-chip-row">
+                      <button v-for="opt in param.options" :key="opt"
+                              class="cfg-chip cfg-chip-sm"
+                              :class="{ active: actParamValue(ruleDlg.action, param.key) === opt }"
+                              @click="setActParam(ruleDlg.action, param.key, opt)">{{ enumOptLabel(opt) }}</button>
+                    </div>
+                    <div v-else-if="param.type === 'bool'" class="cfg-chip-row">
+                      <button class="cfg-chip cfg-chip-sm"
+                              :class="{ active: actParamValue(ruleDlg.action, param.key) === true || actParamValue(ruleDlg.action, param.key) === 'true' }"
+                              @click="setActParam(ruleDlg.action, param.key, true)">true</button>
+                      <button class="cfg-chip cfg-chip-sm"
+                              :class="{ active: actParamValue(ruleDlg.action, param.key) === false || actParamValue(ruleDlg.action, param.key) === 'false' || actParamValue(ruleDlg.action, param.key) === '' }"
+                              @click="setActParam(ruleDlg.action, param.key, false)">false</button>
+                    </div>
+                    <input v-else-if="param.type === 'pos'" class="input cfg-mono input-w-id" type="text"
+                           :value="actParamValue(ruleDlg.action, param.key)"
+                           @input="setActParam(ruleDlg.action, param.key, $event.target.value)"
+                           :placeholder="param.placeholder || '[0,1]'">
+                    <input v-else-if="param.type === 'number'" class="input cfg-mono input-w-num" type="number" step="any"
+                           :value="actParamValue(ruleDlg.action, param.key)"
+                           @input="setActParam(ruleDlg.action, param.key, $event.target.value === '' ? '' : Number($event.target.value))"
+                           :placeholder="param.placeholder">
+                    <input v-else class="input cfg-mono" type="text"
+                           :value="actParamValue(ruleDlg.action, param.key)"
+                           @input="setActParam(ruleDlg.action, param.key, $event.target.value)"
+                           :placeholder="param.placeholder">
+                    <div v-if="param.desc" class="cfg-hint">{{ param.desc }}</div>
+                  </div>
+                </div>
+                <div v-else-if="actionMeta(ruleDlg.action.atype) && actionMeta(ruleDlg.action.atype).params.length === 0"
+                     class="cfg-hint">此動作不需要參數</div>
+              </div>
+
+              <div class="cfg-modedlg-actions">
+                <button class="btn-pill" @click="ruleDlg.open = false">取消</button>
+                <button class="btn-pill" @click="ruleDlg.step = 1">← 上一步</button>
+                <button class="btn-pill cfg-modedlg-confirm"
+                        :disabled="!!ruleDlgEventClash"
+                        @click="confirmRuleDlg">確認建立</button>
+              </div>
+            </template>
+          </div>
         </div>
         </div><!-- /cfg-rules-section-puzzle -->
 
@@ -4487,10 +4817,7 @@
             </div>
           </div>
 
-          <!-- ── 模式清單(從 11_Mode_Config 整段搬過來)── -->
-          <div class="cfg-modes-inline-hint">
-            模式清單(對應 A.xlsx 的 11_Mode_Config 分頁,匯出時仍會獨立成一張分頁)
-          </div>
+          <!-- ── 模式清單(從 11_Mode_Config 整段搬過來;v8.14 #1:對應備註自 UI 移除)── -->
           <div class="cfg-modes-list">
             <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
                  :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode,
@@ -4610,7 +4937,7 @@
                               <select class="cfg-puzzle-select"
                                       :value="row.category"
                                       @change="modeCond.changeCat(m, ri, $event.target.value)">
-                                <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
+                                <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ varCatLabel(cat.id) }}</option>
                               </select>
                             </div>
 
@@ -4636,7 +4963,7 @@
                               <select class="cfg-puzzle-select cfg-puzzle-op"
                                       v-model="row.op"
                                       @change="modeCond.rebuild(m)">
-                                <option v-for="o in OP_TYPES" :key="o" :value="o">{{ o }}</option>
+                                <option v-for="o in OP_TYPES" :key="o" :value="o">{{ opLabel(o) }}</option>
                               </select>
                             </div>
 
@@ -4735,10 +5062,7 @@
                     <span class="cfg-card-caret" :class="{ open: isModeGpOpen(m) }" title="展開 / 收合">›</span>
                   </div>
                   <div v-show="isModeGpOpen(m)" class="cfg-card-body">
-                  <div class="cfg-mode-future-note">
-                    <span class="cfg-mode-future-tag">描述用</span>
-                    以下欄位寫入 A.xlsx / 規格書供下游數值 / 模擬工具落盤遵循;本工具<strong>不執行、不計算 RTP</strong>。
-                  </div>
+                  <!-- v8.14 #1:「描述用…不計算 RTP」備註自 UI 移除(定位資訊由欄位 hint 承載) -->
 
                   <!-- v7.14:玩法種類(SPIN=旋轉;WHEEL/PICK/COLLECTION=bonus 小遊戲)-->
                   <div class="cfg-field" style="margin-top:8px;">
@@ -4804,7 +5128,7 @@
                       </div>
                       <button class="cfg-mode-delete-btn" @click="removeTriggerPay(m, ti)" title="刪除此列">✕</button>
                     </div>
-                    <button class="cfg-mode-add-btn cfg-bonus-item-add" @click="addTriggerPay(m)">
+                    <button class="cfg-mode-add-btn cfg-bonus-item-add cfg-btn-inline" @click="addTriggerPay(m)">
                       <span style="font-size:14px">+</span> 新增觸發給付
                     </button>
                   </div>
@@ -4913,10 +5237,84 @@
               </div><!-- /cfg-mode-card-expand (v5.0-d) -->
             </div>
 
-            <button class="cfg-mode-add-btn" @click="addMode">
+            <button class="cfg-mode-add-btn" @click="openAddModeDlg">
               <span style="font-size: 16px;">+</span>
               <span>新增模式</span>
             </button>
+
+            <!-- ═══ v8.14 #3:新增模式彈窗(主 app 內 overlay;Esc / 點遮罩 = 取消)═══ -->
+            <div v-if="modeAddDlg.open" class="cfg-modedlg-mask"
+                 @click.self="modeAddDlg.open = false"
+                 @keydown.esc="modeAddDlg.open = false">
+              <div class="cfg-modedlg" role="dialog" aria-label="新增模式">
+                <div class="cfg-modedlg-title">新增模式</div>
+
+                <!-- 模式名稱(必填 + 撞名防呆)+ 快選 -->
+                <div class="cfg-modedlg-field">
+                  <label class="cfg-label">模式名稱 <span class="cfg-key">必填</span></label>
+                  <div class="cfg-modedlg-name-row">
+                    <input class="input input-w-name cfg-modedlg-name"
+                           :class="{ err: modeAddDlgNameTaken }"
+                           type="text" v-model.trim="modeAddDlg.name"
+                           placeholder="例:NG / FG / BG" maxlength="20"
+                           @keyup.enter="confirmAddModeDlg">
+                    <span class="cfg-modedlg-quick-lbl">快選</span>
+                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'NG' }" @click="modeAddDlgPick('NG')">NG</button>
+                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'FG' }" @click="modeAddDlgPick('FG')">FG</button>
+                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'BG' }" @click="modeAddDlgPick('BG')">BG</button>
+                  </div>
+                  <div v-if="modeAddDlgNameTaken" class="cfg-warn cfg-warn-inline">⚠ 已有同名模式(不分大小寫),請換一個名稱</div>
+                </div>
+
+                <!-- 玩法大方向 -->
+                <div class="cfg-modedlg-field">
+                  <label class="cfg-label">玩法大方向 <span class="cfg-key">mode_kind</span></label>
+                  <div class="cfg-chip-row">
+                    <button v-for="opt in MODE_KIND_OPTIONS" :key="opt.v"
+                            class="cfg-chip" :class="{ active: modeAddDlg.kind === opt.v }"
+                            @click="modeAddDlg.kind = opt.v">{{ opt.label }}</button>
+                  </div>
+                  <div class="cfg-hint">確認後主畫面的模式卡片會依此顯示對應內容;之後仍可在卡片內調整。</div>
+                </div>
+
+                <!-- 觸發給付(NG 隱藏;bonus 玩法不適用) -->
+                <div v-if="modeAddDlgTpVisible" class="cfg-modedlg-field">
+                  <label class="cfg-label">觸發給付 <span class="cfg-key">trigger_pays</span></label>
+                  <div class="cfg-chip-row">
+                    <button class="cfg-chip" :class="{ active: !modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = false">關閉</button>
+                    <button class="cfg-chip" :class="{ active: modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = true">開啟</button>
+                  </div>
+                  <template v-if="modeAddDlg.tpEnabled">
+                    <div v-for="(tp, ti) in modeAddDlg.tpRows" :key="'dtp'+ti" class="cfg-mode-tp-row">
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">scatter 數</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.scatter_count">
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">給付 ×注額</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="tp.pay">
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">給予免費局</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.grants_spins">
+                      </div>
+                      <button class="cfg-mode-delete-btn" @click="modeAddDlgTpRemove(ti)" title="刪除此列">✕</button>
+                    </div>
+                    <button class="cfg-mode-add-btn cfg-bonus-item-add cfg-btn-inline" @click="modeAddDlgTpAdd">
+                      <span style="font-size:14px">+</span> 新增觸發給付
+                    </button>
+                    <div class="cfg-hint">也可以先建立模式,之後在卡片內的「玩法設定」補填或調整。</div>
+                  </template>
+                </div>
+
+                <div class="cfg-modedlg-actions">
+                  <button class="btn-pill" @click="modeAddDlg.open = false">取消</button>
+                  <button class="btn-pill cfg-modedlg-confirm"
+                          :disabled="!modeAddDlg.name.trim() || modeAddDlgNameTaken"
+                          @click="confirmAddModeDlg">建立模式</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
           </div>
@@ -4952,8 +5350,9 @@
               </thead>
               <tbody>
                 <tr v-for="(gl, gi) in genLimits" :key="'gl'+gi"
-                    :class="{ 'is-warn': genLimitStatusOf(gl).kind === 'warn', 'is-err': genLimitStatusOf(gl).kind === 'err' }"
-                    :title="humanizeGenLimit(gl)">
+                    :class="{ 'is-warn': genLimitStatusOf(gl).kind === 'warn', 'is-err': genLimitStatusOf(gl).kind === 'err', 'is-selected': glSelectedIdx === gi }"
+                    :title="humanizeGenLimit(gl)"
+                    @click="glSelectedIdx = gi">
                   <td><input class="input input-sm" style="width:74px;" v-model="gl.limit_id" placeholder="GL001"></td>
                   <td>
                     <select class="input input-sm" v-model="gl.symbol_id">

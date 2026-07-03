@@ -6307,17 +6307,8 @@
 
 /* ============================================================
    v3.1:11_Mode_Config 合進 01_Global · 模式定義小提示
+   (v8.14 #1:.cfg-modes-inline-hint 備註自 UI 移除,樣式一併清除)
    ============================================================ */
-.cfg-modes-inline-hint {
-  font-size: 10.5px;
-  color: var(--text-light);
-  line-height: 1.5;
-  margin-bottom: 10px;
-  padding: 6px 10px;
-  background: var(--glass-1);
-  border-left: 2px solid var(--accent-brd);
-  border-radius: 0 6px 6px 0;
-}
 
 /* ============================================================
    v3.1:09 + 10 合併成「規則」tab 用樣式
@@ -10781,30 +10772,9 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-sm, 6px);
 }
 
-/* ── v7.10:模式卡「玩法設定」子區(reset_scope + trigger_pays;引擎尚未接,amber 預留)── */
+/* ── v7.10:模式卡「玩法設定」子區(reset_scope + trigger_pays;引擎尚未接)──
+   v8.14 #1:「描述用」備註自 UI 移除,.cfg-mode-future-note / -tag 樣式一併清除 */
 .cfg-mode-gameplay { margin-top: 10px; }
-.cfg-mode-future-note {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 6px 0 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--warn-text);
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-brd);
-  border-radius: var(--r-sm, 6px);
-}
-.cfg-mode-future-tag {
-  flex-shrink: 0;
-  padding: 1px 7px;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 9px;
-  color: var(--warn-text);
-  border: 1px solid var(--warn-brd);
-}
 /* v7.14:mode 玩法種類 — SPIN 專屬欄位灰示(非 SPIN 時) + bonus 小遊戲編輯區 */
 .cfg-mode-spin-fields.cfg-kind-na { opacity: .45; pointer-events: none; }
 .cfg-kind-na-note { color: var(--warn-text); margin: 6px 0 2px; font-style: italic; }
@@ -11005,3 +10975,449 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-strip-cmp-row.is-off { background: color-mix(in srgb, #c0392b 6%, transparent); }
 /* 輪帶中打了 03 未定義的符號 */
 #app .cfg-strip-cmp-row.is-unknown { background: color-mix(in srgb, #b8860b 10%, transparent); }
+
+/* ══════════════════════════════════════════════════════════════
+   v8.14 / UI 批 D：全站排版收斂 + 模式定義重構
+   (一律附加於檔尾;結構性覆寫以 #app 前綴取得 cascade 優先)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 批1:fit 頁 — 清除底部人工撐高(捲動白名單:layout/symbols/reel_strips 不套)──
+   底部空白三大主犯:.cfg-form 64px Inspector 保留區、.cfg-content 32px 底 padding、
+   .cfg-sticky-form height:100% + 空態 flex:1 撐高。fit 頁全數收斂;
+   Inspector 有釘住(has-pinned-inspector)時才恢復保留區,避免 pill 遮住最後一列。 */
+#app .cfg-content.cfg-content--fit { padding-bottom: 16px; }
+#app .cfg-content--fit .cfg-form { padding-bottom: 16px; }
+#app .cfg-content--fit.has-pinned-inspector .cfg-form { padding-bottom: 64px; }
+#app .cfg-content--fit .cfg-form > .cfg-section:last-child,
+#app .cfg-content--fit .cfg-section:last-child,
+#app .cfg-content--fit .cfg-form > *:last-child { margin-bottom: 0; }
+/* sticky-form 改自然高度;矩陣頁的 sticky 模式列改對 .cfg-content 捲動生效 */
+#app .cfg-content--fit .cfg-sticky-form {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+#app .cfg-content--fit .cfg-sticky-form > .cfg-mode-card {
+  flex: none;
+  overflow-y: visible;
+  min-height: 0;
+}
+#app .cfg-content--fit .cfg-sticky-form > .cfg-empty-state { flex: none; }
+
+/* ── 批2-A:文字級距統一(同類型統一 + 全體 +2px)──
+   token 四檔 + key/hint 輔級;字族不動(Jakarta+Noto TC;JetBrains Mono 僅 cfg-key/代碼欄) */
+#app {
+  --fs-title:   18px;   /* 頁標題(原 16) */
+  --fs-section: 15px;   /* 卡片/區段標題(原 13) */
+  --fs-body:    15px;   /* 內文/輸入框(原 13) */
+  --fs-label:   14px;   /* 欄位標籤/chip(原 12) */
+  --fs-hint:    12.5px; /* 提示(原 10.5) */
+  --fs-key:     12px;   /* 欄位 key 徽章(原 10) */
+}
+#app .cfg-form-title    { font-size: var(--fs-title); font-weight: 700; }
+#app .cfg-form-sub      { font-size: var(--fs-label); }
+#app .cfg-section-title,
+#app .cfg-section-title-text { font-size: var(--fs-section); font-weight: 700; }
+#app .cfg-label         { font-size: var(--fs-label); font-weight: 600; }
+#app .cfg-key           { font-size: var(--fs-key); }
+#app .cfg-hint          { font-size: var(--fs-hint); }
+#app .cfg-warn          { font-size: var(--fs-hint); }
+#app .input             { font-size: var(--fs-body); }
+#app .input-sm          { font-size: var(--fs-label); }
+#app .cfg-chip          { font-size: var(--fs-label); }
+#app .cfg-check         { font-size: var(--fs-label); }
+#app .btn-pill          { font-size: var(--fs-label); }
+#app .cfg-mode-add-btn  { font-size: var(--fs-body); }
+#app .cfg-mode-summary-name { font-size: var(--fs-section); }
+#app .cfg-mode-summary-meta,
+#app .cfg-mode-summary-trigger { font-size: var(--fs-hint); }
+#app .cfg-mode-tp-lbl,
+#app .cfg-bonus-ilabel  { font-size: var(--fs-label); }
+#app .cfg-empty-text    { font-size: var(--fs-body); }
+
+/* ── 批2-B:卡片邊界與設定斷點 ──
+   邊框 0.5px 玻璃邊 → 1px 實邊;卡片間距 12→16;
+   聚焦中卡片(focus-within)邊框轉 accent + 陰影一階,明確「正在編輯這張」 */
+#app .cfg-section,
+#app .cfg-mode-card {
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--glass-brd);
+  margin-bottom: 16px;
+}
+#app .cfg-section:focus-within,
+#app .cfg-mode-card:focus-within {
+  border-color: var(--accent-brd);
+  box-shadow: var(--focus-ring), var(--shadow-sm);
+}
+/* 卡片內設定項之間的視覺斷點(僅限直接子層,避免波及 grid 並排欄位) */
+#app .cfg-card-body > .cfg-field + .cfg-field,
+#app .cfg-mode-card-body > .cfg-field + .cfg-field,
+#app .cfg-section > .cfg-field + .cfg-field {
+  border-top: 1px dashed var(--glass-brd);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+/* ── 批2-C:輸入框寬度收斂(未套寬度 token 者上限 320px,靠左;textarea 豁免)── */
+#app .cfg-field > .input:not([class*="input-w-"]):not(textarea) { max-width: 320px; }
+#app .cfg-field > select.input:not([class*="input-w-"]) { max-width: 240px; }
+/* R3 欄位群(Hold&Win respin 列)內的裸 select/input 同樣收斂,不再拉滿卡寬 */
+#app .cfg-mode-r3-fields select.input:not([class*="input-w-"]) { max-width: 240px; }
+#app .cfg-mode-r3-fields input.input:not([class*="input-w-"]):not([type=number]) { max-width: 320px; }
+/* 欄位列底對齊:label 上 / input 下,同列水平線一致 */
+#app .cfg-mode-grid3 { align-items: end; }
+
+/* ── 批3:模式定義 ── */
+/* #2 封頂/上限:間距放寬 + 輸入框收窄 */
+#app .cfg-mode-cap-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+#app .cfg-mode-cap-row .input { max-width: 150px; }
+/* #5 / 通用:行內新增按鈕收斂寬度(不再吃滿容器) */
+#app .cfg-mode-add-btn.cfg-btn-inline {
+  display: inline-flex;
+  width: auto;
+  align-self: flex-start;
+  padding: 6px 14px;
+  margin-top: 6px;
+}
+
+/* #3 新增模式彈窗 */
+#app .cfg-modedlg-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(20, 18, 24, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+#app .cfg-modedlg {
+  width: min(560px, 100%);
+  max-height: min(80vh, 640px);
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg, 0 18px 48px rgba(0,0,0,0.28));
+  padding: 20px 22px;
+}
+#app .cfg-modedlg-title {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  color: var(--accent-text);
+  margin-bottom: 14px;
+}
+#app .cfg-modedlg-field + .cfg-modedlg-field {
+  border-top: 1px dashed var(--glass-brd);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+#app .cfg-modedlg-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#app .cfg-modedlg-name-row .input { max-width: 180px; }
+#app .cfg-modedlg-quick-lbl {
+  font-size: var(--fs-hint);
+  color: var(--text-light);
+  margin-left: 4px;
+}
+#app .cfg-modedlg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+/* 建立鈕 = 選中態契約:實心 Accent + 白字 + 細陰影(--accent 為軟填底,實心用 --accent-hex) */
+#app .btn-pill.cfg-modedlg-confirm:not(:disabled) {
+  background: var(--accent-hex);
+  border-color: var(--accent-hex);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+#app .btn-pill.cfg-modedlg-confirm:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* ══════════════════════════════════════════════════════════════
+   v8.15:規則頁大改版(方案 C:句子式垂直流水線)
+   #2 合併清單沿用既有群組樣式(無新規則)
+   #4 觸發點下拉 / #6 條件膠囊 + 緊湊編輯列 + 動作卡收合
+   #3 彈窗補充(cfg-modedlg 系列的加寬與唯讀行)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── #4:觸發點下拉(取代 10 顆 chip 快選) ── */
+#app .cfg-trigger-select { max-width: 420px; }
+
+/* ── #6:條件膠囊容器 — pill 橫向流式排列,行內混排連接符 ── */
+#app .cfg-puzzle-rows.cfg-puzzle-pills {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 收合態:白話膠囊(點擊展開) */
+#app .cfg-cond-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 12px;
+  background: var(--accent);
+  border: 1.5px solid var(--accent-brd);
+  border-radius: 999px;
+  color: var(--accent-text);
+  font-size: var(--fs-body);
+  cursor: pointer;
+  transition: filter .12s ease, box-shadow .12s ease;
+}
+#app .cfg-cond-pill:hover { filter: brightness(1.04); box-shadow: var(--shadow-sm); }
+#app .cfg-cond-pill-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#app .cfg-cond-pill-edit { font-size: 11px; opacity: .55; flex: 0 0 auto; }
+
+/* AND/OR 小連接符(點擊切換;OR 以警示色系區分) */
+#app .cfg-cond-connector {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  border-radius: 999px;
+  border: 1px dashed var(--glass-brd);
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: color .12s ease, border-color .12s ease;
+}
+#app .cfg-cond-connector:hover { border-style: solid; color: var(--accent-text); }
+#app .cfg-cond-connector.is-or {
+  color: var(--warn-text);
+  border-color: var(--warn-brd);
+  background: var(--warn-bg);
+}
+
+/* 展開態:四欄貼內容寬,不再橫向撐滿(#6 版面修正核心) */
+#app .cfg-puzzle-row.cfg-puzzle-row-compact {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+#app .cfg-puzzle-row-compact .cfg-puzzle-piece { flex: 0 0 auto; }
+#app .cfg-puzzle-row-compact .cfg-puzzle-select,
+#app .cfg-puzzle-row-compact .cfg-puzzle-input {
+  width: auto;
+  min-width: 96px;
+  max-width: 160px;
+}
+#app .cfg-puzzle-row-compact .cfg-puzzle-op { min-width: 76px; }
+
+/* 完成(收合為膠囊)鈕:與刪除鈕同排,✓ 圓鈕 */
+#app .cfg-cond-row-done {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--accent-brd);
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  transition: filter .12s ease;
+}
+#app .cfg-cond-row-done:hover { filter: brightness(1.06); }
+
+/* ── #6:動作卡收合 ── */
+#app .cfg-action-card-caret {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform .15s ease, color .15s ease;
+}
+#app .cfg-action-card-caret.open { transform: rotate(90deg); color: var(--accent-text); }
+#app .cfg-action-card-caret:disabled { opacity: .35; cursor: default; }
+#app .cfg-action-card-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-body);
+  color: var(--text);
+  cursor: pointer;
+}
+#app .cfg-action-card.is-collapsed { padding: 8px 12px; gap: 0; }
+
+/* ── #3:新增規則彈窗補充(沿用 cfg-modedlg 視覺) ── */
+#app .cfg-modedlg.cfg-modedlg-wide { width: min(680px, 100%); }
+#app .cfg-ruledlg-step {
+  font-size: var(--fs-hint);
+  font-weight: 600;
+  color: var(--text-light);
+  margin-left: 8px;
+}
+#app .cfg-ruledlg-ro {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+}
+#app .cfg-ruledlg-ro + .cfg-ruledlg-ro { border-top: 1px dashed var(--glass-brd); }
+#app .cfg-ruledlg-ro-lbl {
+  flex: 0 0 auto;
+  font-size: var(--fs-hint);
+  color: var(--text-light);
+}
+#app .cfg-ruledlg-ro-val {
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+#app .cfg-ruledlg-subtitle {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--glass-brd);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+/* ── 行動版(≤767):膠囊流式天然換行;展開列縱向堆疊 ── */
+@media (max-width: 767px) {
+  #app .cfg-puzzle-row.cfg-puzzle-row-compact { width: 100%; }
+  #app .cfg-puzzle-row-compact .cfg-puzzle-select,
+  #app .cfg-puzzle-row-compact .cfg-puzzle-input { max-width: 100%; }
+  #app .cfg-modedlg.cfg-modedlg-wide { width: 100%; }
+  #app .cfg-trigger-select { max-width: 100%; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v8.15 批2:或分組視圖 / DSL+釘選 footer / 新增鈕收斂 / 標題提示
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── #B:或分組視圖 ── */
+#app .cfg-cond-groups {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+#app .cfg-cond-groups-hint {
+  font-size: var(--fs-hint);
+  color: var(--text-light);
+}
+#app .cfg-cond-groups-hint strong { color: var(--accent-text); }
+/* 觸發組:一組一行(pill 流式),多組時以虛線框輕度圈組 */
+#app .cfg-cond-group {
+  position: relative;
+  max-width: 100%;
+}
+#app .cfg-cond-groups .cfg-cond-group + .cfg-cond-group,
+#app .cfg-cond-group:has(.cfg-cond-group-tag) {
+  padding: 8px 10px;
+  border: 1px dashed var(--glass-brd);
+  border-radius: var(--r-input);
+}
+#app .cfg-cond-group-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  letter-spacing: .04em;
+}
+/* 「或」組間分隔(可點擊併組) */
+#app .cfg-cond-or-sep {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: 14px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid var(--warn-brd);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  cursor: pointer;
+}
+#app .cfg-cond-or-sep:hover { filter: brightness(1.04); }
+
+/* ── #A:DSL + 釘選 單行 footer ── */
+#app .cfg-cond-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--divider);
+}
+#app .cfg-cond-footer-lbl {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-light);
+}
+#app .cfg-cond-footer-code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-light);
+  background: transparent;
+}
+#app .cfg-cond-footer-pin { flex: 0 0 auto; }
+
+/* ── 方案 A:新增鈕由半寬大按鈕收斂為行內小 chip ── */
+#app .cfg-puzzle-add-and,
+#app .cfg-puzzle-add-or {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+/* ── #E:編輯區標題提示 ── */
+#app .cfg-split-id-lbl {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: var(--fs-hint);
+  font-weight: 600;
+  color: var(--text-light);
+}
+#app .cfg-split-id-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-muted, var(--text-light));
+}
+
+/* ── #F:產牌限制表 列選中高亮(從合併清單跳入時定位) ── */
+#app .cfg-genlimits-table tbody tr.is-selected {
+  outline: 2px solid var(--accent-brd);
+  outline-offset: -2px;
+  background: var(--accent);
+}
+
+/* 行動版:或分隔靠左、組框滿寬 */
+@media (max-width: 767px) {
+  #app .cfg-cond-or-sep { margin-left: 6px; }
+  #app .cfg-cond-group { width: 100%; }
+}
