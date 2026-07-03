@@ -1111,6 +1111,33 @@
   //   · 一般遊戲/FG/BONUS 內容自第17列起(1-16留白=logo圖區);賠率表自第9列起
   //  純描述,不執行不算 RTP。舊 buildPlanXlsxBuffer 不動。
   // ════════════════════════════════════════════════════════════════════
+
+  // ─────────────────────────────────────────────────────────────
+  //  v8.10:xlsx → xlsm 後處理(公司格式企劃書)
+  //  xlsm 與 xlsx 的實質差異只有 zip 內 [Content_Types].xml 的 workbook
+  //  content-type 宣告(+ 有巨集時的 vbaProject.bin)。此處產「無巨集 xlsm」:
+  //  Excel 可正常開啟;之後拿到公司巨集時,於 TODO 處嵌入 vbaProject.bin 即可。
+  // ─────────────────────────────────────────────────────────────
+  function _xlsxToXlsmBuffer(xlsxArrayBuffer) {
+    const ff = (typeof window !== 'undefined' && window.fflate) || (typeof fflate !== 'undefined' ? fflate : null);
+    if (!ff) return null;   // fflate 未載入 → 呼叫端 fallback 純 xlsx
+    const files = ff.unzipSync(new Uint8Array(xlsxArrayBuffer));
+    const ctPath = '[Content_Types].xml';
+    if (!files[ctPath]) return null;
+    let ct = ff.strFromU8(files[ctPath]);
+    ct = ct.replace(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml',
+      'application/vnd.ms-excel.sheet.macroEnabled.main+xml'
+    );
+    files[ctPath] = ff.strToU8(ct);
+    // TODO(巨集版):待取得公司 vbaProject.bin 後 —
+    //   1. files['xl/vbaProject.bin'] = <該 bin 的 Uint8Array>
+    //   2. [Content_Types].xml 加 <Override PartName="/xl/vbaProject.bin"
+    //        ContentType="application/vnd.ms-office.vbaProject"/>
+    //   3. xl/_rels/workbook.xml.rels 加 vbaProject relationship
+    return ff.zipSync(files, { level: 6 }).buffer;
+  }
+
   async function buildCompanyXlsxBuffer(metaIn) {
     if (typeof window.ExcelJS === 'undefined') throw new Error('ExcelJS 未載入');
     const cfg  = collectConfig();
@@ -2262,6 +2289,7 @@
     mergeMeta,
     buildPlanXlsxBuffer,
     buildCompanyXlsxBuffer,
+    _xlsxToXlsmBuffer,
     buildMechMarkdown,
     behaviorTemplate,
     _jackpotRowsFromConfig,   // v5.1
@@ -2600,9 +2628,17 @@
           save();
           setHint('產生企劃書（公司格式）中…');
           const buf = await SP.DocGen.buildCompanyXlsxBuffer(JSON.parse(JSON.stringify(meta)));
-          const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-          _download(blob, `${_baseName()}_企劃書.xlsx`);
-          setHint('✔ 企劃書（公司格式）已匯出', 'ok');
+          // v8.10:公司格式改出 .xlsm(macro-enabled;目前無巨集,巨集之後由公司範本嵌入)
+          const xlsmBuf = SP.DocGen._xlsxToXlsmBuffer ? SP.DocGen._xlsxToXlsmBuffer(buf) : null;
+          if (xlsmBuf) {
+            const blob = new Blob([xlsmBuf], { type: 'application/vnd.ms-excel.sheet.macroEnabled.12' });
+            _download(blob, `${_baseName()}_企劃書.xlsm`);
+            setHint('✔ 企劃書（公司格式 .xlsm）已匯出', 'ok');
+          } else {
+            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            _download(blob, `${_baseName()}_企劃書.xlsx`);
+            setHint('✔ 企劃書已匯出（fflate 未載入,退回 .xlsx）', 'ok');
+          }
         } catch (e) {
           console.error(e); setHint(`匯出失敗：${e.message || e}`, 'err');
         } finally { busy.value = false; }

@@ -172,6 +172,26 @@
       const selectedKind = ref('puzzle');  // 'puzzle' | 'discard'
       // 左欄過濾器:全部 / 拼圖 / HARD / SOFT
       const rulesListFilter = ref('all');  // 'all' | 'puzzle' | 'hard' | 'soft'
+      // v8.11/A-1:規則清單關鍵字搜尋(取代與子分頁重疊的「全部/拼圖」chips)
+      const rulesListSearch = ref('');
+      function ruleMatchesSearch(r) {
+        const q = (rulesListSearch.value || '').toLowerCase();
+        if (!q) return true;
+        if (!r) return false;
+        if ((r.rule_id || '').toLowerCase().includes(q)) return true;
+        if ((r.description || '').toLowerCase().includes(q)) return true;
+        if ((r.trigger || '').toLowerCase().includes(q)) return true;
+        if (Array.isArray(r.actions) && r.actions.some(a => a && (a.atype || '').toLowerCase().includes(q))) return true;
+        return false;
+      }
+      function discardMatchesSearch(d) {
+        const q = (rulesListSearch.value || '').toLowerCase();
+        if (!q) return true;
+        if (!d) return false;
+        return (d.discard_id || '').toLowerCase().includes(q)
+            || (d.description || '').toLowerCase().includes(q)
+            || (d.condition || '').toLowerCase().includes(q);
+      }
       // v7.10:盤面規則 vs 通用規則分流(選項 A,依 action type 黑白判定)。
       //   規則只要含任一「盤面/符號幾何」action → 盤面規則;完全不含 → 通用規則。一條規則唯一歸屬。
       const BOARD_ACTION_TYPES = new Set([
@@ -4217,6 +4237,65 @@
         else delete reelStrips.strips[mode][rid];
       }
       // strip 隱含的符號分佈 %（驗證 / 預覽用）
+      // ─── v8.13/批C:輪帶輔助 —— 建議長度 / 權重對照 / 07b 約束提示 ───
+      // 核心定位不變:純編輯輔助與描述層提示,不做 RTP 反推配平(那是下游模擬工具的事)。
+      function suggestedStripLen() {
+        // 依盤面自動建議:最大視窗列數 × 8,下限 24、上限 120(業界常見帶長區間的保守建議)
+        const maxRows = Math.max(3, ...layout.map(r => Number(r.max_rows) || 0));
+        return Math.min(120, Math.max(24, maxRows * 8));
+      }
+      // 對照表:每符號「輪帶出現% vs 04 權重目標% vs Δ」;含輪帶中未定義符號偵測
+      function stripCompare(mode, rid) {
+        const arr = parseStripStr(stripStr[mode] && stripStr[mode][rid]);
+        if (!arr.length) return [];
+        const counts = stripToWeights(arr);
+        const tot = arr.length;
+        const e = reelW(mode);
+        let wTot = 0;
+        for (const sid of e.symbol_ids) wTot += Number(e.weights[`${rid}-${sid}`]) || 0;
+        const known = new Set(e.symbol_ids);
+        const out = [];
+        for (const sid of e.symbol_ids) {
+          const c = counts[sid] || 0;
+          const w = Number(e.weights[`${rid}-${sid}`]) || 0;
+          if (c === 0 && w === 0) continue;
+          const sp = c / tot * 100;
+          const wp = wTot > 0 ? w / wTot * 100 : 0;
+          out.push({ sid, count: c, stripPct: sp, weightPct: wp, delta: sp - wp, unknown: false });
+        }
+        for (const [sid, c] of Object.entries(counts)) {
+          if (!known.has(sid)) out.push({ sid, count: c, stripPct: c / tot * 100, weightPct: 0, delta: null, unknown: true });
+        }
+        return out.sort((a, b) => b.count - a.count);
+      }
+      // 07b 產牌限制 × 輪帶的「可靠推論」提示(只提示邏輯上必然的衝突,不越界猜測視窗抽樣結果):
+      //   MAIN zone、mode 命中、min_count > 0 的符號,若在「全部輪帶」計次總和 = 0 → 該局盤面
+      //   永遠湊不出下限 → 必違反。max_count 與輪帶計次無必然關係,不提示。
+      function stripLimitConflicts(mode) {
+        const out = [];
+        const totalBySym = {};
+        for (const r of layout) {
+          const arr = parseStripStr(stripStr[mode] && stripStr[mode][r.reel_id]);
+          for (const [sid, c] of Object.entries(stripToWeights(arr))) {
+            totalBySym[sid] = (totalBySym[sid] || 0) + c;
+          }
+        }
+        const anyStrip = Object.keys(totalBySym).length > 0;
+        if (!anyStrip) return out;
+        for (const gl of genLimits) {
+          if (!gl || !gl.symbol_id) continue;
+          if (String(gl.zone || 'MAIN') !== 'MAIN') continue;
+          const ms = gl.mode_scope || 'ALL';
+          if (ms !== 'ALL' && ms !== mode) continue;
+          const min = Number(gl.min_count) || 0;
+          if (min <= 0) continue;
+          if ((totalBySym[gl.symbol_id] || 0) === 0) {
+            out.push({ limit_id: gl.limit_id, symbol_id: gl.symbol_id, min });
+          }
+        }
+        return out;
+      }
+
       function stripDist(mode, rid) {
         const arr = parseStripStr(stripStr[mode] && stripStr[mode][rid]);
         const w = stripToWeights(arr);
@@ -4614,9 +4693,70 @@
         }
       }
       // 04 排序:重新排列 symbol_ids 順序(只動欄,不動權重值)
+      // ─── v8.12/批B:符號欄篩選 + 例外摘要 ───
+      // 主情境:「特殊圖示 × 特定輪」的例外調整(如 WILD 在 R1 壓低);
+      // 一般符號也會調 → 篩選只做「視野聚焦」,不隱藏資料、不動結構。
+      const reelSymFilterType = ref('all');            // 'all' | 'special' | 'normal'
+      const reelSymFilterPicked = reactive(new Set()); // 符號 chips 多選(空 = 不限)
+      function _symIsSpecial(sid) {
+        const sym = symbolList.value.find(x => (x.name && x.name.trim()) === sid);
+        if (!sym) return false;
+        const t = String(sym.type || '').toUpperCase();
+        return !!(sym.is_wild || sym.is_scatter || t === 'WILD' || t === 'SCATTER' || t === 'SPECIAL');
+      }
+      function visibleReelSyms(mode) {
+        let ids = reelW(mode).symbol_ids;
+        if (reelSymFilterType.value === 'special') ids = ids.filter(_symIsSpecial);
+        else if (reelSymFilterType.value === 'normal') ids = ids.filter(sid => !_symIsSpecial(sid));
+        if (reelSymFilterPicked.size > 0) ids = ids.filter(sid => reelSymFilterPicked.has(sid));
+        return ids;
+      }
+      function toggleReelSymPick(sid) {
+        if (reelSymFilterPicked.has(sid)) reelSymFilterPicked.delete(sid);
+        else reelSymFilterPicked.add(sid);
+      }
+      function clearReelSymFilter() { reelSymFilterType.value = 'all'; reelSymFilterPicked.clear(); }
+      // 欄「基準」= 眾數(該欄出現頻率最高的權重值;並列取較大者)
+      function reelColBase(mode, sid) {
+        const e = reelW(mode); const freq = new Map();
+        for (const r of layout) {
+          const v = Number(e.weights[`${r.reel_id}-${sid}`]) || 0;
+          freq.set(v, (freq.get(v) || 0) + 1);
+        }
+        let best = 0, bestN = -1;
+        for (const [v, n] of freq) if (n > bestN || (n === bestN && v > best)) { best = v; bestN = n; }
+        return best;
+      }
+      function reelIsDeviant(mode, rid, sid) {
+        return (Number(reelW(mode).weights[`${rid}-${sid}`]) || 0) !== reelColBase(mode, sid);
+      }
+      // 例外摘要:全部「偏離該欄基準」的格子(= 人工調整過的點)
+      function reelExceptions(mode) {
+        const out = []; const e = reelW(mode);
+        for (const sid of e.symbol_ids) {
+          const base = reelColBase(mode, sid);
+          for (const r of layout) {
+            const v = Number(e.weights[`${r.reel_id}-${sid}`]) || 0;
+            if (v !== base) out.push({ sid, rid: r.reel_id, v, base });
+          }
+        }
+        return out;
+      }
+      function gotoReelException(mode, rid, sid) {
+        clearMatrixSelection();
+        matrixSelection.keys.add(_selKey('reel', mode, rid, String(sid)));
+        Vue.nextTick(() => {
+          const el = document.querySelector('.cfg-matrix .is-selected');
+          if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+      }
+
       function sortReelSymbols(mode, by) {
         const e = reelW(mode);
-        if (by === 'alpha-asc') {
+        if (by === 'special-first') {
+          // v8.12:特殊符號(WILD/SCATTER/SPECIAL)置前,其餘保持原相對序(穩定排序)
+          e.symbol_ids.sort((a, b) => (_symIsSpecial(b) ? 1 : 0) - (_symIsSpecial(a) ? 1 : 0));
+        } else if (by === 'alpha-asc') {
           e.symbol_ids.sort((a, b) => a.localeCompare(b));
         } else if (by === 'alpha-desc') {
           e.symbol_ids.sort((a, b) => b.localeCompare(a));
@@ -9284,7 +9424,7 @@
         //   multipliers/coinValues 物件本身內部仍由存檔 watch / 驗證 / 遷移使用,無需導出至模板。
         rtpResult, rtpPct, rtpVsTarget,
         reelStrips, stripActiveMode, stripStr, stripLen, commitStrip, stripDist,
-        stripGenLen, stripGenStacked,
+        stripGenLen, stripGenStacked, suggestedStripLen, stripCompare, stripLimitConflicts,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
         addTriggerPay, removeTriggerPay, RESET_SCOPE_OPTIONS, STACK_MODE_OPTIONS,
         // v8.0:legacy bonus 匯出(bonusGames/addBonusGame/bonusesForMode/bonusJpOptions/…/
@@ -9310,6 +9450,8 @@
         renameRuleBuilderState,
         ruleTestOpen, testCtx, toggleRuleTest, evalRuleNow,
         condBuilderState, condKey, discardCond, modeCond,
+        reelSymFilterType, reelSymFilterPicked, symIsSpecial: _symIsSpecial, visibleReelSyms,
+        toggleReelSymPick, clearReelSymFilter, reelColBase, reelIsDeviant, reelExceptions, gotoReelException,
         ACTION_CATALOG, ACTION_BY_TYPE, actionsByGroup,
         actionEditMode, actionsParseError,
         actionMeta, actParamValue, setActParam,
@@ -9339,7 +9481,7 @@
         resetCurrent,
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用
-        selectedKind, rulesListFilter, rulesAddMenuOpen,
+        selectedKind, rulesListFilter, rulesListSearch, ruleMatchesSearch, discardMatchesSearch, rulesAddMenuOpen,
         isBoardRule, ruleInSection,
         rulesSection, setRulesSection,
         rulesNavExpanded, onRulesParentClick, gotoRulesSub, onRailReopen,

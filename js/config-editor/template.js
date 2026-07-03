@@ -474,7 +474,7 @@
       <div v-if="active === 'global'" class="cfg-form"></div>
 
       <!-- ═══════ 13_Jackpots JP 彩金(v6.2 #0 獨立分頁)═══════ -->
-      <div v-else-if="active === 'jackpots'" class="cfg-form">
+      <div v-else-if="active === 'jackpots'" class="cfg-form cfg-jackpots-form">
         <div class="cfg-form-header">
           <div class="cfg-form-title">💰 13_Jackpots · JP 彩金</div>
           <div class="cfg-form-sub">定義 JACKPOT 名稱、類型與觸發;文件生成自動帶入,匯出寫入選用分頁 13_Jackpots(模擬引擎忽略)。</div>
@@ -1363,6 +1363,7 @@
                   <select class="cfg-matrix-sort-v2-select"
                           @change="sortReelSymbols(reelActiveMode, $event.target.value); $event.target.value = ''">
                     <option value="" disabled selected>選擇…</option>
+                    <option value="special-first">⭐ 特殊優先</option>
                     <option value="alpha-asc">A → Z</option>
                     <option value="alpha-desc">Z → A</option>
                     <option value="weight-desc">權重 大 → 小</option>
@@ -1381,6 +1382,39 @@
 
               <!-- 矩陣表(編輯模式;只有 1 個模式時 view toggle 不顯示,此 v-if 永遠成立) -->
               <div v-if="reelViewMode === 'edit' || modeNames.length < 2" class="cfg-matrix-wrap">
+                <!-- v8.12/批B:符號欄篩選(視野聚焦,不動資料)+ 例外摘要 -->
+                <div class="cfg-matrix-symfilter">
+                  <span class="cfg-mqb-label">欄篩選</span>
+                  <button class="cfg-chip cfg-chip-sm"
+                          :class="{ active: reelSymFilterType === 'all' && reelSymFilterPicked.size === 0 }"
+                          @click="clearReelSymFilter()">全部</button>
+                  <button class="cfg-chip cfg-chip-sm"
+                          :class="{ active: reelSymFilterType === 'special' }"
+                          @click="reelSymFilterType = reelSymFilterType === 'special' ? 'all' : 'special'"
+                          title="只顯示 WILD / SCATTER / SPECIAL 欄">⭐ 特殊</button>
+                  <button class="cfg-chip cfg-chip-sm"
+                          :class="{ active: reelSymFilterType === 'normal' }"
+                          @click="reelSymFilterType = reelSymFilterType === 'normal' ? 'all' : 'normal'">一般</button>
+                  <span class="cfg-msf-sep"></span>
+                  <button v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'msf' + sid"
+                          class="cfg-chip cfg-chip-sm cfg-msf-sym"
+                          :class="{ active: reelSymFilterPicked.has(sid) }"
+                          @click="toggleReelSymPick(sid)"
+                          title="只顯示選中的符號欄(可多選,再點取消)">{{ symIsSpecial(sid) ? '⭐' : '' }}{{ sid }}</button>
+                </div>
+                <div class="cfg-matrix-exceptions">
+                  <span class="cfg-mqb-label" title="偏離該欄基準(眾數)的格子 = 人工調整過的例外點">例外</span>
+                  <template v-if="reelExceptions(reelActiveMode).length">
+                    <button v-for="ex in reelExceptions(reelActiveMode)" :key="'ex' + ex.rid + '-' + ex.sid"
+                            class="cfg-exc-chip"
+                            @click="gotoReelException(reelActiveMode, ex.rid, ex.sid)"
+                            :title="'基準 ' + ex.base + ' → 此格 ' + ex.v + '。點擊跳至該格'">
+                      {{ ex.sid }}·R{{ ex.rid }} <b>{{ ex.v }}</b><s>{{ ex.base }}</s>
+                    </button>
+                  </template>
+                  <span v-else class="cfg-exc-none">本模式各欄均勻,無人工例外</span>
+                </div>
+
                 <!-- D 大優化:常駐快速操作列(不必再開 popover) -->
                 <div class="cfg-matrix-quickbar">
                   <div class="cfg-mqb-group">
@@ -1421,7 +1455,7 @@
                   <thead>
                     <tr>
                       <th class="cfg-matrix-corner">R \ Sym</th>
-                      <th v-for="sid in reelW(reelActiveMode).symbol_ids" :key="sid"
+                      <th v-for="sid in visibleReelSyms(reelActiveMode)" :key="sid"
                           class="cfg-matrix-colhead-clickable">
                         <div class="cfg-matrix-colhead-wrap">
                           <span class="cfg-matrix-colhead-name cfg-matrix-head-sel" @click="selectWholeColumn('reel', reelActiveMode, sid)" title="點擊選取整欄">{{ sid }}</span>
@@ -1471,10 +1505,11 @@
                   <tbody>
                     <tr v-for="r in sortedReels('reel', reelActiveMode)" :key="r.reel_id">
                       <td class="cfg-matrix-rowhead cfg-matrix-head-sel" @click="selectWholeRow('reel', reelActiveMode, r.reel_id)" title="點擊選取整列">R{{ r.reel_id }}</td>
-                      <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="sid"
+                      <td v-for="sid in visibleReelSyms(reelActiveMode)" :key="sid"
                           v-memo="[
                             reelW(reelActiveMode).weights[r.reel_id + '-' + sid],
                             isMatrixCellSelected('reel', reelActiveMode, r.reel_id, sid),
+                            reelIsDeviant(reelActiveMode, r.reel_id, sid),
                             reelIsTopWeight(reelActiveMode, r.reel_id, sid),
                             reelHeatClass(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0),
                             cellPercent('reel', reelActiveMode, r.reel_id, sid),
@@ -1483,6 +1518,7 @@
                           :class="['cfg-matrix-cell-wrap',
                                    reelHeatClass(reelActiveMode, reelW(reelActiveMode).weights[r.reel_id + '-' + sid] || 0),
                                    { 'is-selected': isMatrixCellSelected('reel', reelActiveMode, r.reel_id, sid),
+                                     'is-deviant': reelIsDeviant(reelActiveMode, r.reel_id, sid),
                                      'is-top': reelIsTopWeight(reelActiveMode, r.reel_id, sid) }]"
                           @pointerdown="onMatrixCellPointerDown('reel', reelActiveMode, r.reel_id, sid, $event)"
                           @pointerenter="onMatrixCellPointerEnter('reel', reelActiveMode, r.reel_id, sid, $event)">
@@ -1547,7 +1583,7 @@
                     <thead>
                       <tr>
                         <th class="cfg-matrix-corner">盤 \\ Sym</th>
-                        <th v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'aux'+sid">{{ sid }}</th>
+                        <th v-for="sid in visibleReelSyms(reelActiveMode)" :key="'aux'+sid">{{ sid }}</th>
                         <th class="cfg-matrix-total">合計</th>
                         <th class="cfg-aux-ops-head">操作</th>
                       </tr>
@@ -1559,7 +1595,7 @@
                             :title="'R' + r.reel_id + ' 的副輪(' + (r.subreel_kind || 'STACK') + ')獨立權重;匯出 Reel_ID=' + r.reel_id + '.sub'">
                           R{{ r.reel_id }}·副
                         </td>
-                        <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxsub'+r.reel_id+sid"
+                        <td v-for="sid in visibleReelSyms(reelActiveMode)" :key="'auxsub'+r.reel_id+sid"
                             class="cfg-matrix-cell-wrap"
                             :class="reelHeatClass(reelActiveMode, auxW(reelActiveMode).sub_weights[r.reel_id + '-' + sid] || 0)">
                           <input class="cfg-matrix-cell" type="number" min="0"
@@ -1581,7 +1617,7 @@
                           {{ p.panel_id }}
                           <span class="cfg-aux-src-badge" :class="{ warn: panelWeightSourceLabel(p, reelActiveMode).indexOf('⚠') === 0 }">{{ panelWeightSourceLabel(p, reelActiveMode) }}</span>
                         </td>
-                        <td v-for="sid in reelW(reelActiveMode).symbol_ids" :key="'auxpnl'+p.panel_id+sid"
+                        <td v-for="sid in visibleReelSyms(reelActiveMode)" :key="'auxpnl'+p.panel_id+sid"
                             class="cfg-matrix-cell-wrap"
                             :class="reelHeatClass(reelActiveMode, auxW(reelActiveMode).panel_weights[p.panel_id + '-' + sid] || 0)">
                           <input class="cfg-matrix-cell" type="number" min="0"
@@ -3463,35 +3499,36 @@
               </button>
             </div>
 
-            <!-- 過濾 chip(#1:強制一行不折) -->
-            <div class="cfg-rules-filter-bar" style="display:flex; flex-wrap:nowrap; gap:4px; overflow-x:auto;">
-              <button class="cfg-chip cfg-chip-sm" style="flex:0 0 auto; white-space:nowrap;"
-                      :class="{ active: rulesListFilter === 'all' }"
-                      @click="rulesListFilter = 'all'">全部</button>
-              <button class="cfg-chip cfg-chip-sm" style="flex:0 0 auto; white-space:nowrap;"
-                      :class="{ active: rulesListFilter === 'puzzle' }"
-                      @click="rulesListFilter = 'puzzle'"
-                      title="只看拼圖規則">🧩 拼圖</button>
-              <button class="cfg-chip cfg-chip-sm cfg-chip-hard" style="flex:0 0 auto; white-space:nowrap;"
-                      :class="{ active: rulesListFilter === 'hard' }"
-                      @click="rulesListFilter = 'hard'"
-                      title="只看 HARD 棄牌(風控)">HARD</button>
-              <button class="cfg-chip cfg-chip-sm cfg-chip-soft" style="flex:0 0 auto; white-space:nowrap;"
-                      :class="{ active: rulesListFilter === 'soft' }"
-                      @click="rulesListFilter = 'soft'"
-                      title="只看 SOFT 棄牌(體感)">SOFT</button>
+            <!-- v8.11/A-1:篩選重整 —— 子分頁(v7.10)已做規則分流,「全部/拼圖」chips 與其重疊,移除;
+                 換上關鍵字搜尋(rule_id / 描述 / 動作類型);HARD/SOFT 僅棄牌子分頁保留(同清單內的類別分流)。 -->
+            <div class="cfg-rules-filter-bar" style="display:flex; flex-wrap:nowrap; gap:4px; overflow-x:auto; align-items:center;">
+              <input class="input cfg-rules-search"
+                     type="search"
+                     v-model.trim="rulesListSearch"
+                     placeholder="🔍 搜尋 ID / 描述 / 動作"
+                     style="flex:1 1 auto; min-width:0;">
+              <template v-if="rulesSection === 'discard'">
+                <button class="cfg-chip cfg-chip-sm cfg-chip-hard" style="flex:0 0 auto; white-space:nowrap;"
+                        :class="{ active: rulesListFilter === 'hard' }"
+                        @click="rulesListFilter = rulesListFilter === 'hard' ? 'all' : 'hard'"
+                        title="只看 HARD 棄牌(風控);再點取消">HARD</button>
+                <button class="cfg-chip cfg-chip-sm cfg-chip-soft" style="flex:0 0 auto; white-space:nowrap;"
+                        :class="{ active: rulesListFilter === 'soft' }"
+                        @click="rulesListFilter = rulesListFilter === 'soft' ? 'all' : 'soft'"
+                        title="只看 SOFT 棄牌(體感);再點取消">SOFT</button>
+              </template>
             </div>
 
             <div class="cfg-split-list-body">
               <!-- 拼圖規則(可拖曳排序;只在 filter=all 或 filter=puzzle 時顯示;v7.10 再依子分頁 board/general 分流;棄牌子分頁不顯示拼圖)-->
               <template v-if="rulesSection !== 'discard' && (rulesListFilter === 'all' || rulesListFilter === 'puzzle')">
-                <div v-if="rules.filter(ruleInSection).length > 0" class="cfg-rules-group-header">
+                <div v-if="rules.filter(r => ruleInSection(r) && ruleMatchesSearch(r)).length > 0" class="cfg-rules-group-header">
                   <span class="cfg-rules-group-icon">{{ rulesSection === 'board' ? '🎰' : '🧩' }}</span>
                   <span>{{ rulesSection === 'board' ? '盤面 / 圖示規則' : '通用規則' }}</span>
-                  <span class="cfg-rules-group-count">{{ rules.filter(ruleInSection).length }}</span>
+                  <span class="cfg-rules-group-count">{{ rules.filter(r => ruleInSection(r) && ruleMatchesSearch(r)).length }}</span>
                 </div>
                 <template v-for="(r, idx) in rules" :key="'puzzle-' + (r.rule_id || ('idx-' + idx))">
-                <div v-if="ruleInSection(r)"
+                <div v-if="ruleInSection(r) && ruleMatchesSearch(r)"
                      class="cfg-split-item cfg-split-item-draggable cfg-split-item-puzzle"
                      :class="{
                        active: selectedKind === 'puzzle' && selectedRuleIdx === idx,
@@ -3543,9 +3580,9 @@
                   <span class="cfg-rules-group-count">{{ discards.length }}</span>
                 </div>
                 <template v-for="(d, idx) in discards" :key="'discard-' + idx">
-                  <div v-if="rulesListFilter === 'all' ||
+                  <div v-if="(rulesListFilter === 'all' ||
                              (rulesListFilter === 'hard' && d.discard_kind === 'HARD') ||
-                             (rulesListFilter === 'soft' && d.discard_kind === 'SOFT')"
+                             (rulesListFilter === 'soft' && d.discard_kind === 'SOFT')) && discardMatchesSearch(d)"
                        class="cfg-split-item"
                        :class="{
                          active: selectedKind === 'discard' && selectedDiscardIdx === idx,
@@ -5309,6 +5346,8 @@
                 <label class="cfg-strips-tool-label">長度
                   <input type="number" min="5" max="500" step="1" v-model.number="stripGenLen" class="input input-w-num input-center">
                 </label>
+                <button class="cfg-matrix-btn" @click="stripGenLen = suggestedStripLen()"
+                        :title="'依盤面自動建議(最大視窗列數 × 8):' + suggestedStripLen() + ' 格'">建議 {{ suggestedStripLen() }}</button>
                 <label class="cfg-strips-tool-label">
                   <input type="checkbox" v-model="stripGenStacked"> stacked
                 </label>
@@ -5317,6 +5356,17 @@
                 <button class="cfg-matrix-btn" @click="applyAllStripsToWeights(stripActiveMode)"
                         title="把全部輪帶計次寫回 04 權重">⇄ 全部轉回權重</button>
               </div>
+            </div>
+
+            <!-- v8.13/批C:07b 產牌限制 × 輪帶 必然衝突提示(可靠推論:min>0 但全部輪帶 0 次) -->
+            <div v-if="stripLimitConflicts(stripActiveMode).length" class="cfg-strips-conflicts">
+              <span class="cfg-strips-conflicts-icon">⚠</span>
+              <span class="cfg-strips-conflicts-text">
+                與 <a href="#" @click.prevent="gotoRulesSub('genlimits')" class="cfg-link">07b 產牌限制</a> 必然衝突:
+                <template v-for="(cf, i) in stripLimitConflicts(stripActiveMode)" :key="cf.limit_id + cf.symbol_id">
+                  <template v-if="i > 0">、</template>「{{ cf.symbol_id }}」要求盤面 ≥{{ cf.min }} 顆,但所有輪帶皆 0 次(永遠湊不出下限)
+                </template>
+              </span>
             </div>
 
             <!-- 每 reel 一條輪帶 -->
@@ -5337,10 +5387,20 @@
                           @input="commitStrip(stripActiveMode, r.reel_id)"
                           rows="2"
                           placeholder="H1, H1, L1, WILD, L2, ...（逗號分隔;連續相同=stacked）"></textarea>
-                <div v-if="stripLen(stripActiveMode, r.reel_id)" class="cfg-strip-dist">
-                  <span v-for="d in stripDist(stripActiveMode, r.reel_id)" :key="d.sid" class="cfg-strip-dist-chip">
-                    {{ d.sid }} ×{{ d.count }}（{{ d.pct.toFixed(0) }}%）
-                  </span>
+                <!-- v8.13/批C:分佈 chips 升級為「輪帶% vs 04 權重目標% vs Δ」對照表;|Δ|>3% 高亮 -->
+                <div v-if="stripLen(stripActiveMode, r.reel_id)" class="cfg-strip-cmp">
+                  <div class="cfg-strip-cmp-row cfg-strip-cmp-head">
+                    <span>符號</span><span>次數</span><span>輪帶%</span><span>權重目標%</span><span>Δ</span>
+                  </div>
+                  <div v-for="d in stripCompare(stripActiveMode, r.reel_id)" :key="d.sid"
+                       class="cfg-strip-cmp-row"
+                       :class="{ 'is-off': !d.unknown && d.delta !== null && Math.abs(d.delta) > 3, 'is-unknown': d.unknown }">
+                    <span class="cfg-strip-cmp-sid">{{ d.sid }}<template v-if="d.unknown"> ⚠未定義</template></span>
+                    <span>×{{ d.count }}</span>
+                    <span>{{ d.stripPct.toFixed(1) }}%</span>
+                    <span>{{ d.unknown ? '—' : d.weightPct.toFixed(1) + '%' }}</span>
+                    <span class="cfg-strip-cmp-delta">{{ d.delta === null ? '—' : (d.delta >= 0 ? '+' : '') + d.delta.toFixed(1) }}</span>
+                  </div>
                 </div>
               </div>
             </div>

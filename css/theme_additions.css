@@ -9665,7 +9665,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: flex-start;
+  align-items: flex-end;   /* v8.11/A-4:label上input下的欄位列,底對齊使 input 同一水平線 */
   padding: 12px 14px;
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -9805,7 +9805,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: flex-start;
+  align-items: flex-end;   /* v8.11/A-4:label上input下的欄位列,底對齊使 input 同一水平線 */
   padding: 12px 14px;
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -9900,7 +9900,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: flex-start;
+  align-items: flex-end;   /* v8.11/A-4:label上input下的欄位列,底對齊使 input 同一水平線 */
 }
 .cfg-coin-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cfg-coin-cell .input { width: 100%; }
@@ -10882,3 +10882,126 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   }
   #app .cfg-genlimits-table td .input { flex: 1 1 auto; min-width: 0; }
 }
+
+
+/* ═══════════════════════ v8.11 / 批 A:UI 小刀 ═══════════════════════ */
+
+/* A-1:規則清單搜尋框 */
+#app .cfg-rules-search {
+  height: 30px;
+  font-size: 12.5px;
+  padding: 4px 10px;
+}
+
+/* A-2:短內容分頁收斂 —— 內容自然高 + 寬度上限,消除「一條細帶 + 大片空曠」感。
+   慣例:靠左(與導覽動線一致),不置中。 */
+#app .cfg-betconfig-form { max-width: 900px; }   /* 14 加押/購買 + 18 比倍 */
+#app .cfg-jackpots-form  { max-width: 860px; }   /* 13 JP 彩金 */
+#app .cfg-strips-form    { max-width: 1000px; }  /* 04b 輪帶(未啟用態極短;啟用後內容自然填寬) */
+
+/* A-3:sticky 矩陣頁(04/05/08)的「空態/鎖住態」不再撐滿視口高。
+   height:100% 只為矩陣 sticky 列 + 內部捲動而設;顯示 empty-state 或
+   tab-na-notice(不適用鎖卡)時改回自然高度,消除下方大段空白。 */
+#app .cfg-sticky-form:has(> .cfg-empty-state),
+#app .cfg-sticky-form:has(> .cfg-tab-na-notice) {
+  height: auto;
+  overflow: visible;
+}
+
+/* ═══════════════════════ v8.12 / 批 B:04 權重頁·符號欄篩選 + 例外摘要 ═══════════════════════ */
+#app .cfg-matrix-symfilter,
+#app .cfg-matrix-exceptions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  background: var(--glass-2);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+}
+#app .cfg-msf-sep {
+  width: 1px; height: 18px;
+  background: var(--glass-brd);
+  margin: 0 3px;
+}
+#app .cfg-msf-sym { font-family: var(--mono, monospace); }
+
+/* 例外 chip:符號·輪 新值(舊基準劃線) */
+#app .cfg-exc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink-1);
+  cursor: pointer;
+  transition: background .15s ease;
+}
+#app .cfg-exc-chip:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#app .cfg-exc-chip b { color: var(--accent); font-weight: 700; }
+#app .cfg-exc-chip s { opacity: .55; font-size: 10px; }
+#app .cfg-exc-none { font-size: 11.5px; color: var(--ink-3); }
+
+/* 偏差格:左上角 accent 三角標(與熱力圖/選取態並存) */
+#app .cfg-matrix td.cfg-matrix-cell-wrap.is-deviant { position: relative; }
+#app .cfg-matrix td.cfg-matrix-cell-wrap.is-deviant::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  border-style: solid;
+  border-width: 7px 7px 0 0;
+  border-color: var(--accent) transparent transparent transparent;
+  opacity: .85;
+  pointer-events: none;
+}
+
+/* ═══════════════════════ v8.13 / 批 C:04b 輪帶·對照面板 + 衝突提示 ═══════════════════════ */
+/* 07b 必然衝突提示條 */
+#app .cfg-strips-conflicts {
+  display: flex;
+  align-items: flex-start;   /* icon 對首行(多行文字) */
+  gap: 8px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  border-radius: var(--r-card);
+  border: 1px solid color-mix(in srgb, #c0392b 45%, transparent);
+  background: color-mix(in srgb, #c0392b 8%, transparent);
+  color: var(--ink-1);
+}
+#app .cfg-strips-conflicts-icon { flex: 0 0 auto; }
+
+/* 輪帶 vs 權重 對照表(取代舊 dist chips) */
+#app .cfg-strip-cmp {
+  margin-top: 6px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  font-size: 11.5px;
+}
+#app .cfg-strip-cmp-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.4fr) 60px 76px 96px 64px;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 10px;
+}
+#app .cfg-strip-cmp-row:nth-child(even) { background: var(--glass-1); }
+#app .cfg-strip-cmp-head {
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--glass-2);
+  border-bottom: 1px solid var(--glass-brd);
+}
+#app .cfg-strip-cmp-sid { font-family: var(--mono, monospace); }
+#app .cfg-strip-cmp-delta { font-family: var(--mono, monospace); text-align: right; }
+/* |Δ| > 3%:輪帶與權重目標偏差過大 */
+#app .cfg-strip-cmp-row.is-off .cfg-strip-cmp-delta { color: #c0392b; font-weight: 700; }
+#app .cfg-strip-cmp-row.is-off { background: color-mix(in srgb, #c0392b 6%, transparent); }
+/* 輪帶中打了 03 未定義的符號 */
+#app .cfg-strip-cmp-row.is-unknown { background: color-mix(in srgb, #b8860b 10%, transparent); }
