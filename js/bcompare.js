@@ -191,6 +191,16 @@
     並排比較調整前(A)與調整後(B)的核心數據。Δ = B − A。</span>
   </div>
 
+  <!-- UI 批 E-4:比較導引晶片(兩份就緒後比較即時渲染,ok 為純徽章)-->
+  <div class="bcmp-guide-row">
+    <button v-if="!resA || !resB" class="cfg-guide-chip"
+            :class="(!resA && !resB) ? 'is-start' : 'is-warn'"
+            @click="pickFile(!resA ? 'A' : 'B')">
+      {{ (!resA && !resB) ? '1. 上傳 A 檔(調整前基準)' : (!resA ? '⚠ 還差 A 檔(調整前)' : '⚠ 還差 B 檔(調整後)') }}
+    </button>
+    <span v-else class="cfg-guide-chip is-ok no-action">✨ A / B 就緒,差異如下</span>
+  </div>
+
   <!-- 兩個上傳槽 -->
   <div class="bcmp-slots">
     <div class="bcmp-slot bcmp-slot-a"

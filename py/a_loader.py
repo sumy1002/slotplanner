@@ -34,6 +34,7 @@ from core.schemas import (
     BonusItem,
     AConfig, GlobalConfig, LayoutConfig, ReelLayout, PanelDef,
     SymbolDef, SymbolType,
+    SymbolGroup,
     ReelWeight, GridSizeWeight, ComboWeightOverride,
     Payline, Constraint, ConstraintType,
     PuzzleRule, TriggerType,
@@ -152,6 +153,9 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # v8.8 / R4 B-6:02d_Cell_Attributes(位置型格子屬性)。選用,舊檔安全降級。
     cfg.cell_attrs = _parse_cell_attrs(sheets.get('02d_Cell_Attributes'), layout)
+
+    # P0-3:03d_Symbol_Groups(符號家族 / ANY BAR 混合賠付)。選用,舊檔 → []。
+    cfg.symbol_groups = _parse_symbol_groups(sheets.get('03d_Symbol_Groups'))
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -834,6 +838,14 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 v = r.get(col)
                 if pd.notna(v):
                     pay_table[n] = float(v)
+            # P0-2:每符號最小連線 —— finite 且 ≥1 → 取整,否則 3(缺欄 / 空 / NaN / ≤0)。
+            #   與前端 registry._normMinMatch 同規則;安全降級。
+            _mm = r.get("Min_Match")
+            try:
+                _mm_num = float(_mm)
+            except (TypeError, ValueError):
+                _mm_num = float("nan")
+            min_match_val = int(round(_mm_num)) if (pd.notna(_mm_num) and _mm_num >= 1) else 3
             sym = SymbolDef(
                 symbol_id=sid,
                 display_name=str(r.get("Display_Name") or sid),
@@ -847,12 +859,54 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 # v8.3 / R1 D-12:出現模式宣告(缺欄/空 → "" = 所有模式;安全降級)
                 mode_scope=_to_str(r.get("Mode_Scope")).strip(),
                 instance_mult=_to_bool(r.get("Instance_Mult")),   # v8.7 R6 D-14(缺欄 → False)
+                min_match=min_match_val,                          # P0-2(缺欄 / ≤0 → 3)
+                group_id=_to_str(r.get("Group_ID")).strip(),      # P0-3(缺欄 → "")
             )
             out[sid] = sym
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Symbol {sid} 解析失敗: {e}", row=idx + 2)
     if not out:
         raise ConfigValidationError(sheet, "至少需定義 1 個符號")
+    return out
+
+
+def _parse_symbol_groups(df) -> list["SymbolGroup"]:
+    """P0-3:03d_Symbol_Groups（符號家族 / ANY BAR 混合賠付）。
+
+    additive 契約:sheet 不存在 → [](安全降級)。by-name 讀、缺欄安全降級。
+    純描述,引擎不消費;成員由 SymbolDef.group_id 反查(不在此表)。
+    pay_table 由 Pay_3x..6x 展開(>0 才收)。Group_ID 空列略過。
+    """
+    out: list[SymbolGroup] = []
+    if df is None:
+        return out
+    for _idx, r in df.iterrows():
+        gid_raw = r.get("Group_ID")
+        gid = _to_str(gid_raw).strip()
+        if not gid:
+            continue
+        pay_table: dict[int, float] = {}
+        for n in (3, 4, 5, 6):
+            v = r.get(f"Pay_{n}x")
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                fv = 0.0
+            if pd.notna(fv) and fv > 0:
+                pay_table[n] = fv
+        mm = _to_str(r.get("Match_Mode")).strip().upper() or "ANY_MIXED"
+        # Members_Keep_Individual 缺欄 → True(預設保留個別賠)
+        _mk = r.get("Members_Keep_Individual")
+        keep_ind = True if (_mk is None or (isinstance(_mk, float) and pd.isna(_mk))) else _to_bool(_mk)
+        out.append(SymbolGroup(
+            group_id=gid,
+            display_name=_to_str(r.get("Display_Name")).strip() or gid,
+            match_mode=mm,
+            members_keep_individual=keep_ind,
+            mode_scope=_to_str(r.get("Mode_Scope")).strip(),
+            pay_table=pay_table,
+            notes=_to_str(r.get("Notes")).strip(),
+        ))
     return out
 
 

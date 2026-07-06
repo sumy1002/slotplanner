@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI 批 E Demo — 操作心流(hover-reveal / 失焦即存 / 動態下一步)</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+/* ── 最小 token 子集(取自 theme.css 亮色;正式接線時本段不存在,直接吃全站 token)── */
+#app {
+  --bg:#fbfbfd; --text:#23283d; --text-light:#8a90a6; --text-muted:#a7abbe;
+  --glass-brd:rgba(90,98,130,.16); --glass-1:rgba(120,126,160,.06); --glass-2:#fff;
+  --accent:#eef0fe; --accent-brd:#d6d8fb; --accent-hex:#4338ca; --accent-text:#4338ca;
+  --danger:rgba(220,60,60,.10); --danger-brd:rgba(220,60,60,.45); --danger-text:#b91c1c;
+  --warn-bg:rgba(240,170,60,.16); --warn-brd:rgba(200,140,40,.45); --warn-text:#b56a00;
+  --ok-bg:#e6f6f0; --ok-text:#0f6e56; --ok-dot:#1d9e75;
+  --shadow-sm:0 1px 2px rgba(20,28,46,.05); --shadow-md:0 2px 8px rgba(20,28,46,.09);
+  --shadow-lg:0 12px 32px rgba(20,28,46,.16);
+  --focus-ring:0 0 0 3px rgba(79,70,229,.20);
+  --r-card:14px; --r-input:8px; --t-fast:.15s;
+  --fs-title:18px; --fs-section:15px; --fs-body:15px; --fs-label:14px; --fs-hint:12.5px;
+  font-family:'Plus Jakarta Sans','Noto Sans TC',system-ui,sans-serif;
+  color:var(--text); background:var(--bg);
+  max-width:760px; margin:0 auto; padding:28px 20px 80px;
+}
+body{margin:0;background:#fbfbfd}
+#app h1{font-size:var(--fs-title);margin:0 0 4px}
+#app .sub{font-size:var(--fs-hint);color:var(--text-light);margin-bottom:20px}
+
+/* ── 既有卡片語彙(v8.14 已在案,demo 重現)── */
+#app .cfg-section{background:var(--glass-2);border:1px solid var(--glass-brd);
+  border-radius:var(--r-card);box-shadow:var(--shadow-sm);padding:16px 18px;margin-bottom:16px;
+  transition:border-color .25s,box-shadow .25s}
+#app .cfg-section:focus-within{border-color:var(--accent-brd);box-shadow:var(--focus-ring),var(--shadow-sm)}
+#app .cfg-section-title{display:flex;align-items:center;gap:8px;font-size:var(--fs-section);
+  font-weight:700;margin-bottom:12px}
+#app .cfg-section-title::before{content:'';width:3px;height:13px;border-radius:2px;
+  background:var(--accent-hex);flex-shrink:0}
+#app .cfg-hint{font-size:var(--fs-hint);color:var(--text-light)}
+#app .input{font-size:var(--fs-body);padding:6px 10px;border:1px solid var(--glass-brd);
+  border-radius:var(--r-input);background:#fff;color:var(--text);width:90px}
+#app .input:focus{outline:none;box-shadow:var(--focus-ring);border-color:var(--accent-brd)}
+#app .btn{font-size:var(--fs-hint);padding:4px 10px;border:1px solid var(--glass-brd);
+  border-radius:999px;background:var(--glass-2);color:var(--text-light);cursor:pointer;
+  transition:all var(--t-fast)}
+#app .btn:hover{background:var(--accent);border-color:var(--accent-brd);color:var(--accent-text)}
+#app .btn.danger:hover{background:var(--danger);border-color:var(--danger-brd);color:var(--danger-text)}
+
+/* demo 專用列 */
+#app .wrow{display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:8px}
+#app .wrow+.wrow{border-top:1px dashed var(--glass-brd)}
+#app .wrow:hover{background:var(--glass-1)}
+#app .wsym{font-weight:700;width:70px;font-variant-numeric:tabular-nums}
+#app .wval{width:64px;text-align:right;font-variant-numeric:tabular-nums;cursor:pointer;
+  padding:3px 8px;border-radius:6px;border:1px dashed transparent}
+#app .wval:hover{border-color:var(--accent-brd);background:var(--accent);color:var(--accent-text)}
+#app .wbar{flex:1;height:8px;border-radius:4px;background:var(--glass-1);overflow:hidden}
+#app .wbar>i{display:block;height:100%;background:var(--accent-hex);border-radius:4px;
+  transition:width .3s ease}
+#app .wactions{display:flex;gap:6px}
+#app .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px;
+  position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:10}
+#app .sum{font-size:var(--fs-label);font-weight:700;font-variant-numeric:tabular-nums}
+#app .sum.bad{color:var(--warn-text)} #app .sum.good{color:var(--ok-text)}
+</style>
+<link rel="stylesheet" href="ui-batch-e.css">
+</head>
+<body>
+<div id="app">
+  <h1>UI 批 E 互動 Demo(模擬 04 權重頁)</h1>
+  <div class="sub">① 滑過列 → 操作鈕浮現 ② 點權重數字 → 氣泡微調,點外部即存 ③ 右上晶片跟著狀態變身</div>
+
+  <div class="toolbar">
+    <span class="sum" :class="sumCls">Σ 權重 = {{ total }} / 目標 100</span>
+    <span style="flex:1"></span>
+    <button class="cfg-guide-chip" :class="guide.cls.value" @click="guide.run">{{ guide.label.value }}</button>
+  </div>
+
+  <!-- 一張卡:cfg-reveal-zone 掛在列上;卡片級錯誤態 is-invalid 由總和驅動 -->
+  <div class="cfg-section" :class="{ 'is-invalid': rows.length && total !== 100 && showErr }">
+    <div class="cfg-section-title">Reel 1 符號權重
+      <span class="cfg-hint" style="margin-left:auto">共 {{ rows.length }} 符號</span>
+    </div>
+
+    <div v-if="!rows.length" class="cfg-hint" style="padding:18px 4px">
+      尚無配置 —— 按右上方的導引晶片開始。
+    </div>
+
+    <div v-for="r in rows" :key="r.sym" class="wrow cfg-reveal-zone">
+      <span class="wsym">{{ r.sym }}</span>
+      <span class="wval" :title="'點擊微調'" @click.stop="openPop($event, r)">{{ r.w }}%</span>
+      <span class="wbar"><i :style="{ width: Math.min(r.w,100) + '%' }"></i></span>
+      <span class="wactions cfg-reveal">
+        <button class="btn" @click="dup(r)">⎘ 複製</button>
+        <button class="btn" @click="r.w = 0">清空</button>
+        <button class="btn danger" @click="del(r)">✕ 刪除</button>
+      </span>
+    </div>
+  </div>
+
+  <!-- E-2 單例 Popover:草稿 draft、失焦即存、Esc 反悔 -->
+  <div v-if="pop.state.open" class="cfg-popover"
+       :class="{ 'is-open': pop.state.shown, 'flip-up': pop.state.flipUp }"
+       :style="pop.style.value" tabindex="-1" @focusout="pop.onFocusOut">
+    <div class="cfg-popover-title">微調 {{ pop.state.ctx?.sym }} 權重</div>
+    <div class="cfg-popover-field">
+      <input class="input" type="number" min="0" v-model.number="pop.state.draft.w" autofocus>
+      <input type="range" min="0" max="100" v-model.number="pop.state.draft.w" style="width:100%;margin-top:8px;accent-color:var(--accent-hex)">
+    </div>
+    <div class="cfg-popover-hint">點擊外部即自動儲存 · Esc 取消</div>
+  </div>
+</div>
+
+<script src="ui-batch-e.js"></script>
+<script>
+const { createApp, ref, computed } = Vue;
+createApp({
+  setup() {
+    const rows = ref([]);           // 初始空態 → 導引晶片 start
+    const showErr = ref(false);     // 錯誤邊框延遲亮:剛生成不立刻罵人,互動一次後才驅動
+    const total = computed(() => rows.value.reduce((s, r) => s + (+r.w || 0), 0));
+    const sumCls = computed(() => !rows.value.length ? '' : (total.value === 100 ? 'good' : 'bad'));
+
+    /* E-2:失焦即存 */
+    const pop = UIBatchE.usePopover({
+      onCommit(draft, ctx) {
+        const r = rows.value.find(x => x.sym === ctx.sym);
+        if (r) r.w = Math.max(0, +draft.w || 0);
+        showErr.value = true;
+      },
+      recompute() { /* 正式版:呼叫既有防抖重算(Δ 表 / validationIssues);demo 靠 computed 即時 */ },
+    });
+    function openPop(e, r) { pop.open(e.currentTarget, { draft: { w: r.w }, ctx: { sym: r.sym } }); }
+
+    /* E-3:動態下一步狀態機 —— probe 全部復用現成 computed */
+    const guide = UIBatchE.useGuideChip({
+      probe() {
+        if (!rows.value.length) return { level: 'start' };
+        if (total.value !== 100) return { level: 'warn', diff: 100 - total.value };
+        return { level: 'ok' };
+      },
+      labels: {
+        start: '1. 點此快速生成初始配置',
+        warn : p => `⚠ 2. 一鍵等比補足至 100(差 ${p.diff > 0 ? '+' : ''}${p.diff})`,
+        ok   : '✨ 3. 驗證成功,點此導出企劃配置',
+      },
+      actions: {
+        start() {
+          rows.value = [
+            { sym: 'WILD', w: 5 }, { sym: 'SCAT', w: 5 },
+            { sym: 'H1', w: 20 }, { sym: 'H2', w: 25 }, { sym: 'L1', w: 30 },
+          ]; // 故意 85 → 立即示範 warn 態
+          showErr.value = true;
+        },
+        warn() {  // 等比補足(正式版復用既有 normalize)
+          const t = total.value; if (!t) return;
+          let acc = 0;
+          rows.value.forEach((r, i) => {
+            if (i === rows.value.length - 1) { r.w = 100 - acc; }
+            else { r.w = Math.round(r.w / t * 100); acc += r.w; }
+          });
+        },
+        ok() { alert('（正式版：切換至 docgen / 匯出分頁）'); },
+      },
+    });
+
+    function dup(r) { rows.value.push({ sym: r.sym + '′', w: r.w }); }
+    function del(r) { rows.value = rows.value.filter(x => x !== r); }
+
+    return { rows, total, sumCls, showErr, pop, openPop, guide, dup, del };
+  },
+}).mount('#app');
+</script>
+</body>
+</html>

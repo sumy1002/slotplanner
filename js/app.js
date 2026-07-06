@@ -165,6 +165,25 @@
         return '或點擊選擇檔案';
       });
 
+      // ── UI 批 E-4:TXT→XLSX 導引晶片(取代「開始轉換」大鈕的狀態機)──
+      //   start=未選檔 / warn=篩選後 0 sheet / ok=就緒(本頁例外:ok 保留 action=轉換,
+      //   因轉換即本頁存在目的;例外已記錄於共同檢視文件)
+      const dataGuide = computed(() => {
+        if (isConverting.value) return { level: 'ok', label: '⏳ 轉換中…', action: null };
+        if (!fileInfo.value)   return { level: 'start', label: '1. 選擇 TXT 檔案', action: triggerPick };
+        if (filterSummary.value && filterSummary.value.sel === 0) {
+          return { level: 'warn', label: '⚠ 篩選後 0 個工作表,點此調整', action: openModal };
+        }
+        return { level: 'ok', label: '開始轉換 →', action: convert };
+      });
+      const dataGuideCls = computed(() => ({
+        'is-start': dataGuide.value.level === 'start',
+        'is-warn':  dataGuide.value.level === 'warn',
+        'is-ok':    dataGuide.value.level === 'ok',
+        'no-action': !dataGuide.value.action,
+      }));
+      function dataGuideRun() { const g = dataGuide.value; if (g.action) g.action(); }
+
       function triggerPick() { fileInput.value?.click(); }
       function onPickedFile(e) {
         const f = e.target.files?.[0];
@@ -480,11 +499,19 @@
         onContentDragEnter, onContentDragOver, onContentDragLeave, onContentDrop,
         convert, goPage, onChildStatus, registry,
         filterSummary, openModal,
+        dataGuide, dataGuideCls, dataGuideRun,
         askDownloadLocation,
         themeIcon, themeLabel, cycleTheme,
       };
     },
   });
+
+  // 全域渲染錯誤診斷器:render 期例外印出「元件名 + 生命週期 + 錯誤」,
+  // 取代 prod 版難以定位的匿名堆疊;不吞錯,console 仍完整可見。
+  app.config.errorHandler = (err, instance, info) => {
+    const name = instance?.$options?.name || instance?.$?.type?.name || '(root/inline)';
+    console.error(`[Vue errorHandler] 元件=${name} 階段=${info}`, err);
+  };
 
   app.component('symbol-page', SP.SymbolPage);
   app.component('config-page', SP.ConfigPage);

@@ -335,14 +335,42 @@ class SymbolDef:
     #   True = 此符號每顆「實例」攜帶自身乘數(xWays/落地各帶倍數式);
     #   具體取值/疊加行為以規則或 Notes 描述。False = 傳統符號級乘數。
     instance_mult: bool = False
+    # P0-2:每符號最小連線數（達此數才成立；預設 3，可覆寫 1/2）。
+    #   純描述，引擎不消費；僅 LINE / WAYS（相鄰連線）有意義，SCATTER / CLUSTER 不套用。
+    #   loader 對缺欄 / 空值安全降級為 3。
+    min_match: int = 3
     # v8.3 / R1 A-1:賠付 count 區間同賠(scatter-pays 8-9/10-11/12-30、大盤 cluster)。
     #   loader 已同步把區間展開進 pay_table(from..to 每個 count 同賠),引擎照舊消費
     #   pay_table 即得正確結果;此欄保留原始區間描述供文件/下游輸出。None = 無區間列。
     pay_ranges: Optional[list] = None   # [(count_from, count_to, pay), ...]
+    # P0-3:所屬符號家族 ID（"" = 不屬任何家族）。
+    #   成員標籤；家族定義在 SymbolGroup / 03d_Symbol_Groups。純描述，引擎不消費。
+    group_id: str = ""
 
     @property
     def is_mega(self) -> bool:
         return self.mega_width > 1 or self.mega_height > 1
+
+
+# ============================================================
+# 符號家族 (P0-3;ANY BAR 型混合賠付)
+# ============================================================
+@dataclass
+class SymbolGroup:
+    """P0-3:符號家族（ANY_BAR 等「任意混合成員」的混合賠付結構）。
+
+    碎片＝個別符號（BAR / 2BAR / 3BAR 各自一塊）；group_id 為碎片的家族標籤；
+    本類即家族的組裝規則（哪些碎片湊在一起 → 以家族費率賠付）。
+    純描述，本工具引擎不消費；供 docgen 與下游數值模擬工具。
+    成員由 SymbolDef.group_id 反查（不在此重列）。additive:缺 sheet → []；缺欄安全降級。
+    """
+    group_id: str
+    display_name: str = ""
+    match_mode: str = "ANY_MIXED"          # 比對語義:任意混合成員即成家族
+    members_keep_individual: bool = True   # 成員是否同時保留自身賠率(混合走家族賠,下游取高者)
+    mode_scope: str = ""                   # 出現/生效模式(比照符號;"" = 所有模式)
+    pay_table: dict[int, float] = field(default_factory=dict)   # {3:.., 4:.., 5:.., 6:..}
+    notes: str = ""
 
 
 # ============================================================
@@ -724,6 +752,10 @@ class AConfig:
     # v8.8 / R4 B-6:位置型格子屬性（選用;對應 02d_Cell_Attributes）
     #   固定格乘數(Cygnus)/enhancer cell/Fire Frame/金框格。純描述,引擎不消費。
     cell_attrs: list["CellAttr"] = field(default_factory=list)
+
+    # P0-3:符號家族（選用;對應 03d_Symbol_Groups）。ANY BAR 型混合賠付結構。
+    #   純描述,引擎不消費;成員由 SymbolDef.group_id 反查。舊檔無 sheet → []。
+    symbol_groups: list["SymbolGroup"] = field(default_factory=list)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

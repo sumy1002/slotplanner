@@ -31,6 +31,10 @@
       <div class="spacer"></div>
     </div>
 
+    <!-- UI 批 E-3c:空清單導引晶片(唯一亮點牽手第一步;有符號即隱藏)-->
+    <button v-if="!symbols.length" class="cfg-guide-chip is-start sym-guide-start"
+            @click="addSymbol">1. 新增第一個符號</button>
+
     <div class="sym-list">
       <div v-for="(s, idx) in symbols" :key="s.id"
            class="sym-item"
@@ -104,6 +108,56 @@
       </div>
     </header>
 
+    <!-- P0-3:符號家族管理(獨立於選取符號;成員在各符號卡「所屬家族」下拉指定) -->
+    <div class="sym-card sym-groups-panel" :class="{ 'sym-card-closed': !groupsOpen }" style="margin:10px 0;">
+      <div class="sym-card-head" @click="groupsOpen = !groupsOpen">
+        <span class="sym-card-title">符號家族 / 混合賠付</span>
+        <span v-if="groupsOpen" class="sym-card-sub">ANY BAR 型：成員任意混合連線以家族費率計（成員亦保留自身賠率，取較高者）</span>
+        <span v-else class="sym-card-summary">
+          <span class="sym-card-status" :class="{ on: symbolGroups.length }">{{ symbolGroups.length ? '✓' : '—' }}</span>
+          <span v-if="symbolGroups.length">{{ symbolGroups.length }} 個家族</span>
+          <span v-else class="sym-card-summary-muted">未建立家族</span>
+        </span>
+        <span class="sym-card-collapse" :class="{ open: groupsOpen }" title="展開 / 收合">›</span>
+      </div>
+      <div class="sym-card-body" v-show="groupsOpen">
+        <div v-if="!symbolGroups.length" class="sym-hint-inline" style="margin-bottom:8px;">
+          尚無家族。混合賠付（如「任意 BAR」）：建立一個家族、填家族賠率，再到各成員符號卡選「所屬家族」。
+        </div>
+        <div v-for="(gp, gi) in symbolGroups" :key="gi" class="sym-group-row"
+             style="border:1px solid var(--line, #e3d9c7); border-radius:10px; padding:10px; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input class="input input-sm cfg-mono" v-model.trim="gp.group_id" placeholder="家族 ID（如 ANY_BAR）" style="width:150px;" title="家族 ID">
+            <input class="input input-sm" v-model="gp.display_name" placeholder="顯示名（如 任意BAR）" style="flex:1; min-width:120px;">
+            <span class="sym-hint-inline">成員 {{ groupMemberCount(gp.group_id) }} 個</span>
+            <button class="btn-pill del" @click="removeSymbolGroup(gi)" title="刪除此家族" style="margin-left:auto;">🗑 刪除</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <span class="cfg-key" style="white-space:nowrap;">比對</span>
+            <select class="input input-sm" v-model="gp.match_mode" style="min-width:200px;">
+              <option v-for="mm in SYMGROUP_MATCH_MODES" :key="mm.value" :value="mm.value">{{ mm.label }}</option>
+            </select>
+            <label class="chk" style="margin:0;">
+              <input type="checkbox" v-model="gp.members_keep_individual"><span class="box"></span>
+              <span>成員保留自身賠率（混合走家族賠、同款走個別賠，取高者）</span>
+            </label>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <span class="cfg-key" style="white-space:nowrap;">套用模式</span>
+            <input class="input input-sm cfg-mono" v-model="gp.mode_scope" placeholder="ALL 或 NG,FG1" style="width:150px;" title="ALL 或逗號多選(空=所有模式)">
+            <span class="cfg-key" style="white-space:nowrap;">家族賠率</span>
+            <template v-for="n in [3,4,5,6]" :key="'gp'+gi+'p'+n">
+              <span class="sym-hint-inline">{{ n }}連</span>
+              <input class="input input-sm cfg-mono" type="number" step="any" min="0"
+                     v-model.number="gp['pay_'+n+'x']" placeholder="0" style="width:64px;">
+            </template>
+          </div>
+          <input class="input input-sm" v-model="gp.notes" placeholder="備註（選填）" style="width:100%;">
+        </div>
+        <button class="btn-pill add" @click="addSymbolGroup">＋ 新增家族</button>
+      </div>
+    </div>
+
     <div v-if="!selected" class="sym-empty">
       ← 從左側選擇一個 symbol 來編輯，或點「+ 新增」建立一個
     </div>
@@ -136,6 +190,20 @@
                       @click="setType(t)">{{ t }}</button>
             </div>
             <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
+            <!-- P0-3:所屬符號家族(下拉;家族為動態使用者定義,清單來自「符號家族」面板) -->
+            <div class="sym-weight-block" style="margin-top:10px;">
+              <div class="field-label-sm">所屬家族 <span class="cfg-key">group_id</span></div>
+              <select class="input input-sm" v-model="form.group_id" @change="onFieldEdit" style="width:100%; max-width:260px;">
+                <option value="">（無 — 不屬任何家族）</option>
+                <option v-for="gp in symbolGroups" :key="gp.group_id" :value="gp.group_id">
+                  {{ gp.display_name || gp.group_id }}（{{ gp.group_id }}）
+                </option>
+              </select>
+              <div v-if="form.group_id && !symbolGroups.some(g => g.group_id === form.group_id)"
+                   class="sym-hint-inline" style="color:var(--accent); margin-top:4px;">
+                此家族「{{ form.group_id }}」尚未定義（可於下方「符號家族」面板新增，或改選其他）
+              </div>
+            </div>
             <!-- 權重(併入此卡)-->
             <div class="sym-weight-block">
               <div class="field-label-sm">權重</div>
@@ -236,6 +304,15 @@
             <span class="sym-card-collapse" :class="{ open: cardOpen.pay }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.pay">
+          <!-- P0-2:最少連線(min_match)。僅連線/百搭有意義;預設 3,可覆寫 1/2 -->
+          <div v-if="spec.isLineLike" class="sym-minmatch-row"
+               style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+            <span class="cfg-key" style="white-space:nowrap;">最少連線 · min_match</span>
+            <button v-for="n in minMatchChoices" :key="'mm'+n"
+                    class="btn-pill" :class="{ on: form.min_match === n }"
+                    @click="setMinMatch(n)" style="min-width:34px;">{{ n }}</button>
+            <span class="sym-hint-inline">連達此數才成立（預設 3）</span>
+          </div>
           <div class="sym-pay-dynamic">
             <div v-for="(row, i) in form.pay_rows" :key="i" class="sym-pay-drow"
                  style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
@@ -637,6 +714,8 @@
         can_expand: false,   // v6.2 #10:可擴張標籤
         mode_scope: '',      // v8.3 / R1 D-12:出現模式(逗號分隔;'' = 所有模式)
         instance_mult: false, // v8.7 / R6 D-14:per-instance 乘數宣告
+        min_match: 3,        // P0-2:最少連線(達此數才成立;預設 3,可覆寫 1/2;僅 LINE/WAYS)
+        group_id: '',        // P0-3:所屬符號家族(空=不屬任何家族)
         is_wild: false,
         is_scatter: false,
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
@@ -706,6 +785,8 @@
         form.use_max = s.use_max;
         form.mode_scope = (s.mode_scope != null ? String(s.mode_scope) : '');   // v8.3 D-12
         form.instance_mult = s.instance_mult === true;                          // v8.7 D-14
+        form.min_match = (s.min_match != null ? Math.max(1, Number(s.min_match) || 3) : 3);   // P0-2
+        form.group_id = (s.group_id != null ? String(s.group_id) : '');   // P0-3
         form.max_count = s.max_count;
         form.reel_limit = [...s.reel_limit];
         form.subreel_limit = (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {};
@@ -833,6 +914,8 @@
           max_count: form.use_max ? Math.max(1, Number(form.max_count) || 1) : Number(form.max_count) || 0,
           mode_scope: (form.mode_scope || '').trim(),   // v8.3 D-12
           instance_mult: form.instance_mult === true,   // v8.7 D-14
+          min_match: Math.max(1, Number(form.min_match) || 3),   // P0-2
+          group_id: (form.group_id || '').trim(),   // P0-3
           reel_limit: [...form.reel_limit],
           subreel_limit: { ...form.subreel_limit },
           // 擴充欄位
@@ -862,6 +945,65 @@
       function onFieldEdit() {
         if (writeTimer) clearTimeout(writeTimer);
         writeTimer = setTimeout(writeForm, 150);
+      }
+
+      // ── P0-2:最少連線(min_match)chips(1/2/3;必要時可擴到 5) ──
+      const minMatchChoices = [1, 2, 3];
+      function setMinMatch(n) {
+        form.min_match = Math.max(1, Number(n) || 3);
+        onFieldEdit();
+      }
+
+      // ── P0-3:符號家族(03d_Symbol_Groups)──
+      //   symbol-page 與 config-page 互斥掛載,故本頁自足讀寫同一 LS key(以 LS 為交換媒介);
+      //   成員 = 符號的 group_id;此陣列只存家族定義。純描述,引擎不消費。
+      const SYMGROUPS_LS_KEY = 'slotplanner.aconfig.symbolgroups.v1';
+      function _normSymGroup(g) {
+        g = (g && typeof g === 'object') ? g : {};
+        const num = (v) => Number(v) || 0;
+        return {
+          group_id: (g.group_id != null ? String(g.group_id).trim() : ''),
+          display_name: (g.display_name != null ? String(g.display_name) : ''),
+          match_mode: (g.match_mode != null && String(g.match_mode).trim())
+            ? String(g.match_mode).trim().toUpperCase() : 'ANY_MIXED',
+          members_keep_individual: g.members_keep_individual !== false,
+          mode_scope: (g.mode_scope != null ? String(g.mode_scope).trim() : ''),
+          pay_3x: num(g.pay_3x), pay_4x: num(g.pay_4x), pay_5x: num(g.pay_5x), pay_6x: num(g.pay_6x),
+          notes: (g.notes != null ? String(g.notes) : ''),
+        };
+      }
+      function _loadSymbolGroups() {
+        try {
+          const raw = localStorage.getItem(SYMGROUPS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(_normSymGroup) : [];
+        } catch (e) { return []; }
+      }
+      function _saveSymbolGroups() {
+        try { localStorage.setItem(SYMGROUPS_LS_KEY, JSON.stringify(symbolGroups.map(g => ({ ...g })))); } catch (e) {}
+      }
+      const symbolGroups = reactive(_loadSymbolGroups());
+      const groupsOpen = ref(false);
+      const SYMGROUP_MATCH_MODES = [
+        { value: 'ANY_MIXED', label: '任意混合成員即成家族(ANY_MIXED)' },
+      ];
+      let _sgTimer = null;
+      watch(symbolGroups, () => {
+        if (_sgTimer) clearTimeout(_sgTimer);
+        _sgTimer = setTimeout(_saveSymbolGroups, 150);
+      }, { deep: true });
+      function addSymbolGroup() {
+        const taken = new Set(symbolGroups.map(g => g.group_id).filter(Boolean));
+        let i = symbolGroups.length + 1;
+        while (taken.has('GRP' + i)) i++;
+        symbolGroups.push(_normSymGroup({ group_id: 'GRP' + i, display_name: '', match_mode: 'ANY_MIXED', members_keep_individual: true }));
+        groupsOpen.value = true;
+      }
+      function removeSymbolGroup(idx) { if (idx >= 0 && idx < symbolGroups.length) symbolGroups.splice(idx, 1); }
+      function groupMemberCount(gid) {
+        const g = String(gid || '').trim();
+        if (!g) return 0;
+        return symbols.value.filter(s => String(s.group_id || '').trim() === g && s.enabled !== false).length;
       }
 
       // ── v6.1:動態賠付表 helpers ──
@@ -954,6 +1096,15 @@
         for (let i = 1; i < sorted.length; i++) {
           if (Number(sorted[i].pay) < Number(sorted[i - 1].pay)) {
             issues.push(`⚠️ ${sorted[i].count} 連線賠率小於 ${sorted[i - 1].count} 連線`);
+          }
+        }
+        // P0-2 / D3:賠付最低 count < min_match(僅連線型;達 min_match 才成立)
+        if (spec.isLineLike && rows.length) {
+          const paid = rows.filter(r => Number(r.pay) > 0).map(r => Number(r.count));
+          const lowest = paid.length ? Math.min(...paid) : Infinity;
+          const mm = Math.max(1, Number(form.min_match) || 3);
+          if (isFinite(lowest) && lowest < mm) {
+            issues.push(`⚠️ 最低賠付為 ${lowest} 連,但最少連線設為 ${mm};${mm} 連以下的賠付列在判定下不成立`);
           }
         }
         return issues;
@@ -1687,6 +1838,9 @@
         SYMBOL_TYPES,
         symbols, swatchMap, reelCount,
         spec, maxPayCount, payRowIssues,
+        minMatchChoices, setMinMatch,   // P0-2
+        symbolGroups, groupsOpen, SYMGROUP_MATCH_MODES,   // P0-3
+        addSymbolGroup, removeSymbolGroup, groupMemberCount,   // P0-3
         symbolRefs, refreshSymbolRefs, addRelatedConstraint,
         selectedId, selected, form,
         numErr, nameErr,

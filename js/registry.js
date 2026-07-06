@@ -58,6 +58,13 @@
       : [];
   }
 
+  // ── P0-2:最少連線正規化 —— finite 且 ≥1 → 取整,否則預設 3(缺欄 / 空 / ≤0 / NaN)。
+  //   與 a_loader._parse_symbols 同規則;cloneSymbol/toJSON/fromJSON/_loadFromLocalStorage 共用。
+  function _normMinMatch(v) {
+    const n = Number(v);
+    return (Number.isFinite(n) && n >= 1) ? Math.round(n) : 3;
+  }
+
   // ════════════════════════════════════════════════════════════
   //  SymbolData — 純 object 表示，配 helper 函式
   //  對應 SymbolData class
@@ -91,6 +98,8 @@
       image: null,        // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
       mode_scope: '',     // v8.3 / R1 D-12:出現模式宣告(逗號分隔模式名;'' = 所有模式)
       instance_mult: false, // v8.7 / R6 D-14:per-instance 乘數宣告(每顆實例攜帶自身乘數;規格描述)
+      min_match: 3,       // P0-2:最少連線(達此數才成立;預設 3,可覆寫 1/2;僅 LINE/WAYS 有意義)
+      group_id: '',       // P0-3:所屬符號家族 ID(空=不屬任何家族;ANY_BAR 等混合賠付)
     };
   }
 
@@ -123,6 +132,8 @@
       image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
       mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
       instance_mult: s.instance_mult === true,                                      // v8.7 D-14
+      min_match: _normMinMatch(s.min_match), // P0-2(缺欄/空/≤0→3)
+      group_id: (s.group_id != null ? String(s.group_id).trim() : ''), // P0-3
     };
   }
 
@@ -323,6 +334,8 @@
           image:      (s.image != null && typeof s.image === 'string') ? s.image : null,  // v7.9 #4
       mode_scope: (s.mode_scope != null ? String(s.mode_scope) : ''),               // v8.3 D-12
       instance_mult: s.instance_mult === true,                                      // v8.7 D-14
+          min_match: _normMinMatch(s.min_match), // P0-2
+          group_id: (s.group_id != null ? String(s.group_id).trim() : ''), // P0-3
           swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
@@ -362,6 +375,8 @@
           image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
           mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
           instance_mult: d.instance_mult === true,                                  // v8.7 D-14
+          min_match: _normMinMatch(d.min_match), // P0-2
+          group_id: (d.group_id != null ? String(d.group_id).trim() : ''), // P0-3
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
@@ -425,6 +440,8 @@
             image:      (d.image != null && typeof d.image === 'string') ? d.image : null,  // v7.9 #4
           mode_scope: (d.mode_scope != null ? String(d.mode_scope) : ''),           // v8.3 D-12
           instance_mult: d.instance_mult === true,                                  // v8.7 D-14
+          min_match: _normMinMatch(d.min_match), // P0-2
+          group_id: (d.group_id != null ? String(d.group_id).trim() : ''), // P0-3
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

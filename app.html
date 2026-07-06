@@ -139,7 +139,7 @@
             </div>
           </div>
 
-          <!-- 轉換按鈕列 + 篩選按鈕 -->
+          <!-- 轉換按鈕列 + 篩選按鈕(UI 批 E-4:轉換鈕升級為導引晶片,系統牽著手走)-->
           <div style="display:flex; justify-content:center; align-items:center; gap:12px;">
             <button class="btn btn-filter"
                     @click="openModal"
@@ -153,10 +153,9 @@
               </span>
             </button>
 
-            <button class="btn btn-primary big" @click="convert"
-                    :disabled="!fileInfo || isConverting">
-              {{ isConverting ? '轉換中…' : '開始轉換' }}
-            </button>
+            <button class="cfg-guide-chip data-guide-chip" :class="dataGuideCls"
+                    :disabled="isConverting"
+                    @click="dataGuideRun">{{ dataGuide.label }}</button>
           </div>
 
           <div style="height:32px"></div>

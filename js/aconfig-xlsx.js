@@ -21,13 +21,28 @@
   // ════════════════════════════════════════════════════════════════════
 
   // mode_scope ↔ condition 合併:後端 PuzzleRule 沒有 mode_scope 欄位
+  //   v8.16:多模式(逗號分隔)→「mode in [A, B]」前綴;單模式路徑不變。
   function _composeConditionWithModeScope(modeScope, condition) {
     const ms = (modeScope || 'ALL').toString().trim();
-    const cond = (condition || '').toString().trim();
+    let cond = (condition || '').toString().trim();
     if (!ms || ms === 'ALL') return cond;
+    // v8.16:scope 非 ALL 時先剝除既有 mode 前綴(與 helpers.extractModeScope 同規則),
+    //   以 mode_scope 為唯一真相重組,避免雙重編碼。
+    let m = cond.match(/^\s*mode\s+in\s+\[[^\]]*\]\s+AND\s+\((.+)\)\s*$/i)
+         || cond.match(/^\s*mode\s*==\s*[A-Za-z_][A-Za-z0-9_]*\s+AND\s+\((.+)\)\s*$/i);
+    if (m) cond = m[1].trim();
+    else if (/^\s*mode\s+in\s+\[[^\]]*\]\s*$/i.test(cond) || /^\s*mode\s*==\s*[A-Za-z_][A-Za-z0-9_]*\s*$/.test(cond)) cond = '';
+    else {
+      m = cond.match(/^\s*mode\s+in\s+\[[^\]]*\]\s+AND\s+(.+)$/i)
+       || cond.match(/^\s*mode\s*==\s*[A-Za-z_][A-Za-z0-9_]*\s+AND\s+(.+)$/i);
+      if (m) cond = m[1].trim();
+    }
+    const parts = ms.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      const prefix = `mode in [${parts.join(', ')}]`;
+      return cond ? `${prefix} AND (${cond})` : prefix;
+    }
     if (!cond) return `mode == ${ms}`;
-    const re = new RegExp(`^\\s*mode\\s*==\\s*${ms}\\b`);
-    if (re.test(cond)) return cond;
     return `mode == ${ms} AND (${cond})`;
   }
 
@@ -302,6 +317,7 @@
       'Weight', 'Max_Count', 'Use_Max', 'Reel_Limit',
       'Mode_Scope',   // v8.3 / R1 D-12:出現模式宣告(逗號分隔;空=所有模式);尾端 additive
       'Instance_Mult',// v8.7 / R6 D-14:per-instance 乘數宣告;尾端 additive
+      'Min_Match',    // P0-2:最少連線(達此數才成立;預設 3,可覆寫 1/2);尾端 additive
     ]);
     const syms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     // v4.0 / #13:停用(enabled === false)的符號不匯出;同時建立啟用 id 集合供 04/08 過濾,
@@ -323,9 +339,10 @@
         Array.isArray(s.reel_limit) ? s.reel_limit.join(',') : '',
         (s.mode_scope != null ? String(s.mode_scope) : ''),   // v8.3 D-12
         s.instance_mult === true,                              // v8.7 D-14
+        Math.max(1, Number(s.min_match) || 3),                 // P0-2(空/舊資料→3)
       ]);
     }
-    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14, 12]);
+    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14, 12, 10]);
 
     // 03c_Paytable(v5.3:動態賠付表)
     // v8.3 / R1 A-1:尾端 additive 加 Count_From / Count_To(count 區間同賠)。

@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.combo_engine import ComboResult
-    from core.grid_engine import SpinResult
-    from core.schemas import AConfig
+    from .combo_engine import ComboResult
+    from .grid_engine import SpinResult
+    from .schemas import AConfig
 
 
 # ============================================================

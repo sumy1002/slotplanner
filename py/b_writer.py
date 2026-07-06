@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.schemas import AConfig
+    from .schemas import AConfig
 
 try:
     from openpyxl import Workbook

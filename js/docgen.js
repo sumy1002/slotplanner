@@ -167,6 +167,7 @@
     const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
     const gamble      = _readLS('slotplanner.aconfig.gamble.v1', {});       // v8.6 R5:比倍(唯讀)
     const cellAttrs   = _readLS('slotplanner.aconfig.cellattrs.v1', []);    // v8.8 R4:格子屬性(唯讀)
+    const symbolGroups = _readLS('slotplanner.aconfig.symbolgroups.v1', []); // P0-3:符號家族(唯讀)
     // v8.2 / 缺失清單 F-19/F-20:機制文件補印 特色規則 / 棄牌 / 輪帶 / 格數分佈
     //   (皆為既有 LS 的唯讀取出;純描述輸出,本工具不執行、不計算 RTP)
     const discards    = _readLS('slotplanner.aconfig.discards.v1', []);
@@ -216,6 +217,7 @@
       betConfig: (betConfig && typeof betConfig === 'object') ? betConfig : {},
       gamble: (gamble && typeof gamble === 'object') ? gamble : {},          // v8.6 R5
       cellAttrs: Array.isArray(cellAttrs) ? cellAttrs : [],                   // v8.8 R4
+      symbolGroups: Array.isArray(symbolGroups) ? symbolGroups : [],         // P0-3
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
       coinValues: (coinValues && typeof coinValues === 'object') ? coinValues : {},
       genLimits: Array.isArray(genLimits) ? genLimits : [],   // v7.11
@@ -260,6 +262,9 @@
     }
     return rows;
   }
+
+  // v8.3 A-1:賠付區間 band key（單點 "8"、區間 "8–9"）;buildMechMarkdown / buildPlanXlsxBuffer 共用。
+  function _bandKey(r) { return (r.count_to > 0 ? `${r.count}–${r.count_to}` : String(r.count)); }
 
   // ── v6.3:倍數 / 彩金「單一真相」彙整 ──
   //   已遷移(migrated_to_symbols)時,倍數/彩金一律以「符號」為準(避免 docgen 同時
@@ -630,9 +635,14 @@
       const cm = (cfg.derived.payType === 'CLUSTER' && cfg.derived.clusterMin)
         ? `；最小群組 ${cfg.derived.clusterMin}` : '';
       waysLine = `連線型態：${cfg.derived.payTypeLabel}。賠付方式：${cfg.derived.payMethodDesc}${cm}`;
-    } else {
+    } else if (cfg.derived.isWaysLike) {
       waysLine = cfg.derived.waysCount
         ? `連線型態：${cfg.derived.payTypeLabel}，共 ${cfg.derived.waysCount} 種連線方式。`
+        : `連線型態：${cfg.derived.payTypeLabel}。`;
+    } else {
+      // 修正:LINE 款不印 ways 數(原本無 isWaysLike gate,LINE 也印「共 N 種連線方式」);改印得分線數(有設定才印)。
+      waysLine = cfg.paylines.length
+        ? `連線型態：${cfg.derived.payTypeLabel}，共 ${cfg.paylines.length} 條得分線。`
         : `連線型態：${cfg.derived.payTypeLabel}。`;
     }
     const plMethod = [m.payline_method, m.payline_desc].filter(Boolean).join('\n');
@@ -720,9 +730,12 @@
     kv('結束盤面顯示', m.freegame.exit_board);
     kv('盤面(H×W)', cfg.derived.gridStr);
     // v6.4 / 缺漏#3:SCATTER/CLUSTER 不輸出連線種數,改賠付方式
+    // 修正:FG 段「連線方式」亦需 gate isWaysLike(原本 LINE 款也印 ways 數);LINE 改印得分線數。
     kv('連線方式', cfg.derived.isScatterLike
       ? (cfg.derived.payMethodDesc || '')
-      : (cfg.derived.waysCount ? `共 ${cfg.derived.waysCount} 種連線方式` : ''));
+      : (cfg.derived.isWaysLike
+          ? (cfg.derived.waysCount ? `共 ${cfg.derived.waysCount} 種連線方式` : '')
+          : (cfg.paylines.length ? `共 ${cfg.paylines.length} 條得分線` : '')));
     kv('局數設定', (Number(m.freegame.min_spins) || 0) > 0 ? `最少 ${m.freegame.min_spins} 局 FREE SPINS` : '');
     kv('加局', m.freegame.add_spins);
     kv('上限', m.freegame.cap === '有' ? `有（${m.freegame.cap_value || TODO}）` : m.freegame.cap);
@@ -730,10 +743,16 @@
     // ── Sheet 2：圖示賠付明細（v5.6:動態連線數欄，依實際 pay_rows 決定）──
     const wsS = wb.addWorksheet('圖示賠付明細');
     // 收集所有符號出現過的連線數（由大到小排序），動態建欄
-    const countSet = new Set();
-    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => countSet.add(r.count)));
-    const payCounts = [...countSet].sort((a, b) => b - a);
-    if (payCounts.length === 0) payCounts.push(5, 4, 3);   // 全空時給預設三欄
+    // 修正:改用「賠付區間 band」為欄鍵(同 buildMechMarkdown 的 _bandKey),使區間同賠
+    //   (如 8–9 / 10–11 / 12–30)在 Excel 與 MD 一致;原本只取 r.count、忽略 count_to,
+    //   導致分段賠付在 Excel 只顯示單點欄(12 / 10 / 8…)。
+    const bandFrom = new Map();   // band key -> from(count,排序用)
+    cfg.symbols.forEach(s => _symPayRows(s).forEach(r => {
+      const k = _bandKey(r);
+      if (!bandFrom.has(k)) bandFrom.set(k, Number(r.count) || 0);
+    }));
+    const payCounts = [...bandFrom.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    if (payCounts.length === 0) payCounts.push('5', '4', '3');   // 全空時給預設三欄
     // 欄位:編號 / 名稱 / 類型 / <各連線數> / 備註
     const NCOL_S = 3 + payCounts.length + 1;
     wsS.columns = [{ width: 8 }, { width: 18 }, { width: 12 },
@@ -750,14 +769,22 @@
       _cell(wsS, SR, NCOL_S, '備註', { bold: true, bg, fg: C.thFg, h: 'center' });
       SR++;
     }
+    // P0-2:最少連線(min_match)註記 —— 僅連線型(LINE/WAYS),非 3 才標,寫入「備註」欄。
+    //   缺欄 / NaN → 視為預設 3,不標。
+    const _mmLineLike = !cfg.derived.isScatterLike;
+    const _mmNote = (s) => {
+      const raw = Number(s.min_match);
+      const mm = (Number.isFinite(raw) && raw > 0) ? raw : 3;
+      return (_mmLineLike && mm !== 3) ? `最少 ${mm} 連起賠` : '';
+    };
     function symRow(s, role) {
       _cell(wsS, SR, 1, s.number !== '' && s.number != null ? s.number : '', { h: 'center' });
       _cell(wsS, SR, 2, s.name || _symId(s));
       _cell(wsS, SR, 3, role || (s.type || ''), { h: 'center' });
       const payByN = {};
-      _symPayRows(s).forEach(r => { payByN[r.count] = r.pay; });
+      _symPayRows(s).forEach(r => { payByN[_bandKey(r)] = r.pay; });   // 修正:以 band key 為鍵
       payCounts.forEach((n, i) => _cell(wsS, SR, 4 + i, payByN[n] != null ? payByN[n] : '—', { h: 'center' }));
-      _cell(wsS, SR, NCOL_S, '');
+      _cell(wsS, SR, NCOL_S, _mmNote(s));
       SR++;
     }
     symHeader('一般圖示', C.th);
@@ -775,6 +802,43 @@
         SR++;
       }
     });
+
+    // ── Sheet 2b：符號家族(P0-3;ANY BAR 型混合賠付)。僅在有家族時建 sheet。 ──
+    {
+      const groups = Array.isArray(cfg.symbolGroups)
+        ? cfg.symbolGroups.filter(gp => String(gp.group_id || '').trim()) : [];
+      if (groups.length) {
+        const wsG = wb.addWorksheet('符號家族');
+        wsG.columns = [{ width: 14 }, { width: 18 }, { width: 30 },
+                       { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 },
+                       { width: 12 }, { width: 14 }, { width: 26 }];
+        let GR = 1;
+        wsG.mergeCells(GR, 1, GR, 10);
+        _cell(wsG, GR, 1, '符號家族 / 混合賠付（ANY BAR 型；成員亦保留自身賠率時，混合走家族賠、同款走個別賠，取較高者）',
+          { bold: true, bg: C.band, fg: C.bandFg, size: 11 });
+        GR++;
+        ['家族 ID', '顯示名', '成員符號', '3 連', '4 連', '5 連', '6 連', '保留個別賠', '生效模式', '備註']
+          .forEach((h, i) => _cell(wsG, GR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+        GR++;
+        groups.forEach(gp => {
+          const gid = String(gp.group_id).trim();
+          const members = (cfg.symbols || [])
+            .filter(s => String(s.group_id || '').trim() === gid)
+            .map(s => s.name || _symId(s));
+          const pt = (gp.pay_table && typeof gp.pay_table === 'object') ? gp.pay_table : {};
+          const payN = (n) => { const v = (gp['pay_' + n + 'x'] != null) ? gp['pay_' + n + 'x'] : pt[n]; return Number(v) || 0; };
+          const msc = String(gp.mode_scope || '').trim();
+          _cell(wsG, GR, 1, gid, { h: 'center' });
+          _cell(wsG, GR, 2, (gp.display_name && String(gp.display_name).trim()) || gid);
+          _cell(wsG, GR, 3, members.length ? members.join('、') : '（尚未指定成員）', { wrap: true });
+          [3, 4, 5, 6].forEach((n, i) => { const p = payN(n); _cell(wsG, GR, 4 + i, p > 0 ? p : '—', { h: 'center' }); });
+          _cell(wsG, GR, 8, gp.members_keep_individual !== false ? '是' : '否', { h: 'center' });
+          _cell(wsG, GR, 9, (msc && msc !== 'ALL') ? msc : '全部', { h: 'center' });
+          _cell(wsG, GR, 10, gp.notes ? String(gp.notes) : '', { wrap: true });
+          GR++;
+        });
+      }
+    }
 
     // ── Sheet 3：模式明細 ──
     const wsM = wb.addWorksheet('模式明細');
@@ -1446,6 +1510,19 @@
       descCols(ws);
       let R = START_R;
       R = descRow(ws, R, '賠付方式', cfg.derived.payTypeLabel || '', NG_C);
+      // P0-1a / D9:計分方向 + 雙向計分去重(僅連線型 LINE/WAYS)
+      if (!cfg.derived.isScatterLike) {
+        const _gg = cfg.global || {};
+        const _dir = String(_gg.payline_direction || _gg.ways_direction || 'LTR').toUpperCase();
+        const _dl = _dir === 'RTL' ? '右→左（RTL）'
+                  : _dir === 'BOTH' ? '雙向計分（BOTH；左右任一端起算皆成立）'
+                  : '左→右（LTR）';
+        R = descRow(ws, R, '計分方向', _dl, NG_C);
+        if (_dir === 'BOTH') {
+          R = descRow(ws, R, '雙向去重',
+            _gg.ways_both_dedup !== false ? '同一符號組合左右兩向皆成立時僅計分一次' : '左右兩向各自計分（不去重）', NG_C);
+        }
+      }
       if (cfg.derived.isScatterLike) {
         R = descRow(ws, R, '計分方式', cfg.derived.payMethodDesc || '', NG_C);
       } else if (_isLine && _plCount) {
@@ -1683,7 +1760,9 @@
       if (cfg.derived.payType === 'CLUSTER' && cfg.derived.clusterMin) {  // v6.4 / 缺漏#7
         L.push(`- 最小群組大小：${cfg.derived.clusterMin}`);
       }
-    } else if (cfg.derived.waysCount) {
+    } else if (cfg.derived.isWaysLike && cfg.derived.waysCount) {
+      // 修正:連線種數(ways)僅對 WAYS/Megaways 有意義;LINE 款不印(原 elif 未 gate isWaysLike,
+      //   會讓 LINE 也印 reel^rows 的 ways 數、與「連線」型態矛盾;中獎線數改由「連線/計分規則」段呈現)。
       L.push(`- 連線種數：${cfg.derived.waysCount}`);   // v6.4 / 缺漏#6:已含 TOP_HORIZONTAL 副盤
     }
     L.push(`- 起始模式：${cfg.derived.startingMode}`);
@@ -1892,6 +1971,47 @@
       L.push(`| ${s.number ?? ''} | ${s.name || _symId(s)} | ${_symRole(s) || '特殊'} | ` + mdCounts.map(n => mdPayCell(s, n)).join(' | ') + ' |');
     });
     L.push('');
+    // P0-2:最少連線(min_match)例外註記 —— 僅連線型(LINE/WAYS),只在有非 3 例外時列出。
+    if (!cfg.derived.isScatterLike) {
+      const _mmEx = (cfg.symbols || [])
+        .filter(s => Number(s.min_match) && Number(s.min_match) !== 3)
+        .map(s => `${s.name || _symId(s)}（最少 ${Math.max(1, Number(s.min_match))} 連起賠）`);
+      if (_mmEx.length) {
+        L.push(`＊最少連線：除下列外均為 **3** 連起賠 —— ${_mmEx.join('、')}。`);
+        L.push('');
+      }
+    }
+
+    // P0-3:符號家族 / 混合賠付(ANY BAR 型)。僅在有家族時輸出;成員由 symbol.group_id 反查。
+    {
+      const groups = Array.isArray(cfg.symbolGroups)
+        ? cfg.symbolGroups.filter(gp => String(gp.group_id || '').trim()) : [];
+      if (groups.length) {
+        L.push('## 符號家族 / 混合賠付');
+        L.push('');
+        groups.forEach(gp => {
+          const gid = String(gp.group_id).trim();
+          const dn = (gp.display_name && String(gp.display_name).trim()) || gid;
+          const members = (cfg.symbols || [])
+            .filter(s => String(s.group_id || '').trim() === gid)
+            .map(s => s.name || _symId(s));
+          const pt = (gp.pay_table && typeof gp.pay_table === 'object') ? gp.pay_table : {};
+          const payN = (n) => { const v = (gp['pay_' + n + 'x'] != null) ? gp['pay_' + n + 'x'] : pt[n]; return Number(v) || 0; };
+          const payBits = [3, 4, 5, 6].filter(n => payN(n) > 0).map(n => `${n} 連 ×${payN(n)}`);
+          const bits = [`**${dn}（${gid}）**：`];
+          bits.push(members.length ? `成員 ${members.join('、')}。` : '（尚未指定成員符號）');
+          const mmLabel = (String(gp.match_mode || 'ANY_MIXED').toUpperCase() === 'ANY_MIXED')
+            ? '任意混合成員即成家族' : String(gp.match_mode);
+          bits.push(`${mmLabel}，${payBits.length ? '以家族費率計 —— ' + payBits.join('、') + '。' : '（尚未設定家族賠率）'}`);
+          if (gp.members_keep_individual !== false) bits.push('成員亦保留自身賠率，混合走家族賠、同款走個別賠，取較高者。');
+          const msc = String(gp.mode_scope || '').trim();
+          if (msc && msc !== 'ALL') bits.push(`生效模式：${msc}。`);
+          if (gp.notes && String(gp.notes).trim()) bits.push(`備註：${String(gp.notes).trim()}`);
+          L.push('- ' + bits.join(''));
+        });
+        L.push('');
+      }
+    }
 
     // 連線 / 計分規則
     L.push('## 連線 / 計分規則');
@@ -1904,12 +2024,18 @@
       L.push(`- 滾動方式：${parts.join('；')}`);
     }
     L.push(`- 計分方式：${m.score_formula}`);
-    // v8.7 / R6 A-4:雙向 WAYS 去重宣告(方向=BOTH 且賠付=WAYS 時輸出)
+    // P0-1a / D9:計分方向補述 + 雙向計分去重(泛化 LINE+WAYS;讀 payline_direction||ways_direction、ways_both_dedup)
     {
       const gg = cfg.global || {};
-      const dir = String(gg.payline_direction || gg.ways_direction || 'LTR').toUpperCase();
-      if (dir === 'BOTH' && String(gg.pay_type).toUpperCase() === 'WAYS') {
-        L.push(`- 雙向計分去重：${gg.ways_both_dedup !== false ? '同一符號組合左右兩向皆成立時僅計分一次' : '左右兩向各自計分（不去重）'}（規格宣告，供數值端遵循）`);
+      if (!cfg.derived.isScatterLike) {
+        const dir = String(gg.payline_direction || gg.ways_direction || 'LTR').toUpperCase();
+        const dirLabel = dir === 'RTL' ? '右→左（RTL）'
+                       : dir === 'BOTH' ? '雙向計分（BOTH；左右任一端起算皆成立）'
+                       : '左→右（LTR）';
+        L.push(`- 計分方向：${dirLabel}`);
+        if (dir === 'BOTH') {
+          L.push(`- 雙向計分去重：${gg.ways_both_dedup !== false ? '同一符號組合左右兩向皆成立時僅計分一次' : '左右兩向各自計分（不去重）'}（規格宣告，供數值端遵循）`);
+        }
       }
     }
     if (!cfg.derived.isWaysLike && Array.isArray(cfg.paylines) && cfg.paylines.length) {

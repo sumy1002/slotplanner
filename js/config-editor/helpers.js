@@ -1875,7 +1875,7 @@
       enabled: true,
       priority: 100, description: 'Scatter ≥ 3 觸發 FG 並切到 FG1' },
     { rule_id: 'P002', mode_scope: 'FG1', trigger: 'ON_COMBO_END',
-      condition: 'mode == FG1 AND combo_step >= 2',
+      condition: 'combo_step >= 2',   // v8.16 勘誤:前綴由 mode_scope 於匯出時折疊,不再內嵌
       actions: [
         { atype: 'AWARD_FREE_SPIN', params: { count: 5, mode: 'FG1' } },
       ],
@@ -1883,7 +1883,7 @@
       enabled: true,
       priority: 80,  description: 'FG 連 2 爆以上加 5 局' },
     { rule_id: 'P003', mode_scope: 'NG', trigger: 'ON_DEAD_SPIN',
-      condition: 'mode == NG',
+      condition: '',                  // v8.16 勘誤:同上;scope=NG 已表達全部語義
       actions: [
         { atype: 'UPDATE_GLOBAL', params: { var: 'dead_count', op: 'add', value: 1 } },
       ],
@@ -2827,25 +2827,53 @@
   //    後端 PuzzleRule 沒有 mode_scope 欄位 — 我們把它編碼到 condition 裡面
   //    匯出時:若 mode_scope !== 'ALL',在 condition 前加 (mode == X) AND ...
   //    匯入時:若 condition 開頭是 mode == X,自動抽出設成 mode_scope
+  //    v8.16(scope 豁免):多模式(逗號分隔,如 'NG,FG1')編碼為
+  //      「mode in [NG, FG1]」前綴 — condition_parser 既有文法
+  //      (IN 運算子 + 清單字面值),引擎端零改動。單模式路徑行為不變。
   // ──────────────────────────────────────────────────────────
   function composeConditionWithModeScope(modeScope, condition) {
     const ms = (modeScope || 'ALL').trim();
-    const cond = (condition || '').trim();
-    if (!ms || ms === 'ALL') return cond;
+    let cond = (condition || '').trim();
+    if (!ms || ms === 'ALL') return cond;   // scope=ALL:條件原樣(尊重手寫 mode 條件)
+    // v8.16:scope 非 ALL 時,先剝除條件內既有 mode 前綴(單/多),
+    //   以 mode_scope 為唯一真相重組 — 避免「mode in [A,B] AND (mode == A AND …)」
+    //   雙重編碼(舊種子資料/多次 round-trip 皆可能殘留前綴)。
+    const ex = extractModeScope(cond);
+    if (ex.mode_scope !== 'ALL') cond = ex.rest_condition;
+    const parts = ms.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      const prefix = `mode in [${parts.join(', ')}]`;
+      return cond ? `${prefix} AND (${cond})` : prefix;
+    }
     if (!cond) return `mode == ${ms}`;
-    // 已經以 mode == ms 開頭就不重複加
-    const re = new RegExp(`^\\s*mode\\s*==\\s*${ms}\\b`);
-    if (re.test(cond)) return cond;
     return `mode == ${ms} AND (${cond})`;
   }
 
-  // 從 condition 抽出 mode_scope(僅當開頭就是 mode == X 且後接 AND 時)
-  //   回傳 { mode_scope, rest_condition }
+  // 從 condition 抽出 mode_scope(僅當開頭就是 mode == X / mode in [..] 且後接 AND 時)
+  //   回傳 { mode_scope, rest_condition };多模式回逗號串接(v8.16)
   function extractModeScope(condition) {
     const s = (condition || '').trim();
     if (!s) return { mode_scope: 'ALL', rest_condition: '' };
+    // v8.16 case 0: 整條就是 mode in [A, B]
+    let m = s.match(/^\s*mode\s+in\s+\[([^\]]*)\]\s*$/i);
+    if (m) {
+      const parts = m[1].split(',').map(x => x.trim()).filter(Boolean);
+      if (parts.length) return { mode_scope: parts.join(','), rest_condition: '' };
+    }
+    // v8.16 case 0b: mode in [A, B] AND (...)
+    m = s.match(/^\s*mode\s+in\s+\[([^\]]*)\]\s+AND\s+\((.+)\)\s*$/i);
+    if (m) {
+      const parts = m[1].split(',').map(x => x.trim()).filter(Boolean);
+      if (parts.length) return { mode_scope: parts.join(','), rest_condition: m[2].trim() };
+    }
+    // v8.16 case 0c: mode in [A, B] AND rest(無括號)
+    m = s.match(/^\s*mode\s+in\s+\[([^\]]*)\]\s+AND\s+(.+)$/i);
+    if (m) {
+      const parts = m[1].split(',').map(x => x.trim()).filter(Boolean);
+      if (parts.length) return { mode_scope: parts.join(','), rest_condition: m[2].trim() };
+    }
     // case 1: 整條就是 mode == X
-    let m = s.match(/^\s*mode\s*==\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+    m = s.match(/^\s*mode\s*==\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/);
     if (m) return { mode_scope: m[1], rest_condition: '' };
     // case 2: mode == X AND (...)
     m = s.match(/^\s*mode\s*==\s*([A-Za-z_][A-Za-z0-9_]*)\s+AND\s+\((.+)\)\s*$/i);

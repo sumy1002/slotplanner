@@ -170,8 +170,8 @@
       // ── v3.1:09+10 合併後的「規則」tab 共享狀態 ──
       // selectedKind 區分當前左欄選中的是 puzzle (rules) 還是 discard (discards)
       const selectedKind = ref('puzzle');  // 'puzzle' | 'discard'
-      // 左欄過濾器:全部 / 拼圖 / HARD / SOFT
-      const rulesListFilter = ref('all');  // 'all' | 'puzzle' | 'hard' | 'soft'
+      // v8.15 #4:HARD/SOFT 過濾 chips 退役(合併清單後以列表徽章呈現類別,不再提供過濾);
+      //   rulesListFilter 狀態一併移除,關鍵字搜尋(v8.11)成為唯一過濾器。
       // v8.11/A-1:規則清單關鍵字搜尋(取代與子分頁重疊的「全部/拼圖」chips)
       const rulesListSearch = ref('');
       function ruleMatchesSearch(r) {
@@ -235,10 +235,8 @@
         // v7.10:棄牌子分頁 → 右側詳情切棄牌;盤面/通用 → 切拼圖
         if (section === 'discard') {
           selectedKind.value = 'discard';
-          if (rulesListFilter.value === 'puzzle') rulesListFilter.value = 'all';
         } else if (section === 'board' || section === 'general') {
           selectedKind.value = 'puzzle';
-          if (rulesListFilter.value === 'hard' || rulesListFilter.value === 'soft') rulesListFilter.value = 'all';
         }
         cfgTabRailCollapsed.value = true;   // 與其他 tab 點擊一致:行動版點完收抽屜
       }
@@ -256,8 +254,8 @@
       // 新增按鈕的下拉選單開關
       const rulesAddMenuOpen = ref(false);
       // 合併列表(供左欄渲染),含 puzzle + discard,套用 filter
-      // 注意:rules 已是 reactive array,modes 已是 reactive — 但 selectedKind / rulesListFilter
-      //       是 ref,filter 變動會自動觸發 recomputed
+      // 注意:rules 已是 reactive array,modes 已是 reactive — selectedKind 是 ref,
+      //       變動會自動觸發 recomputed(v8.15:rulesListFilter 已退役)
       function _selectItem(kind, idx) {
         selectedKind.value = kind;
         if (kind === 'puzzle') selectedRuleIdx.value = idx;
@@ -266,25 +264,15 @@
       // 從 add menu 觸發的新增動作
       function addRuleFromMenu(kind) {
         rulesAddMenuOpen.value = false;
-        if (kind === 'puzzle') {
-          // v7.10:若目前在棄牌子分頁,先切到通用(addRule 會依 section 決定是否帶盤面 action)
-          if (rulesSection.value === 'discard') rulesSection.value = 'general';
-          addRule();
-          // addRule 已內部設 selectedRuleIdx,這裡只要切 kind
-          selectedKind.value = 'puzzle';
-          // 新規則依其 action 歸屬,切到對應子分頁確保可見
-          const nr = rules[rules.length - 1];
-          if (nr) rulesSection.value = isBoardRule(nr) ? 'board' : 'general';
-        } else if (kind === 'hard' || kind === 'soft') {
-          addDiscard();
-          // addDiscard 預設 discard_kind = 'HARD',若使用者選 SOFT 就改
-          if (kind === 'soft') {
-            const d = discards[discards.length - 1];
-            if (d) d.discard_kind = 'SOFT';
-          }
-          selectedKind.value = 'discard';
-          selectedDiscardIdx.value = discards.length - 1;
-          rulesSection.value = 'discard';   // v7.10:切到棄牌子分頁確保新棄牌可見
+        // v8.15 #3:新增改走彈窗流程(拼圖兩步 / 棄牌單步);
+        //   舊 addRule / addDiscard 保留為程式後備(規則庫 preset 等路徑仍會用到 CRUD 基元)。
+        // v8.15 批2:棄牌 HARD/SOFT 合併為單一入口(彈窗內選類型);新增「產牌限制」入口。
+        if (kind === 'puzzle') openRuleDlg('puzzle');
+        else if (kind === 'discard') openRuleDlg('discard', 'HARD');
+        else if (kind === 'genlimit') {
+          gotoRulesSub('genlimits');
+          addGenLimit();
+          glSelectedIdx.value = genLimits.length - 1;
         }
       }
       // 點擊文件其他地方時關閉 add menu
@@ -292,6 +280,298 @@
         if (!rulesAddMenuOpen.value) return;
         const host = e.target.closest && e.target.closest('.cfg-rules-add-host');
         if (!host) rulesAddMenuOpen.value = false;
+      }
+
+      // ══════════════════════════════════════════════════════
+      //  v8.15:規則頁大改版
+      //    #1 動態標題(跟隨子分頁)
+      //    #2 三群合併清單(盤面/通用/棄牌恆列;當前群置頂;跨群點擊自動切子分頁)
+      //    #5 清單第二行改「模式 · 觸發點」
+      //    #6 方案 C:條件列膠囊化(pill;點擊原地展開編輯)+ 動作卡收合
+      //    #3 兩步彈窗(拼圖)/ 單步彈窗(棄牌)
+      //  注意:僅 UI 層;A.xlsx 契約 / DSL / 引擎零變更。
+      // ══════════════════════════════════════════════════════
+
+      // #1:拼圖/棄牌共用區的動態標題
+      const RULES_SECTION_META = {
+        board:   { icon: '🎰', label: '盤面 / 圖示規則' },
+        general: { icon: '🧩', label: '通用規則' },
+        discard: { icon: '🗑', label: '棄牌規則' },
+      };
+      const rulesSectionMeta = computed(() =>
+        RULES_SECTION_META[rulesSection.value] || RULES_SECTION_META.general);
+
+      // #5:觸發點短標籤(去 emoji 前綴,給清單第二行 / 彈窗唯讀行)
+      function triggerShortLabel(t) {
+        const meta = TRIGGER_BY_TYPE[t];
+        if (!meta) return t || '–';
+        return meta.label.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*/u, '').trim();
+      }
+      // #5:拼圖清單第二行 = 模式 · 觸發點(取代舊「trigger · atype」技術字串)
+      function ruleListSub(r) {
+        if (!r) return '';
+        const scope = (r.mode_scope && r.mode_scope !== 'ALL') ? r.mode_scope : '全部模式';
+        return `${scope} · ${triggerShortLabel(r.trigger)}`;
+      }
+      // #5:棄牌清單第二行 = 模式(HARD/SOFT 已有徽章)
+      function discardListSub(d) {
+        if (!d) return '';
+        return (d.mode_scope && d.mode_scope !== 'ALL') ? d.mode_scope : '全部模式';
+      }
+
+      // #2:三群合併清單(套用 v8.11 關鍵字搜尋;固定基準序 盤面→通用→棄牌,當前群搬到最前)
+      const rulesListGroups = computed(() => {
+        const boardItems   = [];
+        const generalItems = [];
+        rules.forEach((r, idx) => {
+          if (!ruleMatchesSearch(r)) return;
+          (isBoardRule(r) ? boardItems : generalItems).push({ obj: r, idx });
+        });
+        const discardItems = [];
+        discards.forEach((d, idx) => {
+          if (!discardMatchesSearch(d)) return;
+          discardItems.push({ obj: d, idx });
+        });
+        // v8.15 批2:棄牌群內 HARD 置前(穩定排序;同類維持原順序)
+        discardItems.sort((a, b) =>
+          (a.obj.discard_kind === 'HARD' ? 0 : 1) - (b.obj.discard_kind === 'HARD' ? 0 : 1));
+        // v8.15 批2 #F:產牌限制併入清單(第四群;點擊跳 genlimits 子分頁並選中該列)
+        const genItems = [];
+        genLimits.forEach((gl, idx) => {
+          if (!genLimitMatchesSearch(gl)) return;
+          genItems.push({ obj: gl, idx });
+        });
+        const groups = [
+          { key: 'board',     kind: 'puzzle',   icon: '🎰', label: '盤面 / 圖示規則', items: boardItems },
+          { key: 'general',   kind: 'puzzle',   icon: '🧩', label: '通用規則',        items: generalItems },
+          { key: 'discard',   kind: 'discard',  icon: '🗑', label: '棄牌規則',        items: discardItems },
+          { key: 'genlimits', kind: 'genlimit', icon: '🎲', label: '產牌限制',        items: genItems },
+        ];
+        const cur = rulesSection.value;
+        return groups.filter(g => g.key === cur).concat(groups.filter(g => g.key !== cur));
+      });
+      // #2:點清單項 → 跨群自動切子分頁 + 選中該項(清單隨之以該群置頂重排)
+      function selectRuleFromList(groupKey, kind, idx) {
+        if (rulesSection.value !== groupKey) rulesSection.value = groupKey;
+        _selectItem(kind, idx);
+      }
+
+      // #6:膠囊條件列展開狀態(scope = 'rule:<rid>' / discardCond.key(rec);dlg 內恆展開不經此表)
+      const condRowOpen = reactive({});
+      function condRowKey(scope, ri) { return `${scope}::${ri}`; }
+      function isCondRowOpen(scope, ri) { return !!condRowOpen[condRowKey(scope, ri)]; }
+      function toggleCondRow(scope, ri) {
+        const k = condRowKey(scope, ri);
+        condRowOpen[k] = !condRowOpen[k];
+      }
+      function openCondRow(scope, ri) { condRowOpen[condRowKey(scope, ri)] = true; }
+
+      // #6:新增條件列的 UI 包裝 — 新列自動展開編輯。
+      //   順帶修復:舊 template 在編輯區引用了不存在的 idx / r(v-for 重構殘留),
+      //   造成「+ AND / + OR / 新增第一片條件」與「拼圖↔原始」切換按鈕 TypeError(errata 記錄)。
+      function addBuilderRowUI(combinator = 'AND') {
+        const r = rules[selectedRuleIdx.value];
+        if (!r || !r.rule_id) return;
+        addBuilderRow(selectedRuleIdx.value, combinator);
+        const rows = builderRowsMap[r.rule_id] || [];
+        openCondRow('rule:' + r.rule_id, rows.length - 1);
+      }
+      function discardAddRowUI(rec, combinator = 'AND') {
+        if (!rec) return;
+        discardCond.addRow(rec, combinator);
+        const rows = condBuilderState.rows[discardCond.key(rec)] || [];
+        openCondRow(discardCond.key(rec), rows.length - 1);
+      }
+      // #6:動作卡收合(預設收合成一行白話;未選型的空動作恆展開,避免無法選型)
+      const actionOpenMap = reactive({});
+      function actionOpenKey(rid, ai) { return `${rid}::${ai}`; }
+      function isActionOpen(rid, ai, act) {
+        if (act && !act.atype) return true;
+        return !!actionOpenMap[actionOpenKey(rid, ai)];
+      }
+      function toggleActionOpen(rid, ai) {
+        const k = actionOpenKey(rid, ai);
+        actionOpenMap[k] = !actionOpenMap[k];
+      }
+      function addActionUI(atype = '') {
+        const i = selectedRuleIdx.value;
+        const r = rules[i];
+        if (!r) return;
+        addAction(i, atype);
+        actionOpenMap[actionOpenKey(r.rule_id, (r.actions || []).length - 1)] = true;
+      }
+
+      // ── #3:新增規則彈窗 ──
+      //   拼圖 = 兩步(基本設定 → 動作事件);棄牌 = 單步。
+      //   欄位對映(v8.15 定調,errata 詳述):
+      //     條件名稱 → rule_id / discard_id(唯一鍵;撞名防呆,不分大小寫)
+      //     事件名稱 → description(防呆:不得與條件名稱相同、不得與其他規則描述完全一樣)
+      //   套用模式(v8.16 落地複選):單選折疊為「mode == X AND (…)」;複選折疊為
+      //     「mode in [A, B] AND (…)」— condition_parser 既有 IN + 清單文法,引擎零改動。
+      const ruleDlg = reactive({
+        open: false, step: 1, kind: 'puzzle',
+        name: '', mode: 'ALL', trigger: 'ON_GRID_GENERATED', rows: [],
+        hardness: 'HARD',
+        eventName: '', action: { atype: '', params: {} },
+      });
+      function openRuleDlg(kind, hardness) {
+        ruleDlg.open = true;
+        ruleDlg.step = 1;
+        ruleDlg.kind = kind || 'puzzle';
+        ruleDlg.name = '';
+        ruleDlg.mode = 'ALL';
+        ruleDlg.trigger = 'ON_GRID_GENERATED';
+        ruleDlg.rows = [];
+        ruleDlg.hardness = hardness || 'HARD';
+        ruleDlg.eventName = '';
+        ruleDlg.action = { atype: '', params: {} };
+        Vue.nextTick(() => {
+          try { document.querySelector('.cfg-ruledlg-name')?.focus(); } catch (e) { /* no-op */ }
+        });
+      }
+      const ruleDlgNameTaken = computed(() => {
+        const n = ruleDlg.name.trim().toUpperCase();
+        if (!n) return false;
+        if (ruleDlg.kind === 'discard') {
+          return discards.some(d => (d.discard_id || '').trim().toUpperCase() === n);
+        }
+        return rules.some(r => (r.rule_id || '').trim().toUpperCase() === n);
+      });
+      const ruleDlgEventClash = computed(() => {
+        const n = ruleDlg.eventName.trim();
+        if (!n) return '';
+        if (n.toUpperCase() === ruleDlg.name.trim().toUpperCase()) return '事件名稱不能與條件名稱完全一樣';
+        if (rules.some(r => (r.description || '').trim() === n)) return '已有其他規則使用一模一樣的事件名稱';
+        return '';
+      });
+      // 彈窗內條件列操作(直接對 ruleDlg.rows;確認時才 buildCondition 落字串)
+      function dlgAddRow(combinator = 'AND') {
+        ruleDlg.rows.push({ category: 'symbol_count', subkey: '', op: '>=', value: '0', combinator });
+      }
+      function dlgRemoveRow(i) { ruleDlg.rows.splice(i, 1); }
+      function dlgChangeCat(i, cat) {
+        const row = ruleDlg.rows[i];
+        if (!row) return;
+        row.category = cat;
+        const meta = VAR_CATEGORY_MAP[cat];
+        if (!meta || !meta.needsSubkey) row.subkey = '';
+      }
+      // 第二步唯讀口語化:「(符號)數量 ≥ 3 觸發」
+      const ruleDlgCondHuman = computed(() => {
+        if (!ruleDlg.rows.length) return '(無條件,觸發點發生即執行)';
+        let out = '';
+        ruleDlg.rows.forEach((r, i) => {
+          const seg = humanizeCondRow(r);
+          if (i === 0) out = seg;
+          else out += ((r.combinator || 'AND').toUpperCase() === 'OR' ? ',或 ' : ',且 ') + seg;
+        });
+        return out + ' 觸發';
+      });
+      function dlgChangeActionType(v) {
+        ruleDlg.action = (typeof makeAction === 'function' && v) ? makeAction(v) : { atype: v || '', params: {} };
+      }
+      function dlgStepNext() {
+        if (!ruleDlg.name.trim() || ruleDlgNameTaken.value) return;
+        ruleDlg.step = 2;
+      }
+      function confirmRuleDlg() {
+        const name = ruleDlg.name.trim();
+        if (!name || ruleDlgNameTaken.value) return;
+        if (ruleDlg.kind === 'discard') {
+          const d = makeDiscard(name);
+          d.discard_kind = ruleDlg.hardness;
+          d.mode_scope = ruleDlg.mode || 'ALL';
+          d.condition = buildCondition(ruleDlg.rows);
+          discards.push(d);
+          const dk = discardCond.key(d);
+          condBuilderState.rows[dk] = ruleDlg.rows.map(x => ({ ...x }));
+          condBuilderState.mode[dk] = 'builder';
+          condBuilderState.error[dk] = null;
+          selectedKind.value = 'discard';
+          selectedDiscardIdx.value = discards.length - 1;
+          rulesSection.value = 'discard';
+          ruleDlg.open = false;
+          emit('status', { type: 'ok', msg: `已建立棄牌規則 ${name}` });
+          return;
+        }
+        if (ruleDlgEventClash.value) return;
+        const r = makeRule(name);
+        r.mode_scope = ruleDlg.mode || 'ALL';
+        r.trigger = ruleDlg.trigger;
+        r.condition = buildCondition(ruleDlg.rows);
+        r.description = ruleDlg.eventName.trim();
+        r.actions = ruleDlg.action.atype
+          ? [{ atype: ruleDlg.action.atype, params: { ...(ruleDlg.action.params || {}) } }]
+          : [];
+        rules.push(r);
+        builderRowsMap[name] = ruleDlg.rows.map(x => ({ ...x }));
+        ruleEditMode[name] = 'builder';
+        ruleParseError[name] = null;
+        selectedKind.value = 'puzzle';
+        selectedRuleIdx.value = rules.length - 1;
+        // 依 action 自動分流(守則 #119),跳到所屬子分頁確保可見
+        rulesSection.value = isBoardRule(r) ? 'board' : 'general';
+        ruleDlg.open = false;
+        emit('status', { type: 'ok', msg: `已建立規則「${name}」(歸入「${isBoardRule(r) ? '盤面/圖示' : '通用'}規則」)` });
+      }
+
+      // ══ v8.15 批2 ══
+      // #B:AND/OR 語義規範(定調)— 單一真相 = condition_parser 優先序:且(AND)綁得比 或(OR)緊。
+      //   扁平混用即 DNF:「a AND b OR c AND d」≡「(a 且 b)或(c 且 d)」。
+      //   UI 以 OR 為斷點把條件列切成「觸發組」:組內全部必要(且),任一組整組成立即觸發(或)。
+      //   注意:數量遞增給不同獎勵(3/4/5 SCAT 給不同局數)不是條件 OR — 條件只需「≥ 3」,
+      //   局數差異走模式的觸發給付(trigger_pays)或多條規則。此提示同步放在 UI hint。
+      function condRowGroups(rows) {
+        const groups = [];
+        let cur = [];
+        (rows || []).forEach((row, ri) => {
+          if (ri > 0 && String(row.combinator || 'AND').toUpperCase() === 'OR' && cur.length) {
+            groups.push(cur);
+            cur = [];
+          }
+          cur.push({ row, ri });
+        });
+        if (cur.length) groups.push(cur);
+        return groups;
+      }
+      // 組間「或」分隔點擊 → 把該組首列改回 AND(併回前一組);組內「且」點擊 → 改 OR(拆出新組)
+      //   兩者都只是改 row.combinator + rebuild,底層資料/DSL 生成零變更。
+
+      // #C:選單中文化(純顯示層;儲存值 / DSL 不變)
+      const OP_ZH = {
+        '==': '等於', '!=': '不等於', '>': '大於', '>=': '大於等於',
+        '<': '小於', '<=': '小於等於', in: '屬於清單', not_in: '不屬於清單', contains: '包含',
+      };
+      function opLabel(o) { return OP_ZH[o] ? `${OP_ZH[o]}(${o})` : o; }
+      function varCatLabel(id) {
+        const m = VAR_HUMAN[id];
+        return m ? `${m.label}(${id})` : id;
+      }
+      const ENUM_OPT_ZH = { add: '加上', sub: '減去', mul: '乘以', set: '設為' };
+      function enumOptLabel(v) { return ENUM_OPT_ZH[v] ? `${ENUM_OPT_ZH[v]} ${v}` : v; }
+
+      // #F:產牌限制併入合併清單 — 搜尋比對 + 點擊跳頁選中
+      const glSelectedIdx = ref(-1);
+      function genLimitMatchesSearch(gl) {
+        const q = (rulesListSearch.value || '').toLowerCase();
+        if (!q) return true;
+        if (!gl) return false;
+        return (gl.limit_id || '').toLowerCase().includes(q)
+            || (gl.symbol_id || '').toLowerCase().includes(q)
+            || String(gl.zone || '').toLowerCase().includes(q)
+            || (gl.notes || '').toLowerCase().includes(q);
+      }
+      function genListSub(gl) { return humanizeGenLimit(gl); }
+      function selectGenLimitFromList(idx) {
+        glSelectedIdx.value = idx;
+        gotoRulesSub('genlimits');
+        Vue.nextTick(() => {
+          try {
+            const rows = document.querySelectorAll('.cfg-genlimits-table tbody tr');
+            const tr = rows[idx];
+            if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } catch (e) { /* no-op */ }
+        });
       }
 
       // ──────────────────────────────────────────────────────
@@ -312,6 +592,14 @@
         spin:                   { label: '本局變數', needsSubkey: true, subkeyPrefix: 'spin.' },
         spin_locals:            { label: '本局變數', needsSubkey: true, subkeyPrefix: 'spin.' },
         payload:                { label: '事件資料', needsSubkey: true, subkeyPrefix: 'payload.' },
+        // v8.15 批2 #C:補齊 v8.4 / v8.9 變數的中文(pill 白話與下拉中文化共用)
+        win:                    { label: '本局贏分' },
+        prev_win:               { label: '前局贏分' },
+        rand:                   { label: '隨機值(0–1)' },
+        reel_height:            { label: '輪高', needsSubkey: true, subkeyPrefix: '第' },
+        adjacent_count:         { label: '相鄰計數', needsSubkey: true, subkeyPrefix: '' },
+        cluster_max:            { label: '連通群大小', needsSubkey: true, subkeyPrefix: '' },
+        board_symbol_total:     { label: '盤面符號總數' },
       };
 
       // 運算子 → 白話
@@ -327,6 +615,23 @@
         'contains':'包含',
       };
 
+      // v8.15 #6:單列條件 → 白話片段(膠囊 pill 顯示用;humanizeCondition 共用單一真相)
+      function humanizeCondRow(r) {
+        if (!r) return '';
+        const meta = VAR_HUMAN[r.category];
+        let varDesc;
+        if (!meta) {
+          varDesc = r.subkey ? `${r.category}.${r.subkey}` : r.category;
+        } else if (meta.needsSubkey) {
+          varDesc = r.subkey ? `${meta.label} ${meta.subkeyPrefix || ''}${r.subkey}` : meta.label;
+        } else {
+          varDesc = meta.label;
+        }
+        const op = OP_HUMAN[r.op] || r.op;
+        const val = (r.value == null || r.value === '') ? '?' : r.value;
+        return `${varDesc} ${op} ${val}`;
+      }
+
       // 把 condition DSL 翻成白話
       // 'symbol_count.SCAT >= 3 AND mode == FG1' → '符號 SCAT 數量 ≥ 3,並且 當前模式 等於 FG1'
       function humanizeCondition(str) {
@@ -337,18 +642,7 @@
         let out = '';
         for (let i = 0; i < parsed.rows.length; i++) {
           const r = parsed.rows[i];
-          const meta = VAR_HUMAN[r.category];
-          let varDesc;
-          if (!meta) {
-            varDesc = r.subkey ? `${r.category}.${r.subkey}` : r.category;
-          } else if (meta.needsSubkey) {
-            varDesc = r.subkey ? `${meta.label} ${meta.subkeyPrefix || ''}${r.subkey}` : meta.label;
-          } else {
-            varDesc = meta.label;
-          }
-          const op = OP_HUMAN[r.op] || r.op;
-          const val = (r.value == null || r.value === '') ? '?' : r.value;
-          const seg = `${varDesc} ${op} ${val}`;
+          const seg = humanizeCondRow(r);   // v8.15 #6:與膠囊 pill 共用同一片段真相
           if (i === 0) {
             out = seg;
           } else {
@@ -493,9 +787,9 @@
         ruleParseError[newId] = null;
         selectedKind.value = 'puzzle';
         selectedRuleIdx.value = rules.length - 1;
-        // 避免 filter 隱藏剛建立的規則
-        if (rulesListFilter.value === 'hard' || rulesListFilter.value === 'soft') {
-          rulesListFilter.value = 'all';
+        // v8.15 #2:同步子分頁到副本的分類歸屬(合併清單置頂群 = 所在群)
+        if (rulesSection.value === 'board' || rulesSection.value === 'general') {
+          rulesSection.value = isBoardRule(copy) ? 'board' : 'general';
         }
         emit('status', { type: 'ok', msg: `已複製「${src.rule_id}」→「${newId}」` });
       }
@@ -512,7 +806,7 @@
         discards.push(copy);
         selectedKind.value = 'discard';
         selectedDiscardIdx.value = discards.length - 1;
-        if (rulesListFilter.value === 'puzzle') rulesListFilter.value = 'all';
+        rulesSection.value = 'discard';   // v8.15 #2:合併清單下確保置頂群一致
         emit('status', { type: 'ok', msg: `已複製「${src.discard_id}」→「${newId}」` });
       }
 
@@ -1252,34 +1546,28 @@
       function removeMode(idx) {
         if (modes.length <= 1) return;
         const m = modes[idx];
-        // ── v8.14 增補:刪除前統計懸空參照,列入 confirm 讓使用者知情(不自動改動參照,
-        //   健檢會持續標紅;僅 starting_mode 於刪除後兜底,避免起始模式指向不存在的模式)──
         const name = (m.mode || '').trim();
-        const _refs = [];
+        // v8.16:刪除前盤點懸空參照(mode_scope 逗號名單 comma-aware + 條件 DSL 字面值)。
+        //   哲學:告知並兜底,不自動清理孤兒 — 之後以原名重建模式即可復原對應。
+        let refs = 0;
+        const _hasTok = (v) => !!(v && v !== 'ALL' &&
+          String(v).split(',').map(x => x.trim()).includes(name));
         try {
-          if (name) {
-            const inScope = (v) => String(v || '').split(',').map(s => s.trim()).includes(name);
-            const nBuy  = (betConfig.buy_features || []).filter(bf => bf && bf.target_mode === name).length;
-            const nUp   = modes.filter((x, i) => i !== idx && (x.wheel_upgrade_to || '').trim() === name).length;
-            const nScope = rules.filter(r => r && r.mode_scope !== 'ALL' && inScope(r.mode_scope)).length
-                         + discards.filter(d => d && d.mode_scope !== 'ALL' && inScope(d.mode_scope)).length
-                         + genLimits.filter(gl => gl && gl.mode_scope !== 'ALL' && inScope(gl.mode_scope)).length;
-            if (nBuy)   _refs.push(`${nBuy} 個 Buy Feature 目標`);
-            if (nUp)    _refs.push(`${nUp} 個 WHEEL 升級目標`);
-            if (nScope) _refs.push(`${nScope} 條規則/棄牌/產牌限制的 mode_scope`);
-            if ((g.starting_mode || '').trim() === name) _refs.push('起始模式');
-          }
-        } catch (e) { /* no-op */ }
-        const refMsg = _refs.length ? `\n⚠ 仍有參照指向此模式:${_refs.join('、')}(刪除後健檢會標示,請記得調整)` : '';
-        if (!confirm(`確定要刪除模式「${m.mode || '(未命名)'}」嗎?${refMsg}`)) return;
+          [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups].forEach(arr => {
+            if (Array.isArray(arr)) arr.forEach(o => { if (_hasTok(o && o.mode_scope)) refs++; });
+          });
+          const _escN = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const _dslRe = new RegExp(
+            '\\bmode\\s*==\\s*' + _escN + '\\b|\\bmode\\s+in\\s+\\[[^\\]]*\\b' + _escN + '\\b[^\\]]*\\]');
+          for (const r of rules)    { if (r.condition && _dslRe.test(r.condition)) refs++; }
+          for (const d of discards) { if (d.condition && _dslRe.test(d.condition)) refs++; }
+          for (const x of modes)    { if (x !== m && x.trigger_condition && _dslRe.test(x.trigger_condition)) refs++; }
+        } catch (e) { /* 盤點失敗不擋刪除 */ }
+        const extra = (name && refs)
+          ? `\n\n注意:仍有 ${refs} 筆設定(規則/棄牌/約束/產牌限制/格子屬性/JP/家族/條件)參照「${name}」。\n刪除後不會自動清理這些參照;之後以原名重建模式即可復原對應。`
+          : '';
+        if (!confirm(`確定要刪除模式「${name || '(未命名)'}」嗎?${extra}`)) return;
         modes.splice(idx, 1);
-        // starting_mode 兜底:指向被刪模式時退回第一個現存模式,避免匯出即錯
-        try {
-          if (name && (g.starting_mode || '').trim() === name && modes.length) {
-            g.starting_mode = (modes[0].mode || '').trim();
-            emit('status', { type: 'warn', msg: `起始模式已改指「${g.starting_mode}」(原「${name}」已刪除)` });
-          }
-        } catch (e) { /* no-op */ }
         emit('status', { type: 'ok', msg: `已刪除模式「${m.mode}」` });
       }
       // ── 模式改名:把所有以「模式名稱」為 key 的 per-mode 資料一起搬移,避免改名即丟設定 ──
@@ -1331,86 +1619,41 @@
             if (changed) j.mode_scope = Array.from(new Set(next)).join(',');
           }
         }
+        // 3b) v8.16:其餘 mode_scope 逗號名單(規則/棄牌/約束/產牌限制/格子屬性)
+        //     comma-aware:多選名單裡的單一 token 改名,其餘 token 不動。
+        const _renScope = (o) => {
+          if (!o || !o.mode_scope || o.mode_scope === 'ALL') return;
+          const parts = String(o.mode_scope).split(',').map(s => s.trim()).filter(Boolean);
+          let changed = false;
+          const next = parts.map(p => (p === old ? (changed = true, newName) : p));
+          if (changed) o.mode_scope = Array.from(new Set(next)).join(',');
+        };
+        [rules, discards, constraints, genLimits, cellAttrs, symbolGroups].forEach(arr => {
+          if (Array.isArray(arr)) arr.forEach(_renScope);
+        });
+        // 3c) v8.16:條件 DSL 內的 mode 字面值 — 「mode == OLD」與「mode in [.., OLD, ..]」
+        //     只動 mode 比對的字面值,不碰其他變數/符號名。
+        const _escOld = old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const _renDsl = (txt) => {
+          if (!txt) return txt;
+          let s2 = String(txt).replace(
+            new RegExp('\\bmode\\s*==\\s*' + _escOld + '\\b', 'g'), 'mode == ' + newName);
+          s2 = s2.replace(/\bmode\s+in\s+\[([^\]]*)\]/gi, (whole, list) => {
+            const ps = list.split(',').map(x => x.trim()).filter(Boolean);
+            if (!ps.includes(old)) return whole;
+            return 'mode in [' + ps.map(p => (p === old ? newName : p)).join(', ') + ']';
+          });
+          return s2;
+        };
+        for (const r of rules)    { if (r.condition) r.condition = _renDsl(r.condition); }
+        for (const d of discards) { if (d.condition) d.condition = _renDsl(d.condition); }
+        for (const x of modes)    { if (x.trigger_condition) x.trigger_condition = _renDsl(x.trigger_condition); }
         // 4) 起始模式字串
         if (g.starting_mode === old) g.starting_mode = newName;
         // 5) 各分頁 sticky active mode ref
         for (const r of [reelActiveMode, gridActiveMode, comboActiveModeBar, stripActiveMode]) {
           if (r && r.value === old) r.value = newName;
         }
-        // ── v8.14 增補:改名遷移覆蓋補全(v7.14/v8.3/v8.6 之後新增的模式名參照)──
-        //   同 closure + 失焦才呼叫的既有模式,執行期容器均已初始化;每段各自 try 包護,
-        //   任一容器異常不阻斷其餘遷移。純資料搬移,零契約 / 零 LS key / 零型別變更。
-        const _renameScopeList = (v) => {
-          // mode_scope 型字串:'ALL' / 單名 / 逗號名單 → 逐項比對搬移
-          const s = String(v == null ? '' : v).trim();
-          if (!s || s === 'ALL') return v;
-          const parts = s.split(',').map(x => x.trim()).filter(Boolean);
-          let hit = false;
-          const next = parts.map(p => (p === old ? (hit = true, newName) : p));
-          return hit ? Array.from(new Set(next)).join(',') : v;
-        };
-        // 6) 加押/購買 Buy Feature 目標模式(v8.6 R5)
-        try {
-          for (const bf of (betConfig.buy_features || [])) {
-            if (bf && bf.target_mode === old) bf.target_mode = newName;
-          }
-        } catch (e) { /* no-op */ }
-        // 7) 各模式的 WHEEL 升級目標(v7.14):可能有別的模式升級到被改名的模式
-        try {
-          for (const mm of modes) {
-            if (mm && (mm.wheel_upgrade_to || '').trim() === old) mm.wheel_upgrade_to = newName;
-          }
-        } catch (e) { /* no-op */ }
-        // 8) 規則 / 棄牌 / 產牌限制的 mode_scope(v7.11 07b 含在內)
-        try { for (const r of rules)     if (r) r.mode_scope = _renameScopeList(r.mode_scope); } catch (e) { /* no-op */ }
-        try { for (const d of discards)  if (d) d.mode_scope = _renameScopeList(d.mode_scope); } catch (e) { /* no-op */ }
-        try { for (const gl of genLimits) if (gl) gl.mode_scope = _renameScopeList(gl.mode_scope); } catch (e) { /* no-op */ }
-        // 9) 規則動作內「mode 型參數」(SWITCH_MODE.target / AWARD_FREE_SPIN.mode 等):
-        //    以 ACTION_BY_TYPE 目錄泛用比對 type==='mode' 的參數,未來新增 mode 型參數自動涵蓋
-        try {
-          for (const r of rules) {
-            for (const a of (r && Array.isArray(r.actions) ? r.actions : [])) {
-              const def = a && ACTION_BY_TYPE[a.atype];
-              if (!def || !Array.isArray(def.params) || !a.params) continue;
-              for (const pd of def.params) {
-                if (pd && pd.type === 'mode' && a.params[pd.key] === old) a.params[pd.key] = newName;
-              }
-            }
-          }
-        } catch (e) { /* no-op */ }
-        // 10) 規則 / 棄牌 condition DSL 中的「mode == 舊名」字面參照(詞界比對,不誤傷前綴相同的名稱)
-        try {
-          const esc = old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const re = new RegExp('(\\bmode\\s*==\\s*)' + esc + '(?![A-Za-z0-9_])', 'g');
-          for (const r of rules)    if (r && r.condition) r.condition = r.condition.replace(re, '$1' + newName);
-          for (const d of discards) if (d && d.condition) d.condition = d.condition.replace(re, '$1' + newName);
-        } catch (e) { /* no-op */ }
-        // 11) 符號表(SymbolRegistry)的模式名參照:mode_scope(v8.3 D-12)+
-        //     mult_values/prize_values 的 weight_by_mode key(v8.3 D-13)。
-        //     走 registry 官方 read-modify-write(symbols()→applyAll),存 LS + emit('changed') 一次完成跨頁同步。
-        try {
-          if (registry) {
-            const syms = registry.symbols();
-            let touched = false;
-            const _moveWbm = (list) => {
-              for (const v of (Array.isArray(list) ? list : [])) {
-                const wbm = v && v.weight_by_mode;
-                if (wbm && Object.prototype.hasOwnProperty.call(wbm, old)) {
-                  if (!(newName in wbm)) wbm[newName] = wbm[old];
-                  delete wbm[old];
-                  touched = true;
-                }
-              }
-            };
-            for (const s of syms) {
-              const ns = _renameScopeList(s.mode_scope);
-              if (ns !== s.mode_scope) { s.mode_scope = ns; touched = true; }
-              _moveWbm(s.mult_values);
-              _moveWbm(s.prize_values);
-            }
-            if (touched) registry.applyAll(syms, registry.swatchMap());
-          }
-        } catch (e) { /* no-op */ }
         emit('status', { type: 'ok', msg: `模式「${old}」已改名為「${newName}」,相關設定一併搬移` });
       }
 
@@ -1491,15 +1734,7 @@
             if (k.startsWith(pid + '-')) delete pw[k];
           }
         }
-        // v8.14 增補:07b 產牌限制 zone 'PANEL:<id>' 指向被刪副盤 → 退化為 MAIN 並提示
-        try {
-          let n = 0;
-          for (const gl of genLimits) {
-            if (gl && String(gl.zone || '') === 'PANEL:' + pid) { gl.zone = 'MAIN'; n++; }
-          }
-          if (n) emit('status', { type: 'warn', msg: `刪副盤連動:${n} 筆產牌限制的區域已退化為主盤整體` });
-        } catch (e) { /* no-op */ }
-        emit('status', { type: 'ok', msg: `已移除自由副盤 ${pid}` });;
+        emit('status', { type: 'ok', msg: `已移除自由副盤 ${pid}` });
       }
       function selectPanel(idx) { activePanelIdx.value = idx; selectedReelIdxs.value = []; }
 
@@ -1944,12 +2179,6 @@
               }
             }
           }
-          // v8.14 增補:07b 產牌限制 zone 'PANEL:<id>'(v7.11)跟著改名,限制不懸空
-          try {
-            for (const gl of genLimits) {
-              if (gl && String(gl.zone || '') === 'PANEL:' + oldId) gl.zone = 'PANEL:' + clean;
-            }
-          } catch (e) { /* no-op */ }
         }
       }
       // panel 預覽幾何（自身 col/row/width/height → SVG 矩形格）
@@ -2092,61 +2321,6 @@
           }
           comboWeights[mode].weights = nw;
         }
-        // ── v8.14 增補:重編號連動覆蓋補全(v7.11/v8.8 之後新增的 reel_id 參照)──
-        //   各段 try 包護;對應不到(被刪的輪)採「安全退化 + 提示」而非殘留錯指。
-        let _droppedStrips = 0, _droppedAttrs = 0, _fallbackZones = 0, _resetTriggers = 0;
-        // a) 04b 輪帶:strips[mode][rid] 與編輯字串快取 stripStr[mode][rid] 同步重映射
-        try {
-          for (const store of [reelStrips.strips, stripStr]) {
-            for (const mode in store) {
-              const bucket = store[mode];
-              if (!bucket || typeof bucket !== 'object') continue;
-              const nb = {};
-              for (const rid in bucket) {
-                const nid = newForOld[parseInt(rid, 10)];
-                if (nid !== undefined) nb[nid] = bucket[rid];
-                else if (store === reelStrips.strips) _droppedStrips++;
-              }
-              for (const k of Object.keys(bucket)) delete bucket[k];
-              Object.assign(bucket, nb);   // 原地改寫,保住 reactive 參照
-            }
-          }
-        } catch (e) { /* no-op */ }
-        // b) 02d 位置型格子屬性(v8.8):reel 重映射;掛在被刪輪上的屬性列移除
-        try {
-          for (let i = cellAttrs.length - 1; i >= 0; i--) {
-            const ca = cellAttrs[i];
-            const nid = newForOld[Number(ca && ca.reel)];
-            if (nid !== undefined) ca.reel = nid;
-            else { cellAttrs.splice(i, 1); _droppedAttrs++; }
-          }
-        } catch (e) { /* no-op */ }
-        // c) 07b 產牌限制 zone 'SUB:<rid>'(v7.11):重映射;指向被刪輪者退化為 MAIN
-        try {
-          for (const gl of genLimits) {
-            const z = String((gl && gl.zone) || '');
-            if (!z.startsWith('SUB:')) continue;
-            const nid = newForOld[parseInt(z.slice(4), 10)];
-            if (nid !== undefined) gl.zone = 'SUB:' + nid;
-            else { gl.zone = 'MAIN'; _fallbackZones++; }
-          }
-        } catch (e) { /* no-op */ }
-        // d) 自由副盤 trigger_reel:重映射;指向被刪輪者歸 0(= 全盤判定,引擎現行語義)
-        try {
-          for (const p of panels) {
-            const t = Number(p && p.trigger_reel) || 0;
-            if (t < 1) continue;
-            const nid = newForOld[t];
-            if (nid !== undefined) p.trigger_reel = nid;
-            else { p.trigger_reel = 0; _resetTriggers++; }
-          }
-        } catch (e) { /* no-op */ }
-        const _warnParts = [];
-        if (_droppedStrips)  _warnParts.push(`移除被刪輪的輪帶 ${_droppedStrips} 條`);
-        if (_droppedAttrs)   _warnParts.push(`移除被刪輪上的格子屬性 ${_droppedAttrs} 筆`);
-        if (_fallbackZones)  _warnParts.push(`產牌限制 SUB 區域退化為 MAIN ${_fallbackZones} 筆`);
-        if (_resetTriggers)  _warnParts.push(`副盤觸發輪歸為全盤 ${_resetTriggers} 筆`);
-        if (_warnParts.length) emit('status', { type: 'warn', msg: '刪輪連動:' + _warnParts.join(';') });
       }
 
       // ──────────────────────────────────────────────────────────
@@ -2189,42 +2363,6 @@
         const attrs = ['y_offset', 'max_rows', 'has_subreel', 'subreel_position', 'subreel_rows', 'subreel_inherit_weight', 'subreel_kind', 'subreel_symbol_set'];
         for (const k of attrs) { const t = a[k]; a[k] = b[k]; b[k] = t; }
         _swapReelWeightKeys(ridA, ridB);   // 權重 key 跟著換(三段定址)
-        // ── v8.14 增補:互換連動覆蓋補全(與 _remapReelDimension 同一組容器)──
-        //   moveReelInsert 以連續相鄰互換冒泡,逐步互換仍保持一致,可安全重用。
-        try {
-          for (const store of [reelStrips.strips, stripStr]) {
-            for (const mode in store) {
-              const bucket = store[mode];
-              if (!bucket || typeof bucket !== 'object') continue;
-              const hasA = Object.prototype.hasOwnProperty.call(bucket, ridA);
-              const hasB = Object.prototype.hasOwnProperty.call(bucket, ridB);
-              const va = bucket[ridA], vb = bucket[ridB];
-              if (hasB) bucket[ridA] = vb; else delete bucket[ridA];
-              if (hasA) bucket[ridB] = va; else delete bucket[ridB];
-            }
-          }
-        } catch (e) { /* no-op */ }
-        try {
-          for (const ca of cellAttrs) {
-            const r = Number(ca && ca.reel);
-            if (r === ridA) ca.reel = ridB;
-            else if (r === ridB) ca.reel = ridA;
-          }
-        } catch (e) { /* no-op */ }
-        try {
-          for (const gl of genLimits) {
-            const z = String((gl && gl.zone) || '');
-            if (z === 'SUB:' + ridA) gl.zone = 'SUB:' + ridB;
-            else if (z === 'SUB:' + ridB) gl.zone = 'SUB:' + ridA;
-          }
-        } catch (e) { /* no-op */ }
-        try {
-          for (const p of panels) {
-            const t = Number(p && p.trigger_reel) || 0;
-            if (t === ridA) p.trigger_reel = ridB;
-            else if (t === ridB) p.trigger_reel = ridA;
-          }
-        } catch (e) { /* no-op */ }
         return true;
       }
       function swapReels(fromIdx, toIdx) {
@@ -4342,6 +4480,41 @@
                          value: '', mode_scope: 'ALL', notes: '' });
       }
       function removeCellAttr(idx) { cellAttrs.splice(idx, 1); }
+
+      // ── P0-3:符號家族(03d_Symbol_Groups)──
+      //   新 LS key slotplanner.aconfig.symbolgroups.v1(D7 授權;已納 aconfig-xlsx 快照/還原、本檔 R-H1)。
+      //   單一真相:symbolGroups reactive 陣列;掛 SP.symbolGroups 供 symbol.js 兩入口共用
+      //   (符號卡「所屬家族」下拉 + 03_Symbols 頁「符號家族」子區塊);deep watch 於 symbol.js 變更時亦持久化。
+      //   純描述,引擎不消費。load/save 內聯(不動凍結 helpers)。成員由 registry symbol.group_id 反查(不存此陣列)。
+      const SYMGROUPS_LS_KEY = 'slotplanner.aconfig.symbolgroups.v1';
+      function _normSymGroup(g) {
+        g = (g && typeof g === 'object') ? g : {};
+        const num = (v) => Number(v) || 0;
+        return {
+          group_id: (g.group_id != null ? String(g.group_id).trim() : ''),
+          display_name: (g.display_name != null ? String(g.display_name) : ''),
+          match_mode: (g.match_mode != null && String(g.match_mode).trim())
+            ? String(g.match_mode).trim().toUpperCase() : 'ANY_MIXED',
+          members_keep_individual: g.members_keep_individual !== false,   // 缺/非 false → true
+          mode_scope: (g.mode_scope != null ? String(g.mode_scope).trim() : ''),
+          pay_3x: num(g.pay_3x), pay_4x: num(g.pay_4x), pay_5x: num(g.pay_5x), pay_6x: num(g.pay_6x),
+          notes: (g.notes != null ? String(g.notes) : ''),
+        };
+      }
+      function _loadSymbolGroups() {
+        try {
+          const raw = localStorage.getItem(SYMGROUPS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(_normSymGroup) : [];
+        } catch (e) { return []; }
+      }
+      const symbolGroups = reactive(_loadSymbolGroups());
+      // 註:symbol-page 與 config-page 互斥掛載(page 1 / 3),不同時存在 →
+      //   兩元件各自讀寫同一 LS key(slotplanner.aconfig.symbolgroups.v1),以 LS 為交換媒介
+      //   (符合本工具「LS 權威 + buildAxlsxBufferFromLS 唯一匯出」哲學),不走跨元件共用參照。
+      const SYMGROUP_MATCH_MODES = [
+        { value: 'ANY_MIXED', label: '任意混合成員即成家族(ANY_MIXED)' },
+      ];
       function _nextGenLimitId() {
         const taken = new Set(genLimits.map(g => g.limit_id).filter(Boolean));
         let i = genLimits.length + 1;
@@ -4397,6 +4570,25 @@
         }
         return dup;
       });
+
+      // ── v8.16:mode_scope 多選共用 helpers ──
+      //   語義:'ALL'/空 = 全模式;逗號名單 = 多選(與 v6.2 constraints、
+      //   schemas.mode_in_scope 同語義)。點 ALL = 清空回 ALL;全取消 = 回 ALL。
+      //   字串版供裸字串狀態(ruleDlg.mode);物件版供 .mode_scope 欄位。
+      function scopeStrHas(v, s) {
+        if (s === 'ALL') return v === 'ALL' || !v;
+        if (v === 'ALL' || !v) return false;
+        return String(v).split(',').map(x => x.trim()).includes(s);
+      }
+      function toggleScopeStr(v, s) {
+        if (s === 'ALL') return 'ALL';
+        let cur = (v === 'ALL' || !v)
+          ? [] : String(v).split(',').map(x => x.trim()).filter(Boolean);
+        cur = cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s];
+        return cur.length ? cur.join(',') : 'ALL';
+      }
+      function scopeHasMode(o, s) { return scopeStrHas(o && o.mode_scope, s); }
+      function toggleScopeMode(o, s) { if (o) o.mode_scope = toggleScopeStr(o.mode_scope, s); }
 
       // v6.2 硬約束#2:套用模式多選(mode_scope='ALL' 或逗號分隔;py 端 mode_in_scope 已支援)
       function toggleConstraintMode(c, s) {
@@ -5011,6 +5203,374 @@
           const el = document.querySelector('.cfg-matrix .is-selected');
           if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
         });
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      //  UI 批 E-2a:04 單格微調氣泡(Popover · 失焦即存)
+      //  契約:微調既有值 → Popover;建立新實體 → 維持彈窗。
+      //  提交 = 關閉的唯一寫回點;Esc = 放棄草稿。零新增 LS key。
+      // ══════════════════════════════════════════════════════════════
+      // v-E2b:kind 分派表 — reel(04主)/ grid(05)/ sub(04副輪)/ panel(04自由副盤)
+      //   base=null 的 kind 無欄基準概念(氣泡隱藏基準列與「=基準」鈕)
+      const _CELLPOP_KINDS = {
+        reel: {
+          get:   (m, rid, sid) => Number(reelW(m).weights[`${rid}-${sid}`]) || 0,
+          set:   (m, rid, sid, v) => { reelW(m).weights[`${rid}-${sid}`] = v; },
+          base:  (m, rid, sid) => reelColBase(m, sid),
+          label: (rid, sid) => `${sid} · R${rid}`,
+        },
+        grid: {
+          get:   (m, rid, sz) => Number(gridW(m).weights[`${rid}-${sz}`]) || 0,
+          set:   (m, rid, sz, v) => { gridW(m).weights[`${rid}-${sz}`] = v; },
+          base:  null,
+          label: (rid, sz) => `R${rid} · ${sz} 格`,
+        },
+        sub: {
+          get:   (m, rid, sid) => Number(auxW(m).sub_weights[`${rid}-${sid}`]) || 0,
+          set:   (m, rid, sid, v) => { auxW(m).sub_weights[`${rid}-${sid}`] = v; },
+          base:  null,
+          label: (rid, sid) => `${sid} · R${rid}.sub`,
+        },
+        panel: {
+          get:   (m, pid, sid) => Number(auxW(m).panel_weights[`${pid}-${sid}`]) || 0,
+          set:   (m, pid, sid, v) => { auxW(m).panel_weights[`${pid}-${sid}`] = v; },
+          base:  null,
+          label: (pid, sid) => `${sid} · ${pid}`,
+        },
+      };
+      const cellPop = reactive({
+        open: false, shown: false, flipUp: false,
+        x: 0, y: 0,
+        kind: 'reel', mode: '', rid: 0, sid: '',
+        label: '',
+        draft: 0,            // 本地草稿:開啟時複製,提交時回寫(single source 不被半成品污染)
+        base: null,          // 該欄基準(眾數);null = 此 kind 無基準概念
+      });
+      let _cellPopAnchor = null;
+
+      function _cellPopPlace() {
+        const popEl = document.querySelector('.cfg-cellpop');
+        if (!_cellPopAnchor || !popEl) return;
+        const a = _cellPopAnchor.getBoundingClientRect();
+        const p = popEl.getBoundingClientRect();
+        const vw = window.innerWidth, vh = window.innerHeight, GAP = 8, PAD = 12;
+        let x = Math.max(PAD, Math.min(a.left, vw - p.width - PAD));
+        let y = a.bottom + GAP;
+        cellPop.flipUp = false;
+        if (y + p.height > vh - PAD && a.top - GAP - p.height >= PAD) {
+          y = a.top - GAP - p.height;
+          cellPop.flipUp = true;
+        }
+        cellPop.x = Math.round(x); cellPop.y = Math.round(y);
+      }
+      function openCellPop(anchorEl, kind, mode, rid, sid) {
+        const K = _CELLPOP_KINDS[kind];
+        if (!K) return;                             // 未知 kind:告知並降級(不開不炸)
+        if (cellPop.open) commitCellPop();          // 換錨點 = 先提交前一個
+        _cellPopAnchor = anchorEl;
+        cellPop.kind = kind;
+        cellPop.mode = mode; cellPop.rid = rid; cellPop.sid = sid;
+        cellPop.label = K.label(rid, sid);
+        cellPop.draft = K.get(mode, rid, sid);
+        cellPop.base = K.base ? K.base(mode, rid, sid) : null;
+        cellPop.open = true; cellPop.shown = false;
+        Vue.nextTick(() => {
+          _cellPopPlace();
+          requestAnimationFrame(() => { cellPop.shown = true; });
+        });
+        document.addEventListener('pointerdown', _cellPopOutside, true);
+        document.addEventListener('keydown', _cellPopKey, true);
+        window.addEventListener('resize', _cellPopPlace);
+      }
+      // 提交 = 關閉(失焦即存的唯一寫回點);寫入後既有 reactive 管線
+      // (LS 排程、RTP 估算、偏差標記 v-memo 依賴)自動接手,無需另掛重算。
+      function commitCellPop() {
+        if (!cellPop.open) return;
+        const v = Math.max(0, Number(cellPop.draft) || 0);
+        const K = _CELLPOP_KINDS[cellPop.kind];
+        if (K) K.set(cellPop.mode, cellPop.rid, cellPop.sid, v);
+        if (_cellPopAnchor && _cellPopAnchor.classList) {
+          _cellPopAnchor.classList.remove('cfg-flash-saved');
+          void _cellPopAnchor.offsetWidth;
+          _cellPopAnchor.classList.add('cfg-flash-saved');
+        }
+        _cellPopTeardown();
+      }
+      function cancelCellPop() { if (cellPop.open) _cellPopTeardown(); }   // Esc:放棄草稿
+      function _cellPopTeardown() {
+        cellPop.open = false; cellPop.shown = false;
+        _cellPopAnchor = null;
+        document.removeEventListener('pointerdown', _cellPopOutside, true);
+        document.removeEventListener('keydown', _cellPopKey, true);
+        window.removeEventListener('resize', _cellPopPlace);
+      }
+      function _cellPopOutside(e) {
+        const popEl = document.querySelector('.cfg-cellpop');
+        if (popEl && popEl.contains(e.target)) return;
+        if (_cellPopAnchor && _cellPopAnchor.contains && _cellPopAnchor.contains(e.target)) return;
+        commitCellPop();
+      }
+      function _cellPopKey(e) {
+        if (e.key === 'Escape') { e.stopPropagation(); cancelCellPop(); }
+        else if (e.key === 'Enter') { e.stopPropagation(); commitCellPop(); }
+      }
+      // 例外 chip → 原地開氣泡(不再強迫捲動);「跳至該格」保留為氣泡內連結
+      function openCellPopFromException(ev, mode, rid, sid) {
+        openCellPop(ev.currentTarget, 'reel', mode, rid, sid);
+      }
+      // 滑桿上限:取 100 / 基準×2 / 目前值 的最大者,避免大權重被夾住
+      const cellPopSliderMax = computed(() =>
+        Math.max(100, (cellPop.base || 0) * 2, Number(cellPop.draft) || 0));
+
+      // ── 批 F-4:行動版 Bottom Sheet 向下滑關閉 ──
+      //   ≤767px 時氣泡由 CSS 轉為底部抽屜;向下滑 >60px = 提交關閉
+      //   (與點遮罩同語義:關閉即儲存)。桌面與滑桿/輸入框互動不受影響:
+      //   僅在觸控起點不落在 input/slider/button 上時才追蹤位移。
+      let _sheetY0 = null;
+      function _sheetIsMobile() { return window.matchMedia('(max-width: 767px)').matches; }
+      function sheetTouchStart(e) {
+        _sheetY0 = null;
+        if (!_sheetIsMobile()) return;
+        const t = e.target;
+        if (t && t.closest && t.closest('input, button, select, textarea')) return;
+        _sheetY0 = (e.touches && e.touches[0]) ? e.touches[0].clientY : null;
+      }
+      function sheetTouchMove() { /* passive 佔位:不阻擋抽屜內原生捲動 */ }
+      function sheetTouchEnd(e) {
+        if (_sheetY0 === null) return;
+        const y = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : null;
+        const dy = (y !== null) ? (y - _sheetY0) : 0;
+        _sheetY0 = null;
+        if (dy > 60) commitCellPop();
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      //  UI 批 E-3a:導引晶片(Linear 式「動態下一步」)
+      //  契約:單顆常駐分頁工具列右端;start(靛紫)/ warn(黃)/ ok(綠,
+      //  拍板:無 action 純徽章)/ probe 回 null = idle 整顆隱藏。
+      //  判定只復用既有函式與資料讀取,不新增引擎判斷、不落地 LS。
+      // ══════════════════════════════════════════════════════════════
+      function _guideScrollFirst(selector) {
+        return () => {
+          const el = document.querySelector(selector);
+          if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        };
+      }
+      // 統一 warn 底層:validationIssues 幾乎覆蓋所有 tab(以 add(severity, tab, msg) 寫入)
+      function _guideIssueWarn(tab) {
+        const iss = validationIssues.value.filter(i => i.tab === tab);
+        if (!iss.length) return null;
+        return { level: 'warn', label: `⚠ ${iss.length} 項待處理,點此檢視`,
+                 action: () => { validationPanelOpen.value = true; } };
+      }
+      const GUIDE_PROBES = {
+        // ── 02 盤面結構(常駐頁,無空態;斷欄/破洞等 16 處檢查已在 issues)──
+        layout() {
+          return _guideIssueWarn('layout')
+              || { level: 'ok', label: '✨ 盤面結構就緒', action: null };
+        },
+        // ── 03 符號(元件內新增流程不可達,start 態留待 E-3c 元件內接;先接通用層)──
+        symbols() {
+          return _guideIssueWarn('symbols')
+              || { level: 'ok', label: '✨ 符號清單就緒', action: null };
+        },
+        // ── 04 Reel 權重 ──
+        reel_weights() {
+          const m = reelActiveMode.value;
+          if (!m) return null;
+          const e = reelW(m);
+          if (!e.symbol_ids || e.symbol_ids.length === 0) {
+            return { level: 'start', label: '1. 先到 03 建立符號',
+                     action: () => { active.value = 'symbols'; } };
+          }
+          for (const r of layout) {
+            let tot = 0;
+            for (const sid of e.symbol_ids) tot += Number(e.weights[`${r.reel_id}-${sid}`]) || 0;
+            if (tot === 0) {
+              const rid = r.reel_id;
+              return { level: 'warn', label: `⚠ R${rid} 權重全 0(無法生成),一鍵均勻填 100`,
+                       action: () => reelFillRowUniform(m, rid, 100) };
+            }
+          }
+          return _guideIssueWarn('reel_weights')
+              || { level: 'ok', label: '✨ 權重表就緒', action: null };
+        },
+        // ── 04b 真實輪帶(v8.13 三件套復用)──
+        reel_strips() {
+          if (!reelStrips.enabled) return null;              // 功能關閉 = idle
+          const m = stripActiveMode.value;
+          if (!m) return null;
+          const lens = layout.map(r => stripLen(m, r.reel_id));
+          if (lens.every(L => L === 0)) {
+            const n = suggestedStripLen();
+            return { level: 'start', label: `1. 依 04 權重一鍵生成輪帶(建議 ${n} 格)`,
+                     action: () => {
+                       stripGenLen.value = n;
+                       genAllStripsFromWeights(m, n, stripGenStacked.value);
+                     } };
+          }
+          const conf = stripLimitConflicts(m);
+          if (conf.length) {
+            return { level: 'warn', label: `⚠ 產牌限制必然衝突 ${conf.length} 筆,點此查看`,
+                     action: _guideScrollFirst('.cfg-strips-conflicts') };
+          }
+          let off = 0;
+          for (const r of layout) {
+            for (const d of stripCompare(m, r.reel_id)) {
+              if (d.unknown) off++;
+              else if (d.delta !== null && Math.abs(d.delta) > 3) off++;
+            }
+          }
+          if (off) {
+            return { level: 'warn', label: `⚠ ${off} 項與權重偏差 >3%,點此定位`,
+                     action: _guideScrollFirst('.cfg-strip-cmp-row.is-off, .cfg-strip-cmp-row.is-unknown') };
+          }
+          return _guideIssueWarn('reel_strips')
+              || { level: 'ok', label: '✨ 輪帶與權重對齊', action: null };
+        },
+        // ── 05 格數(僅 MEGAWAYS 適用;鎖卡 = idle)──
+        grid_size_weights() {
+          if ((g.pay_type || '').toUpperCase() !== 'MEGAWAYS') return null;
+          return _guideIssueWarn('grid_size_weights')
+              || { level: 'ok', label: '✨ 格數權重就緒', action: null };
+        },
+        // ── 06 中獎線(僅 LINE 適用)──
+        paylines() {
+          if ((g.pay_type || '').toUpperCase() !== 'LINE') return null;
+          const allEmpty = paylines.every(p => !p.path || !p.path.length);
+          if (allEmpty) {
+            return { level: 'start', label: '1. 用範本快速鋪第一條線',
+                     action: () => addPaylineFromPreset('middle') };
+          }
+          const ov = paylineOverlapIdxs.value.size;
+          if (ov) {
+            return { level: 'warn', label: `⚠ ${ov} 條線路徑重疊,點此定位`,
+                     action: _guideScrollFirst('.cfg-split-item.is-overlap') };
+          }
+          return _guideIssueWarn('paylines')
+              || { level: 'ok', label: '✨ 中獎線就緒', action: null };
+        },
+        // ── 07 硬約束(非必填 = idle)──
+        constraints() {
+          if (!constraints.length) return null;
+          const bad = constraints.filter(c => constraintStatus(c).kind === 'err').length;
+          if (bad) {
+            return { level: 'warn', label: `⚠ ${bad} 筆約束不完整,點此定位`,
+                     action: _guideScrollFirst('.cfg-constraint-v2-badge.err') };
+          }
+          return _guideIssueWarn('constraints')
+              || { level: 'ok', label: '✨ 硬約束就緒', action: null };
+        },
+        // ── 13 JP(非必填 = idle)──
+        jackpots() {
+          if (!jackpots.length) return null;
+          return _guideIssueWarn('jackpots')
+              || { level: 'ok', label: '✨ JP 彩金就緒', action: null };
+        },
+        // ── 12 分佈區間(非必填 = idle;bins 為 mode → rows 結構,任一模式有列即視為使用)──
+        distribution_bins() {
+          const used = Object.values(bins || {}).some(v => Array.isArray(v) ? v.length : (v && typeof v === 'object' && Object.keys(v).length));
+          if (!used) return null;
+          return _guideIssueWarn('distribution_bins')
+              || { level: 'ok', label: '✨ 分佈區間就緒', action: null };
+        },
+        // ── 18 比倍(開關關 = idle)──
+        gamble() {
+          if (!gamble.enabled) return null;
+          return _guideIssueWarn('gamble')
+              || { level: 'ok', label: '✨ 比倍設定就緒', action: null };
+        },
+        // ── 14 加押/購買(雙開關皆關 = idle)──
+        bet_config() {
+          const buyOn  = !!betConfig.buy_feature_enabled;
+          const anteOn = !!betConfig.ante_bet_enabled;
+          if (!buyOn && !anteOn) return null;
+          if (buyOn && (!betConfig.buy_features || betConfig.buy_features.length === 0)) {
+            return { level: 'start', label: '1. 新增第一個購買檔位',
+                     action: () => addBuyFeature() };
+          }
+          return _guideIssueWarn('bet_config')
+              || { level: 'ok', label: '✨ 加押/購買就緒', action: null };
+        },
+        // ── 文件生成:全案總驗收(導引流程的終點站)──
+        docgen() {
+          const n = validationIssues.value.length;
+          if (n) {
+            return { level: 'warn', label: `⚠ 全案尚有 ${n} 項待處理,點此檢視`,
+                     action: () => { validationPanelOpen.value = true; } };
+          }
+          return { level: 'ok', label: '✨ 全案驗證通過,可產出文件', action: null };
+        },
+        // ── 規則頁:依 rulesSection 換 probe(一頁五態)──
+        rules() {
+          const sec = rulesSection.value;
+          if (sec === 'modes') {
+            if (modes.length <= 1) {
+              return { level: 'start', label: '1. 新增第一個特色模式',
+                       action: () => openAddModeDlg() };
+            }
+            if (duplicateNames.value.size || modes.some(m => !String(m.mode || '').trim())) {
+              return { level: 'warn', label: '⚠ 模式名稱重複或為空,點此定位',
+                       action: _guideScrollFirst('.cfg-mode-summary-name.err') };
+            }
+          } else if (sec === 'board' || sec === 'general') {
+            const cnt = rules.filter(r => (sec === 'board') === isBoardRule(r)).length;
+            if (cnt === 0) {
+              return { level: 'start', label: '1. 從規則庫套用常用機制',
+                       action: () => { presetDrawerOpen.value = true; } };
+            }
+          } else if (sec === 'discard') {
+            if (!discards.length) return null;               // 無棄牌 = 合法,idle
+          } else if (sec === 'genlimits') {
+            if (!genLimits.length) return null;              // 非必填 = idle
+            const bad = genLimits.filter(gl => {
+              const k = genLimitStatusOf(gl).kind;
+              return k === 'err' || k === 'warn';
+            }).length;
+            if (bad) {
+              return { level: 'warn', label: `⚠ ${bad} 筆限制有問題,點此定位`,
+                       action: _guideScrollFirst('.cfg-form tr.is-err, .cfg-form tr.is-warn') };
+            }
+            return { level: 'ok', label: '✨ 產牌限制就緒', action: null };
+          }
+          return _guideIssueWarn('rules')
+              || { level: 'ok', label: '✨ 規則設定就緒', action: null };
+        },
+      };
+      const guideChip = computed(() => {
+        const probe = GUIDE_PROBES[active.value];
+        if (!probe) return null;                             // 未接入分頁 = 不渲染
+        // 批 F-0 修正:watch 註冊時的 eager 求值早於 validationIssues 等
+        // const 宣告(TDZ)→ probe 例外一律降級為 idle,不炸 errorHandler。
+        let snap = null;
+        try { snap = probe(); } catch (_) { return null; }
+        if (!snap) return null;                              // idle
+        return snap;
+      });
+      // 三態切換瞬間輕呼吸(把視線引過去);同態重算不動畫
+      const guidePulse = ref(false);
+      let _guideLastLevel = null;
+      watch(() => guideChip.value && guideChip.value.level, (nv) => {
+        if (_guideLastLevel !== null && nv && nv !== _guideLastLevel) {
+          guidePulse.value = true;
+          setTimeout(() => { guidePulse.value = false; }, 550);
+        }
+        _guideLastLevel = nv || null;
+      });
+      const guideChipCls = computed(() => {
+        const g = guideChip.value;
+        if (!g) return {};
+        return {
+          'is-start': g.level === 'start',
+          'is-warn':  g.level === 'warn',
+          'is-ok':    g.level === 'ok',
+          'no-action': !g.action,
+          'is-pulse': guidePulse.value,
+        };
+      });
+      function guideRun() {
+        const g = guideChip.value;
+        if (g && g.action) g.action();
       }
 
       function sortReelSymbols(mode, by) {
@@ -6167,10 +6727,8 @@
         selectedRuleIdx.value = rules.length - 1;
         // v3.1:合併 tab 後使用者可能正在看棄牌規則,插入 preset 後自動切到拼圖類別
         selectedKind.value = 'puzzle';
-        // 確保過濾器不會把剛插入的規則隱藏起來
-        if (rulesListFilter.value === 'hard' || rulesListFilter.value === 'soft') {
-          rulesListFilter.value = 'all';
-        }
+        // v8.15 #2:切到插入規則的分類子分頁,右欄與清單置頂群一致
+        rulesSection.value = isBoardRule(newRule) ? 'board' : 'general';
         emit('status', { type: 'ok', msg: `已從規則庫插入「${preset.name}」→ ${newId}` });
         // 不自動關抽屜 — 使用者可能想連續插入多個
       }
@@ -7335,6 +7893,8 @@
             const colIsScat   = headers['Is_Scatter']       || null;
             const colModeScope = headers['Mode_Scope']      || null;   // v8.3 / R1 D-12(缺欄→null,舊檔安全)
             const colInstMult  = headers['Instance_Mult']   || null;   // v8.7 / R6 D-14(缺欄→null,舊檔安全)
+            const colMinMatch  = headers['Min_Match']       || null;   // P0-2(缺欄→null,舊檔安全)
+            const colGroupId   = headers['Group_ID']        || null;   // P0-3(缺欄→null,舊檔安全)
 
             let updated = 0;
             let skipped = 0;
@@ -7363,6 +7923,8 @@
               if (colIsScat) matched.is_scatter= asBool(row.getCell(colIsScat).value);
               if (colModeScope) matched.mode_scope = asStr(row.getCell(colModeScope).value).trim();   // v8.3 D-12
               if (colInstMult)  matched.instance_mult = asBool(row.getCell(colInstMult).value);        // v8.7 D-14
+              if (colMinMatch)  matched.min_match = asNum(row.getCell(colMinMatch).value, 3); // P0-2(applyAll→cloneSymbol 正規化 0/≤0→3)
+              if (colGroupId)   matched.group_id = asStr(row.getCell(colGroupId).value).trim(); // P0-3
               updated++;
             });
             // 把更新後的 symbols 套回 registry(觸發 changed)
@@ -7422,6 +7984,39 @@
             if (pUpdated > 0 || pSkipped > 0) {
               warnings.push(`03c_Paytable:更新 ${pUpdated} 個符號賠付表`
                 + (pSkipped ? `,跳過 ${pSkipped} 個(無對應符號)` : ''));
+            }
+          }
+
+          // ── 03d_Symbol_Groups ── P0-3:符號家族(additive;舊檔無此 sheet → symbolGroups 維持)。
+          //   by-name 讀;有 sheet 即整批覆蓋 symbolGroups(比照 02d/07b 匯入)。
+          const ws03d = wb.getWorksheet('03d_Symbol_Groups');
+          if (ws03d) {
+            const hRow = ws03d.getRow(1);
+            const H = {};
+            hRow.eachCell((cell, col) => { H[asStr(cell.value).trim()] = col; });
+            const cGid = H['Group_ID'] || null;
+            const gcell = (row, name) => (H[name] ? row.getCell(H[name]).value : null);
+            const ng = [];
+            if (cGid) {
+              ws03d.eachRow((row, idx) => {
+                if (idx === 1) return;
+                const gid = asStr(row.getCell(cGid).value).trim();
+                if (!gid) return;
+                ng.push(_normSymGroup({
+                  group_id: gid,
+                  display_name: asStr(gcell(row, 'Display_Name')),
+                  match_mode: asStr(gcell(row, 'Match_Mode')),
+                  members_keep_individual: (H['Members_Keep_Individual'] ? asBool(gcell(row, 'Members_Keep_Individual')) : true),
+                  mode_scope: asStr(gcell(row, 'Mode_Scope')).trim(),
+                  pay_3x: asNum(gcell(row, 'Pay_3x'), 0),
+                  pay_4x: asNum(gcell(row, 'Pay_4x'), 0),
+                  pay_5x: asNum(gcell(row, 'Pay_5x'), 0),
+                  pay_6x: asNum(gcell(row, 'Pay_6x'), 0),
+                  notes: asStr(gcell(row, 'Notes')),
+                }));
+              });
+              symbolGroups.splice(0, symbolGroups.length, ...ng);
+              warnings.push(`03d_Symbol_Groups:載入 ${ng.length} 個符號家族`);
             }
           }
 
@@ -8310,6 +8905,7 @@
           case '硬約束':   return () => saveConstraints(constraints.map(c => ({ ...c })));
           case '產牌限制': return () => saveGenLimits(genLimits.map(g => ({ ...g })));
           case '格子屬性': return () => { try { localStorage.setItem(CELLATTRS_LS_KEY, JSON.stringify(cellAttrs.map(c => ({ ...c })))); } catch (e) {} };
+          case '符號家族': return () => { try { localStorage.setItem(SYMGROUPS_LS_KEY, JSON.stringify(symbolGroups.map(g => ({ ...g })))); } catch (e) {} };   // P0-3
           case 'Reel 權重': return () => saveReelWeights(JSON.parse(JSON.stringify(reelWeights)));
           case '格數權重': return () => saveGridWeights(JSON.parse(JSON.stringify(gridWeights)));
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
@@ -8360,6 +8956,7 @@
       watch(constraints,  () => scheduleSave('硬約束'),   { deep: true });
       watch(genLimits,    () => scheduleSave('產牌限制'), { deep: true });
       watch(cellAttrs,    () => scheduleSave('格子屬性'), { deep: true });   // v8.8 R4
+      watch(symbolGroups, () => scheduleSave('符號家族'), { deep: true });   // P0-3
       watch(reelWeights,  () => scheduleSave('Reel 權重'), { deep: true });
       watch(gridWeights,  () => scheduleSave('格數權重'), { deep: true });
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
@@ -8469,6 +9066,65 @@
             });
           }
         } catch (e) { /* registry 未就緒時靜默略過 */ }
+
+        // ─── P0-2 / D3:最少連線(min_match)與賠付下限一致性(僅連線型 LINE/WAYS)───
+        //   達 min_match 才成立;若賠付表最低 count < min_match,該賠付列在判定下不成立 → warn。
+        try {
+          const _pt = String((g && g.pay_type) || '').trim().toUpperCase();
+          const _lineLike = _pt === 'LINE' || _pt === 'WAYS' || _pt === 'MEGAWAYS' || !!(g && g.megaways);
+          if (_lineLike) {
+            const regSyms2 = (registry && registry.symbols) ? registry.symbols() : [];
+            for (const s of regSyms2) {
+              if (s.enabled === false) continue;
+              const mm = Math.max(1, Number(s.min_match) || 3);
+              let lowest = Infinity;
+              const rows = Array.isArray(s.pay_rows) ? s.pay_rows : [];
+              for (const r of rows) {
+                if (Number(r.pay) > 0) lowest = Math.min(lowest, Number(r.count) || Infinity);
+              }
+              if (!isFinite(lowest)) {
+                [3, 4, 5, 6].forEach(n => { if (Number(s['pay_' + n + 'x']) > 0) lowest = Math.min(lowest, n); });
+              }
+              if (isFinite(lowest) && lowest < mm) {
+                add('warn', 'symbols',
+                  `符號「${s.symbol_id || s.name}」最低賠付為 ${lowest} 連,但最少連線設為 ${mm};${mm} 連以下的賠付列在判定下不成立`);
+              }
+            }
+          }
+        } catch (e) { /* registry 未就緒時靜默略過 */ }
+
+        // ─── P0-3:符號家族(symbolGroups)一致性 ───
+        //   ① Group_ID 重複 ② 家族 mode_scope 引用不存在模式 ③ 家族無成員(無符號 group_id 指向它)
+        //   ④ 符號的 group_id 指向不存在的家族。皆 warn(告知不擋;tab=symbols)。
+        try {
+          const groups = Array.isArray(symbolGroups) ? symbolGroups : [];
+          const regSyms3 = (registry && registry.symbols) ? registry.symbols() : [];
+          const memberCount = {};
+          const groupIdSet = new Set();
+          for (const s of regSyms3) {
+            const gid = String(s.group_id || '').trim();
+            if (gid) memberCount[gid] = (memberCount[gid] || 0) + 1;
+          }
+          const seen = new Set();
+          for (const g0 of groups) {
+            const gid = String(g0.group_id || '').trim();
+            if (!gid) { add('warn', 'symbols', '有符號家族未填 Group_ID'); continue; }
+            groupIdSet.add(gid);
+            if (seen.has(gid)) add('warn', 'symbols', `符號家族 ID「${gid}」重複`);
+            seen.add(gid);
+            const msc = String(g0.mode_scope || '').trim();
+            if (msc && msc !== 'ALL') {
+              msc.split(',').map(x => x.trim()).filter(Boolean).forEach(mn => {
+                if (!validModeSet.has(mn)) add('warn', 'symbols', `符號家族「${g0.display_name || gid}」的出現模式「${mn}」不存在於模式清單`);
+              });
+            }
+            if (!memberCount[gid]) add('warn', 'symbols', `符號家族「${g0.display_name || gid}」目前沒有任何成員符號(於符號卡「所屬家族」指定成員)`);
+          }
+          for (const s of regSyms3) {
+            const gid = String(s.group_id || '').trim();
+            if (gid && !groupIdSet.has(gid)) add('warn', 'symbols', `符號「${s.symbol_id || s.name}」的所屬家族「${gid}」未定義於符號家族清單`);
+          }
+        } catch (e) { /* 靜默 */ }
 
         // ─── v8.5 / R3:玩家擇一組 + Hold&Win respin 描述檢查 ───
         try {
@@ -9535,7 +10191,6 @@
         cvCellDown, cvCellEnter, cvGridMove, cvUp, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard,
         cvStageRef, cvPanStart, cvPanMove, cvPanEnd, cvStageUp, cvResetView,
         // ── template 用非底線名稱的別名(對應既有底線實作)──
-        selectItem: _selectItem,
         handleSaveAsTemplate: _handleSaveAsTemplate,
         dragReelIdx: _dragReelIdx,
         dragOverIdx: _dragOverIdx,
@@ -9546,6 +10201,7 @@
         registry, symbolList, symbolNames, allModeScopes,
         modes, modeNames, duplicateNames, modesDebugJson,
         addMode, removeMode, renameMode, modeCardKey, passStatus,
+        scopeStrHas, toggleScopeStr, scopeHasMode, toggleScopeMode,
         // v8.14 批3 #3:新增模式彈窗
         modeAddDlg, openAddModeDlg, modeAddDlgPick, modeAddDlgNameTaken,
         modeAddDlgTpVisible, modeAddDlgTpAdd, modeAddDlgTpRemove, confirmAddModeDlg,
@@ -9728,6 +10384,9 @@
         condBuilderState, condKey, discardCond, modeCond,
         reelSymFilterType, reelSymFilterPicked, symIsSpecial: _symIsSpecial, visibleReelSyms,
         toggleReelSymPick, clearReelSymFilter, reelColBase, reelIsDeviant, reelExceptions, gotoReelException,
+        cellPop, openCellPop, openCellPopFromException, commitCellPop, cancelCellPop, cellPopSliderMax,
+        sheetTouchStart, sheetTouchMove, sheetTouchEnd,
+        guideChip, guideChipCls, guideRun,
         ACTION_CATALOG, ACTION_BY_TYPE, actionsByGroup,
         actionEditMode, actionsParseError,
         actionMeta, actParamValue, setActParam,
@@ -9757,8 +10416,16 @@
         resetCurrent,
         selectedRuleIdx, selectedDiscardIdx, selectedPaylineIdx,
         // v3.1:合併 09+10 為「規則」tab 用
-        selectedKind, rulesListFilter, rulesListSearch, ruleMatchesSearch, discardMatchesSearch, rulesAddMenuOpen,
-        isBoardRule, ruleInSection,
+        selectedKind, rulesListSearch, ruleMatchesSearch, discardMatchesSearch, rulesAddMenuOpen,
+        // ── v8.15:規則頁大改版(動態標題/合併清單/膠囊條件/動作收合/兩步彈窗)──
+        rulesSectionMeta, rulesListGroups, selectRuleFromList, ruleListSub, discardListSub,
+        isCondRowOpen, toggleCondRow, humanizeCondRow, addBuilderRowUI, discardAddRowUI,
+        isActionOpen, toggleActionOpen, addActionUI,
+        ruleDlg, ruleDlgNameTaken, ruleDlgEventClash, ruleDlgCondHuman,
+        dlgAddRow, dlgRemoveRow, dlgChangeCat, dlgChangeActionType, dlgStepNext, confirmRuleDlg,
+        // ── v8.15 批2:或分組 / 中文化 / 產牌限制入列 ──
+        condRowGroups, opLabel, varCatLabel, enumOptLabel,
+        glSelectedIdx, genListSub, selectGenLimitFromList,
         rulesSection, setRulesSection,
         rulesNavExpanded, onRulesParentClick, gotoRulesSub, onRailReopen,
         addRuleFromMenu,
