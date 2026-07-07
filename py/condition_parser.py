@@ -31,6 +31,7 @@ class TokenType:
     OR = "OR"
     NOT = "NOT"
     OP = "OP"           # ==, !=, >, >=, <, <=, in, not_in, contains
+    ARITH = "ARITH"     # v8.31 / E-1:算術運算子(* / + -;僅允許出現在比較的右側值)
     IDENT = "IDENT"     # 變數名 (含點: symbol_count.WILD)
     NUMBER = "NUMBER"
     STRING = "STRING"
@@ -52,14 +53,23 @@ _TOKEN_PATTERNS = [
     (r"<=",                     TokenType.OP),
     (r">",                      TokenType.OP),
     (r"<",                      TokenType.OP),
-    (r"\bAND\b",                TokenType.AND),
-    (r"\bOR\b",                 TokenType.OR),
-    (r"\bNOT\b",                TokenType.NOT),
-    (r"\bnot_in\b",             TokenType.OP),
-    (r"\bin\b",                 TokenType.OP),
-    (r"\bcontains\b",           TokenType.OP),
+    # v8.31 / W-4:關鍵字大小寫寬容(and/or/not/in/not_in/contains 任意大小寫皆合法;
+    #   前端「原始模式」手打小寫先前 JS 綠燈、Python 紅燈的不對稱在此收斂)。
+    #   NOT 排在 not_in 前安全:「not_in」的 t 與 _ 皆 word char,\b 不成立 → NOT 不誤吃。
+    (r"(?i:\bAND\b)",           TokenType.AND),
+    (r"(?i:\bOR\b)",            TokenType.OR),
+    (r"(?i:\bNOT\b)",           TokenType.NOT),
+    (r"(?i:\bnot_in\b)",        TokenType.OP),
+    (r"(?i:\bin\b)",            TokenType.OP),
+    (r"(?i:\bcontains\b)",      TokenType.OP),
     (r"-?\d+\.\d+",             TokenType.NUMBER),
     (r"-?\d+",                  TokenType.NUMBER),
+    # v8.31 / E-1:算術運算子。「-」必須排在數字 pattern 之後,負數字面(-1)優先成立;
+    #   有空白的二元減(a - 1)落到此處。* / + 先前為非法字元,此為純放寬。
+    (r"\*",                     TokenType.ARITH),
+    (r"/",                      TokenType.ARITH),
+    (r"\+",                     TokenType.ARITH),
+    (r"-",                      TokenType.ARITH),
     (r"\"([^\"]*)\"",           TokenType.STRING),
     (r"'([^']*)'",              TokenType.STRING),
     # v8.29 / C-2:cell_value 座標識別字(cell_value.3,2)。窄規則:僅放行
@@ -168,20 +178,37 @@ class _Parser:
         return ConditionLeaf(var=ident[1], op=op, value=value)
 
     def _parse_value(self):
+        # v8.31 / E-1:右側值允許算術式(如 global.coin_pool * 0.5)。
+        #   工具定位=純描述不執行:遇算術即把整段以「原樣字串」保留在 leaf.value,
+        #   求值語意交下游模擬工具。僅右側值支援;左側仍須為單一變數。
+        #   list([...])內元素同規則遞迴適用。
+        first_val, first_lex = self._parse_primary()
+        if self._peek()[0] != TokenType.ARITH:
+            return first_val
+        parts = [first_lex]
+        while self._peek()[0] == TokenType.ARITH:
+            parts.append(self._advance()[1])          # 運算子
+            _, lex = self._parse_primary()            # 下一個運算元(原樣字彙)
+            parts.append(lex)
+        return " ".join(parts)
+
+    def _parse_primary(self):
+        """單一值 → (python 值, 原樣字彙)。list 不參與算術,直接回傳。"""
         t = self._advance()
         if t[0] == TokenType.NUMBER:
-            return float(t[1]) if "." in t[1] else int(t[1])
+            v = float(t[1]) if "." in t[1] else int(t[1])
+            return v, t[1]
         if t[0] == TokenType.STRING:
-            return t[1].strip("\"'")
+            return t[1].strip("\"'"), t[1]
         if t[0] == TokenType.IDENT:
             # 裸字當字串(e.g. mode == FG1)
             # 也允許 TRUE/FALSE 解析為 bool
             up = t[1].upper()
             if up == "TRUE":
-                return True
+                return True, t[1]
             if up == "FALSE":
-                return False
-            return t[1]
+                return False, t[1]
+            return t[1], t[1]
         if t[0] == TokenType.LBRACKET:
             items = []
             if self._peek()[0] != TokenType.RBRACKET:
@@ -190,7 +217,7 @@ class _Parser:
                     self._advance()
                     items.append(self._parse_value())
             self._expect(TokenType.RBRACKET, "缺少右方括號")
-            return items
+            return items, ""   # list 不參與算術(字彙不回填)
         raise ValueError(f"預期值,得到 {t}")
 
     def _parse_op(self, s: str) -> ConditionOp:
@@ -202,6 +229,11 @@ class _Parser:
             "contains": ConditionOp.CONTAINS,
         }
         if s not in mapping:
+            # v8.31 / W-4:字詞運算子(in/not_in/contains)大小寫寬容 — tokenizer 已放行
+            #   任意大小寫,此處以小寫正規化查表;符號運算子(== 等)不受影響。
+            s_low = s.lower()
+            if s_low in mapping:
+                return mapping[s_low]
             raise ValueError(f"未知比較運算子: {s}")
         return mapping[s]
 
@@ -296,8 +328,16 @@ def _parse_params(s: str) -> dict:
     out = {}
     pairs = _split_top_level(s, ",")
     for pair in pairs:
+        pair = pair.strip()
+        if not pair:
+            continue   # 尾隨逗號等空片段 → 靜默略過(既有行為)
         if "=" not in pair:
-            continue
+            # v8.31 / W-5:非空片段缺 '=' 改為可見失敗(先前 continue 靜默吞掉,
+            #   裸座標 cell=2,3 會丟失懸空的「3」而無任何警告 → 資料靜默毀損)。
+            raise ValueError(
+                f"Action 參數片段缺 '=': {pair!r}"
+                f"(含逗號的值請加引號,如 cell=\"2,3\")"
+            )
         k, v = pair.split("=", 1)
         out[k.strip()] = _parse_value(v.strip())
     return out

@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "version": "v1 (v8.31)",
+    "purpose": "SlotPlanner DSL 金測試集 — 三守恆:①JS builder 可產出的條件 Python 必可解析;②動作 DSL 兩端解析出的 params 必逐鍵相等;③非法輸入 Python 必以可見錯誤拒絕(不靜默毀損)。",
+    "usage": "python3 dsl_golden_py.py(產 /tmp/dsl_py.json 並驗條件) → node dsl_golden_js.js(產 /tmp/dsl_js.json) → python3 dsl_golden_py.py --compare(跨端比對)。任何 parser/分割器改動後必跑。",
+    "known_edges": [
+      "二元減需左右留空白(a - 1);「a -1」會綁成負數字面造成殘留 token 錯誤(既有 tokenizer 語意,文件化)",
+      "左側算術(a * 2 > b)不支援 — 左側必為單一變數;算術僅右側值",
+      "JS parseCondition(builder 寬鬆版)拒絕含括號條件屬設計內(原始模式繞過),故括號案例只驗 Python 端"
+    ]
+  },
+  "conditions_py_legal": [
+    "combo_step >= 3 AND mode == FG1",
+    "(mode == FG1 OR mode == FG2) AND symbol_count.WILD >= 2",
+    "NOT (total_multiplier > 1000) AND consecutive_dead_spins >= 3",
+    "mode in [FG1, FG2]",
+    "x not_in [1,2]",
+    "cell_value.3,2 > 0",
+    "cell_value.10,12 >= 5 AND mode == FG1",
+    "spin.x >= cell_value.3,2",
+    "adjacent_count.WILD.SCAT >= 1",
+    "cluster_max.PINK >= 5",
+    "reel_height.3 == 12",
+    "rightmost_reel_in_win == 1",
+    "respins_left == 0 AND feature_value_total >= 50",
+    "symbol_value.COIN >= 100",
+    "board_symbol_total == 0",
+    "win > prev_win",
+    "rand < 0.1",
+    "x > -1",
+    "payload.count contains 3",
+    "global.total_payout > global.coin_pool * 0.5",
+    "win > bet * 10 AND mode == FG1",
+    "spin.x >= a + b - 1",
+    "a == 1 and b == 2",
+    "a == 1 And b == 2 Or c == 3",
+    "not (a > 1)",
+    "mode In [FG1, FG2]",
+    "x NOT_IN [1,2]",
+    "event == fg_trigger",
+    "global.pot >= 20 OR spin.retrig == TRUE"
+  ],
+  "conditions_py_illegal": [
+    "a == 1 &&  b == 2",
+    "cell_value.a,b > 0",
+    "a * 2 > b",
+    "mode == FG1 AND (x > 1",
+    "combo_step >>= 3",
+    "== 3"
+  ],
+  "actions_roundtrip": [
+    "SPAWN(target=BIRD, cell=\"2,3\")",
+    "SPAWN(cell=\"2,3\", symbol=BIRD); WALK(symbol=BIRD, dir=UP, steps=1)",
+    "WALK(symbol=JAR, steps=2, dir=PATH, persist=FEATURE)",
+    "PAY(value=\"cell_value.3,2\")",
+    "PAY(value=feature_value_total)",
+    "PAY(value=symbol_count.COIN)",
+    "END_FEATURE(when=\"respins_left == 0\")",
+    "END_FEATURE(when=\"mode in [FG1, FG2]\")",
+    "CONVERT(from=COIN, to=WILD, scope=adjacent_8)",
+    "COLLECT(source=symbol_value, target=feature_value_total, scope=all_visible)",
+    "COLLECT(scope=range(2..4))",
+    "COLLECT(scope=random_cells(5))",
+    "MULTIPLY_VALUE(target=symbol_value.COIN, factor=2)",
+    "REVIVE(respins=3)",
+    "COMPACT(direction=DOWN)",
+    "ADJUST_MULTIPLIER(op=add, value=1); BOARD_FILL(symbol=WILD, count=2, pos=random)",
+    "EMIT_EVENT(name=fg_trigger, payload={count:1,kind:big})",
+    "STICKY(positions=\"1,1;2,2\", duration=3)",
+    "SWITCH_MODE(target=FG1, inherit_globals=false)",
+    "UPDATE_GLOBAL(var=pot, op=add, value=5)",
+    "AWARD_FREE_SPIN(count=10, mode=FG1)",
+    "NUDGE(symbol=WILD, steps=1)",
+    "GROW_BOARD(rows=1)"
+  ],
+  "actions_py_illegal": [
+    "SPAWN(cell=2,3, symbol=BIRD)",
+    "NOT_AN_ACTION(x=1)",
+    "SPAWN{cell=\"2,3\"}"
+  ]
+}

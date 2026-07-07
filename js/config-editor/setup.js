@@ -7490,6 +7490,25 @@
           const wb = new window.ExcelJS.Workbook();
           await wb.xlsx.load(buf);
 
+          // ── v8.32 / R-1:by-name 讀欄器(共用)──
+          //   目的:additive 尾端加欄時,匯入端自動跟上(加欄只需改 export + schemas,
+          //   不再重演 C-3 硬編號漏讀)。回傳 accessor:(row, 欄名) => 原始 cell 值;
+          //   缺欄 → null(與 asStr/asNum/asBool 的空值語意組合 = 安全降級為預設)。
+          //   同名欄以首見為準;header 名以匯出端 addRow 為單一真相,金測試集守恆。
+          function _rowReader(ws) {
+            const idx = {};
+            ws.getRow(1).eachCell({ includeEmpty: false }, (cell, col) => {
+              const k = asStr(cell.value).trim();
+              if (k && idx[k] == null) idx[k] = col;
+            });
+            const rd = (row, name) => {
+              const i = idx[name];
+              return i ? row.getCell(i).value : null;
+            };
+            rd.has = (name) => idx[name] != null;   // schema 偵測用(09 新舊版判斷等)
+            return rd;
+          }
+
           // ── 01_Global ── key-value 列
           const ws1 = wb.getWorksheet('01_Global');
           if (ws1) {
@@ -7508,25 +7527,26 @@
           // ── 02_Layout ── 每列一個 Reel
           const ws2 = wb.getWorksheet('02_Layout');
           if (ws2) {
+            const C2 = _rowReader(ws2);   // v8.32 / R-1:by-name
             const nl = [];
             ws2.eachRow((row, idx) => {
               if (idx === 1) return;
-              const reel_id = asNum(row.getCell(1).value, 0);
+              const reel_id = asNum(C2(row, 'Reel_ID'), 0);
               if (!reel_id) return;
               nl.push({
                 reel_id,
-                y_offset: asNum(row.getCell(2).value, 0),
-                max_rows: asNum(row.getCell(3).value, 1),
-                has_subreel: asBool(row.getCell(4).value),
-                subreel_position: asStr(row.getCell(5).value).trim(),
-                subreel_rows: asNum(row.getCell(6).value, 0),
-                subreel_inherit_weight: asBool(row.getCell(7).value),
-                // v8.1 bugfix:匯入對稱補讀第 8–10 欄(SubReel_Kind / SubReel_Symbol_Set / Cells;
+                y_offset: asNum(C2(row, 'Y_Offset'), 0),
+                max_rows: asNum(C2(row, 'Max_Rows'), 1),
+                has_subreel: asBool(C2(row, 'Has_SubReel')),
+                subreel_position: asStr(C2(row, 'SubReel_Position')).trim(),
+                subreel_rows: asNum(C2(row, 'SubReel_Rows'), 0),
+                subreel_inherit_weight: asBool(C2(row, 'SubReel_Inherit_Weight')),
+                // v8.1 bugfix:匯入對稱補讀 SubReel_Kind / SubReel_Symbol_Set / Cells(
                 //   v5.1 / v7.5-Layer C 契約加法欄,原匯入漏讀 → round-trip 缺口)。舊檔缺欄 → 預設。
-                subreel_kind: asStr(row.getCell(8).value).trim() || 'STACK',
-                subreel_symbol_set: asStr(row.getCell(9).value).trim(),
+                subreel_kind: asStr(C2(row, 'SubReel_Kind')).trim() || 'STACK',
+                subreel_symbol_set: asStr(C2(row, 'SubReel_Symbol_Set')).trim(),
                 cells: (() => {
-                  const s = asStr(row.getCell(10).value).trim();
+                  const s = asStr(C2(row, 'Cells')).trim();
                   if (!s) return null;   // 空 = 實心欄(與匯出對稱)
                   const arr = s.split(';').map(x => x.trim()).filter(Boolean);
                   return arr.length ? arr : null;
@@ -7541,30 +7561,31 @@
           //   無此分頁(舊檔)→ 不動 panels,僅提示;有分頁(含 0 列)→ 以檔案為準覆蓋。
           const ws2b = wb.getWorksheet('02b_Panels');
           if (ws2b) {
+            const C2b = _rowReader(ws2b);   // v8.32 / R-1:by-name
             const np = [];
             ws2b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const panel_id = asStr(row.getCell(1).value).trim();
+              const panel_id = asStr(C2b(row, 'Panel_ID')).trim();
               if (!panel_id) return;
               const p = makePanel(panel_id);
-              p.col    = asNum(row.getCell(2).value, 0);
-              p.row    = asNum(row.getCell(3).value, 0);
-              p.width  = asNum(row.getCell(4).value, 3);
-              p.height = asNum(row.getCell(5).value, 3);
-              const scrollFlag = asBool(row.getCell(6).value);
-              p.symbol_set     = asStr(row.getCell(7).value).trim();
-              p.inherit_weight = asBool(row.getCell(8).value);
-              p.join_payline   = asBool(row.getCell(9).value);
-              p.note           = asStr(row.getCell(10).value);
-              // 第 11 欄 Panel_Type(優先);舊檔無此欄 → 由 Scroll 推導(與 loadPanels 遷移一致)
-              const ptypeRaw = asStr(row.getCell(11).value).trim().toUpperCase();
+              p.col    = asNum(C2b(row, 'Col'), 0);
+              p.row    = asNum(C2b(row, 'Row'), 0);
+              p.width  = asNum(C2b(row, 'Width'), 3);
+              p.height = asNum(C2b(row, 'Height'), 3);
+              const scrollFlag = asBool(C2b(row, 'Scroll'));
+              p.symbol_set     = asStr(C2b(row, 'Symbol_Set')).trim();
+              p.inherit_weight = asBool(C2b(row, 'Inherit_Weight'));
+              p.join_payline   = asBool(C2b(row, 'Join_Payline'));
+              p.note           = asStr(C2b(row, 'Note'));
+              // Panel_Type(優先);舊檔無此欄 → 由 Scroll 推導(與 loadPanels 遷移一致)
+              const ptypeRaw = asStr(C2b(row, 'Panel_Type')).trim().toUpperCase();
               p.panel_type = ptypeRaw || (scrollFlag === false ? 'COLLECT' : 'SCROLL');
               p.scroll = (p.panel_type === 'SCROLL');
-              p.trigger_symbol    = asStr(row.getCell(12).value).trim();
-              p.collect_target_jp = asStr(row.getCell(13).value).trim();
-              p.trigger_reel      = asNum(row.getCell(14).value, 0);
-              // 第 15 欄 Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
-              const cellsRaw = asStr(row.getCell(15).value).trim();
+              p.trigger_symbol    = asStr(C2b(row, 'Trigger_Symbol')).trim();
+              p.collect_target_jp = asStr(C2b(row, 'Collect_Target_JP')).trim();
+              p.trigger_reel      = asNum(C2b(row, 'Trigger_Reel'), 0);
+              // Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
+              const cellsRaw = asStr(C2b(row, 'Cells')).trim();
               const cellsArr = cellsRaw ? cellsRaw.split(/[;\s]+/).filter(Boolean) : null;
               p.cells = Array.isArray(cellsArr) ? normalizeMask(cellsArr, p.width, p.height) : null;
               np.push(p);
@@ -7611,27 +7632,28 @@
           // ── 13_Jackpots ── 14 欄,以 makeJackpot 為基底覆蓋。有分頁 → 以檔案為準覆蓋。
           const ws13 = wb.getWorksheet('13_Jackpots');
           if (ws13) {
+            const C13 = _rowReader(ws13);   // v8.32 / R-1:by-name
             const nj = [];
             ws13.eachRow((row, idx) => {
               if (idx === 1) return;
-              const jp_id = asStr(row.getCell(1).value).trim();
-              const name  = asStr(row.getCell(2).value).trim();
+              const jp_id = asStr(C13(row, 'JP_ID')).trim();
+              const name  = asStr(C13(row, 'Name')).trim();
               if (!jp_id && !name) return;
               const j = makeJackpot(jp_id || name);
               j.jp_id          = jp_id;
               j.name           = name;
-              j.kind           = asStr(row.getCell(3).value).trim() || 'FIXED';
-              j.mult           = asNum(row.getCell(4).value, 0);
-              j.increment_pct  = asNum(row.getCell(5).value, 0);
-              j.must_hit_by    = asNum(row.getCell(6).value, 0);
-              j.trigger_desc   = asStr(row.getCell(7).value);
-              j.trigger_type   = asStr(row.getCell(8).value).trim() || 'COLLECT';
-              j.accum_pct      = asNum(row.getCell(9).value, 0);
-              j.accum_mech     = asStr(row.getCell(10).value);
-              j.collect_prob   = asNum(row.getCell(11).value, 0);
-              j.collect_enter  = asStr(row.getCell(12).value);
-              j.mode_scope     = asStr(row.getCell(13).value).trim() || 'ALL';
-              j.notes          = asStr(row.getCell(14).value);
+              j.kind           = asStr(C13(row, 'Kind')).trim() || 'FIXED';
+              j.mult           = asNum(C13(row, 'Multiplier'), 0);
+              j.increment_pct  = asNum(C13(row, 'Increment_Pct'), 0);
+              j.must_hit_by    = asNum(C13(row, 'Must_Hit_By'), 0);
+              j.trigger_desc   = asStr(C13(row, 'Trigger_Desc'));
+              j.trigger_type   = asStr(C13(row, 'Trigger_Type')).trim() || 'COLLECT';
+              j.accum_pct      = asNum(C13(row, 'Accum_Pct'), 0);
+              j.accum_mech     = asStr(C13(row, 'Accum_Mech'));
+              j.collect_prob   = asNum(C13(row, 'Collect_Prob'), 0);
+              j.collect_enter  = asStr(C13(row, 'Collect_Enter'));
+              j.mode_scope     = asStr(C13(row, 'Mode_Scope')).trim() || 'ALL';
+              j.notes          = asStr(C13(row, 'Notes'));
               nj.push(j);
             });
             jackpots.splice(0, jackpots.length, ...nj);
@@ -7743,18 +7765,22 @@
           }
 
           // ── v8.25 / G4:19_Jackpot_Tiers(獎池級距 + 觸發方式)匯入 ──
+          //   v8.31 / W-6 契約文件化:Jackpot_Trigger 以「首個非空值為準」。
+          //   匯出契約只寫首列;手改 xlsx 於後續列填入不同 trigger 時,後續非空值一律忽略
+          //   (不報錯、不覆寫)。級距列與觸發承載列正交:純觸發列(Tier/Label 皆空)不計級距。
           const ws19 = wb.getWorksheet('19_Jackpot_Tiers');
           if (ws19) {
+            const C19 = _rowReader(ws19);   // v8.32 / R-1:by-name
             const jc = _defaultJackpot();
             ws19.eachRow((row, idx) => {
               if (idx === 1) return;
-              const tier  = asStr(row.getCell(1).value).trim();
-              const label = asStr(row.getCell(2).value).trim();
-              const trig  = asStr(row.getCell(4).value).trim().toUpperCase();
+              const tier  = asStr(C19(row, 'Tier')).trim();
+              const label = asStr(C19(row, 'Label')).trim();
+              const trig  = asStr(C19(row, 'Jackpot_Trigger')).trim().toUpperCase();
               if (trig && !jc.trigger) jc.trigger = trig;   // 第一個非空觸發為準
               if (!tier && !label) return;                  // 純觸發承載列 → 不計級距
-              jc.tiers.push({ tier, label, value: asNum(row.getCell(3).value, 0),
-                              notes: asStr(row.getCell(5).value).trim() });
+              jc.tiers.push({ tier, label, value: asNum(C19(row, 'Value'), 0),
+                              notes: asStr(C19(row, 'Notes')).trim() });
             });
             jackpotCfg.tiers = jc.tiers;
             jackpotCfg.trigger = jc.trigger;
@@ -7799,50 +7825,47 @@
           // ── 11_Mode_Config ── 先匯入,後面 04/05/08/12 才有正確 modeNames
           const ws11 = wb.getWorksheet('11_Mode_Config');
           if (ws11) {
+            const C11 = _rowReader(ws11);   // v8.32 / R-1:by-name(26 欄全數;加欄自動跟上)
             const nm = [];
             ws11.eachRow((row, idx) => {
               if (idx === 1) return;
-              const mode = asStr(row.getCell(1).value).trim();
+              const mode = asStr(C11(row, 'Mode')).trim();
               if (!mode) return;
               nm.push({
                 mode,
-                trigger_condition: asStr(row.getCell(2).value),
-                spin_count: asNum(row.getCell(3).value, 0),
-                inherit_globals: asBool(row.getCell(4).value),
-                on_enter_reset_vars: asStr(row.getCell(5).value),
-                notes: asStr(row.getCell(6).value),
-                // v7.10 additive:Reset_Scope 為尾端第 7 欄;舊檔無此欄 → 空字串(繼承全域)
-                reset_scope: asStr(row.getCell(7).value).trim(),
-                // v7.11 additive:Cap_Enabled(8)/Cap_Value(9)/Stack_Mode(10);舊檔無 → 空(不封頂/繼承)
-                cap_enabled: asStr(row.getCell(8).value).trim(),
-                cap_value:   asStr(row.getCell(9).value).trim(),
-                stack_mode:  asStr(row.getCell(10).value).trim(),
-                // v7.14 additive:Mode_Kind(11)/Wheel_Upgrade_To(12)/Pick_Count(13)/Collect_Target(14)
-                //   舊檔無 → 空/0;mode_kind 空 → _ensureModeGameplayFields 補 'SPIN'。
-                mode_kind:        asStr(row.getCell(11).value).trim().toUpperCase(),
-                wheel_upgrade_to: asStr(row.getCell(12).value).trim(),
-                pick_count:       asNum(row.getCell(13).value, 0),
-                collect_target:   asNum(row.getCell(14).value, 0),
-                // v8.5 / R3 additive:Choice_Group(15)/Respin_Base(16)/Respin_Reset_On(17)/Respin_Stop_Cond(18)
-                //   舊檔無 → 空/0(_ensureModeGameplayFields 補預設)。
-                choice_group:     asStr(row.getCell(15).value).trim(),
-                respin_base:      asNum(row.getCell(16).value, 0),
-                respin_reset_on:  asStr(row.getCell(17).value).trim().toUpperCase(),
-                respin_stop_cond: asStr(row.getCell(18).value).trim(),
-                // v8.7 / R6 A-2:Pay_Type_Override(19);舊檔無 → ''(繼承全域)
-                pay_type_override: asStr(row.getCell(19).value).trim().toUpperCase(),
-                // v8.29 / C-3:round-trip 補讀尾端欄(舊檔缺欄 → asStr/asBool 得空/false,
-                //   _ensureModeGameplayFields 補預設,安全降級)。
-                // v8.22 / G3:Hold&Win 設定面(20–23)
-                collect_enabled:        asBool(row.getCell(20).value),
-                respin_reset_symbol:    asStr(row.getCell(21).value).trim(),
-                grid_expand_in_collect: asBool(row.getCell(22).value),
-                allow_persistent:       asBool(row.getCell(23).value),
-                // v8.24 / G5:結構化結束謂詞(24)
-                end_condition:          asStr(row.getCell(24).value).trim(),
-                // v8.28 / 缺口B+C:解鎖前提清單(25)/倍數複合覆寫(26)
-                unlock_requires:        asStr(row.getCell(25).value).split(',').map(s => s.trim()).filter(Boolean),
-                mult_compose_override:  asStr(row.getCell(26).value).trim().toUpperCase(),
+                trigger_condition: asStr(C11(row, 'Trigger_Condition')),
+                spin_count: asNum(C11(row, 'Spin_Count'), 0),
+                inherit_globals: asBool(C11(row, 'Inherit_Globals')),
+                on_enter_reset_vars: asStr(C11(row, 'On_Enter_Reset_Vars')),
+                notes: asStr(C11(row, 'Notes')),
+                // v7.10 additive:舊檔無此欄 → 空字串(繼承全域)
+                reset_scope: asStr(C11(row, 'Reset_Scope')).trim(),
+                // v7.11 additive:舊檔無 → 空(不封頂/繼承)
+                cap_enabled: asStr(C11(row, 'Cap_Enabled')).trim(),
+                cap_value:   asStr(C11(row, 'Cap_Value')).trim(),
+                stack_mode:  asStr(C11(row, 'Stack_Mode')).trim(),
+                // v7.14 additive:舊檔無 → 空/0;mode_kind 空 → _ensureModeGameplayFields 補 'SPIN'。
+                mode_kind:        asStr(C11(row, 'Mode_Kind')).trim().toUpperCase(),
+                wheel_upgrade_to: asStr(C11(row, 'Wheel_Upgrade_To')).trim(),
+                pick_count:       asNum(C11(row, 'Pick_Count'), 0),
+                collect_target:   asNum(C11(row, 'Collect_Target'), 0),
+                // v8.5 / R3 additive:舊檔無 → 空/0(_ensureModeGameplayFields 補預設)。
+                choice_group:     asStr(C11(row, 'Choice_Group')).trim(),
+                respin_base:      asNum(C11(row, 'Respin_Base'), 0),
+                respin_reset_on:  asStr(C11(row, 'Respin_Reset_On')).trim().toUpperCase(),
+                respin_stop_cond: asStr(C11(row, 'Respin_Stop_Cond')).trim(),
+                // v8.7 / R6 A-2:舊檔無 → ''(繼承全域)
+                pay_type_override: asStr(C11(row, 'Pay_Type_Override')).trim().toUpperCase(),
+                // v8.22 / G3:Hold&Win 設定面(舊檔缺欄 → asStr/asBool 得空/false 安全降級)
+                collect_enabled:        asBool(C11(row, 'Collect_Enabled')),
+                respin_reset_symbol:    asStr(C11(row, 'Respin_Reset_Symbol')).trim(),
+                grid_expand_in_collect: asBool(C11(row, 'Grid_Expand_In_Collect')),
+                allow_persistent:       asBool(C11(row, 'Allow_Persistent')),
+                // v8.24 / G5:結構化結束謂詞
+                end_condition:          asStr(C11(row, 'End_Condition')).trim(),
+                // v8.28 / 缺口B+C:解鎖前提清單/倍數複合覆寫
+                unlock_requires:        asStr(C11(row, 'Unlock_Requires')).split(',').map(s => s.trim()).filter(Boolean),
+                mult_compose_override:  asStr(C11(row, 'Mult_Compose_Override')).trim().toUpperCase(),
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -7872,20 +7895,20 @@
           // ── 11c_Mode_Items(v7.14 additive;舊檔無此 sheet → 跳過,items 維持空)──
           const ws11c = wb.getWorksheet('11c_Mode_Items');
           if (ws11c) {
+            const C11c = _rowReader(ws11c);   // v8.32 / R-1:by-name
             const itByMode = {};
             ws11c.eachRow((row, idx) => {
               if (idx === 1) return;
-              const mode = asStr(row.getCell(1).value).trim();
+              const mode = asStr(C11c(row, 'Mode')).trim();
               if (!mode) return;
               (itByMode[mode] = itByMode[mode] || []).push({
-                label:        asStr(row.getCell(2).value),
-                value:        asNum(row.getCell(3).value, 0),
-                weight:       asNum(row.getCell(4).value, 0),
-                is_end:       asBool(row.getCell(5).value),
-                link_jackpot: asStr(row.getCell(6).value).trim(),
-                // v8.29 / C-3:round-trip 補讀(舊檔缺欄 → '' 安全降級)
-                item_role:    asStr(row.getCell(7).value).trim().toUpperCase(),   // v8.22 G3
-                link_mode:    asStr(row.getCell(8).value).trim(),                 // v8.27 批8
+                label:        asStr(C11c(row, 'Item_Label')),
+                value:        asNum(C11c(row, 'Item_Value'), 0),
+                weight:       asNum(C11c(row, 'Item_Weight'), 0),
+                is_end:       asBool(C11c(row, 'Item_Is_End')),
+                link_jackpot: asStr(C11c(row, 'Item_Link_JP')).trim(),
+                item_role:    asStr(C11c(row, 'Item_Role')).trim().toUpperCase(),   // v8.22 G3
+                link_mode:    asStr(C11c(row, 'Item_Link_Mode')).trim(),            // v8.27 批8
               });
             });
             for (const m of modes) {
@@ -7941,16 +7964,17 @@
           // ── 06_Paylines ──
           const ws6 = wb.getWorksheet('06_Paylines');
           if (ws6) {
+            const C6 = _rowReader(ws6);   // v8.32 / R-1:by-name
             const np = [];
             ws6.eachRow((row, idx) => {
               if (idx === 1) return;
-              const line_id = asNum(row.getCell(1).value, 0);
+              const line_id = asNum(C6(row, 'Line_ID'), 0);
               if (!line_id) return;
               np.push({
                 line_id,
-                path: asStr(row.getCell(2).value),
-                direction: asStr(row.getCell(3).value) || 'LTR',
-                notes: asStr(row.getCell(4).value),
+                path: asStr(C6(row, 'Path')),
+                direction: asStr(C6(row, 'Direction')) || 'LTR',
+                notes: asStr(C6(row, 'Notes')),
               });
             });
             if (np.length > 0) paylines.splice(0, paylines.length, ...np);
@@ -7959,19 +7983,20 @@
           // ── 07_Constraints ──
           const ws7 = wb.getWorksheet('07_Constraints');
           if (ws7) {
+            const C7 = _rowReader(ws7);   // v8.32 / R-1:by-name
             const nc = [];
             ws7.eachRow((row, idx) => {
               if (idx === 1) return;
-              const cid = asStr(row.getCell(1).value).trim();
+              const cid = asStr(C7(row, 'Constraint_ID')).trim();
               if (!cid) return;
               nc.push({
                 constraint_id: cid,
-                ctype: asStr(row.getCell(2).value) || 'REEL_RESTRICT',
-                symbol_id: asStr(row.getCell(3).value),
-                reels_allowed: asStr(row.getCell(4).value),
-                threshold: asNum(row.getCell(5).value, 0),
-                mode_scope: asStr(row.getCell(6).value) || 'ALL',
-                notes: asStr(row.getCell(7).value),
+                ctype: asStr(C7(row, 'Type')) || 'REEL_RESTRICT',
+                symbol_id: asStr(C7(row, 'Symbol_ID')),
+                reels_allowed: asStr(C7(row, 'Reels_Allowed')),
+                threshold: asNum(C7(row, 'Max_Count_Global'), 0),
+                mode_scope: asStr(C7(row, 'Mode_Scope')) || 'ALL',
+                notes: asStr(C7(row, 'Notes')),
               });
             });
             if (nc.length > 0) constraints.splice(0, constraints.length, ...nc);
@@ -8026,65 +8051,56 @@
           // 用首列標頭判斷
           const ws9 = wb.getWorksheet('09_Puzzle_Rules');
           if (ws9) {
-            // 讀首列判斷 schema 版本
-            // v8.29 / C-3:掃描上限 10 → 動態欄數(修 v8.21 Persistent(11)/v8.28 Notes(12) 掃不到)
-            const hdr = [];
-            const hdrRow = ws9.getRow(1);
-            const hdrCount = Math.max(12, ws9.columnCount || 12);
-            for (let c = 1; c <= hdrCount; c++) hdr.push(asStr(hdrRow.getCell(c).value).trim());
-            const isNewSchema = hdr.includes('Actions') && hdr.includes('Enabled');
-            // v8.4 / R2 P5:隨機組欄位(by-name;舊檔缺欄 → 0 → 走預設)
-            const cRG9 = hdr.indexOf('Random_Group') + 1;
-            const cRW9 = hdr.indexOf('Random_Weight') + 1;
-            // v8.29 / C-3:Persistent(v8.21 G1)/Notes(v8.28 缺口A)round-trip 補讀
-            //   (by-name;舊檔缺欄 → 0 → false/'' 安全降級)
-            const cPS9 = hdr.indexOf('Persistent') + 1;
-            const cNT9 = hdr.indexOf('Notes') + 1;
+            // v8.32 / R-1:統一走 by-name 讀欄器(取代 v8.29 的手動 hdr 掃描;
+            //   新/舊 schema 欄名互斥處各自 by-name,同名 Notes 欄因分支互斥不衝突)。
+            const C9 = _rowReader(ws9);
+            const isNewSchema = C9.has('Actions') && C9.has('Enabled');
 
             const nr = [];
             ws9.eachRow((row, idx) => {
               if (idx === 1) return;
-              const rid = asStr(row.getCell(1).value).trim();
+              const rid = asStr(C9(row, 'Rule_ID')).trim();
               if (!rid) return;
               if (isNewSchema) {
-                // 新 schema: Rule_ID | Priority | Trigger | Condition | Actions | Emits | Enabled | Description
-                const fullCondition = asStr(row.getCell(4).value);
+                // 新 schema: Rule_ID | Priority | Trigger | Condition | Actions | Emits | Enabled
+                //           | Description | Random_Group | Random_Weight | Persistent | Notes
+                const fullCondition = asStr(C9(row, 'Condition'));
                 const { mode_scope, rest_condition } = extractModeScope(fullCondition);
-                const emitsStr = asStr(row.getCell(6).value);
-                const enabledStr = asStr(row.getCell(7).value).trim().toUpperCase();
+                const emitsStr = asStr(C9(row, 'Emits'));
+                const enabledStr = asStr(C9(row, 'Enabled')).trim().toUpperCase();
                 let actions = [];
                 try {
-                  actions = parseActionsDSL(asStr(row.getCell(5).value));
+                  actions = parseActionsDSL(asStr(C9(row, 'Actions')));
                 } catch (e) {
                   console.warn(`[09_Puzzle_Rules] rule ${rid} actions parse failed:`, e);
                 }
                 nr.push({
                   ...makeRule(rid),
                   rule_id: rid,
-                  priority: asNum(row.getCell(2).value, 100),
-                  trigger: asStr(row.getCell(3).value) || 'ON_GRID_GENERATED',
+                  priority: asNum(C9(row, 'Priority'), 100),
+                  trigger: asStr(C9(row, 'Trigger')) || 'ON_GRID_GENERATED',
                   condition: rest_condition,
                   mode_scope: mode_scope || 'ALL',
                   actions,
                   emits: emitsStr ? emitsStr.split(',').map(s => s.trim()).filter(Boolean) : [],
                   enabled: enabledStr !== 'FALSE' && enabledStr !== 'NO' && enabledStr !== '0',
-                  description: asStr(row.getCell(8).value),
-                  random_group: cRG9 > 0 ? asStr(row.getCell(cRG9).value).trim() : '',          // v8.4 P5
-                  random_weight: cRW9 > 0 ? asNum(row.getCell(cRW9).value, 100) : 100,          // v8.4 P5
-                  persistent: cPS9 > 0 ? asBool(row.getCell(cPS9).value) : false,               // v8.29 C-3(v8.21 G1)
-                  notes:      cNT9 > 0 ? asStr(row.getCell(cNT9).value).trim() : '',            // v8.29 C-3(v8.28 缺口A)
+                  description: asStr(C9(row, 'Description')),
+                  random_group: asStr(C9(row, 'Random_Group')).trim(),                 // v8.4 P5
+                  random_weight: C9.has('Random_Weight') ? asNum(C9(row, 'Random_Weight'), 100) : 100,  // v8.4 P5
+                  persistent: asBool(C9(row, 'Persistent')),                           // v8.21 G1
+                  notes:      asStr(C9(row, 'Notes')).trim(),                          // v8.28 缺口A
                 });
               } else {
                 // 舊 schema:轉換到新 schema 結構
                 const oldRow = {
                   rule_id: rid,
-                  mode_scope: asStr(row.getCell(2).value) || 'ALL',
-                  trigger: asStr(row.getCell(3).value) || 'ON_GRID_GENERATED',
-                  condition: asStr(row.getCell(4).value),
-                  action_type: asStr(row.getCell(5).value),
-                  action_params: asStr(row.getCell(6).value),
-                  priority: asNum(row.getCell(7).value, 100),
-                  notes: asStr(row.getCell(8).value),
+                  mode_scope: asStr(C9(row, 'Mode_Scope')) || 'ALL',
+                  trigger: asStr(C9(row, 'Trigger')) || 'ON_GRID_GENERATED',
+                  condition: asStr(C9(row, 'Condition')),
+                  action_type: asStr(C9(row, 'Action_Type')),
+                  action_params: asStr(C9(row, 'Action_Params')),
+                  priority: asNum(C9(row, 'Priority'), 100),
+                  notes: asStr(C9(row, 'Notes')),
                 };
                 nr.push(migrateRuleSchema(oldRow));
               }
