@@ -11763,3 +11763,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   #app .cfg-cellpop-quick .cfg-matrix-btn { padding: 8px 12px; }
   #app .cfg-cellpop-row .input { max-width: 120px; }
 }
+
+/* ── v8.35 / GAP-H1:符號卡 Mega 尺寸分佈輸入列 ── */
+#app .sym-mega-sizes-row { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+#app .sym-mega-sizes-row .input { max-width: 340px; }

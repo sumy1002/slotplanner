@@ -68,7 +68,14 @@ localStorage.setItem('slotplanner.aconfig.rules.v1', JSON.stringify([
     condition: 'cell_value.3,2 > 0',
     actions: [{ atype: 'SPAWN', params: { target: 'BIRD', cell: '2,3' } }],
     emits: ['spawned'], enabled: true, description: '人看的摘要', persistent: true,
-    notes: '走最短路徑', random_group: 'RG', random_weight: 60 }]));
+    notes: '走最短路徑', random_group: 'RG', random_weight: 60 },
+  // v8.34 / GAP-S1:動態參數規則(裸變數 / 引號公式 / 引號範圍)
+  { rule_id: 'PDYN', priority: 90, trigger: 'ON_SPIN_END', mode_scope: 'ALL', condition: '',
+    actions: [
+      { atype: 'AWARD_FREE_SPIN', params: { count: 'symbol_count.SCAT' } },
+      { atype: 'UPDATE_GLOBAL',   params: { var: 'hunt', op: 'add', value: 'symbol_count.SCAT + 1' } },
+      { atype: 'BOARD_FILL',      params: { symbol_id: 'WILD', count: '2-5' } }],
+    emits: [], enabled: true, description: '', notes: '' }]));
 
 function slice(startMark, endMark) {
   const src = fs.readFileSync('setup.js', 'utf8');
@@ -153,10 +160,15 @@ function assert(name, cond) {
       && HW.items[0].link_jackpot === 'MINI');
 
   console.log('── 09 ──');
-  const R = rules[0];
+  const R = rules.find(r => r.rule_id === 'PX');
   assert('09 全欄', R.persistent === true && R.notes === '走最短路徑' && R.description === '人看的摘要'
       && R.random_group === 'RG' && R.random_weight === 60 && R.emits[0] === 'spawned'
       && R.condition === 'cell_value.3,2 > 0' && R.actions[0].params.cell === '2,3');
+  const RD = rules.find(r => r.rule_id === 'PDYN');   // v8.34 / GAP-S1(匯入端按 priority 排序,按 id 取)
+  assert('09 動態參數 round-trip', RD && RD.actions.length === 3
+      && RD.actions[0].params.count === 'symbol_count.SCAT'
+      && RD.actions[1].params.value === 'symbol_count.SCAT + 1'
+      && RD.actions[2].params.count === '2-5');
 
   console.log(fails === 0 ? '\\n★ R-1 總驗收全數 PASS' : `\\n✗ ${fails} 項 FAIL`);
   process.exit(fails ? 1 : 0);

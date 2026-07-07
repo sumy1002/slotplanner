@@ -171,6 +171,11 @@ class GlobalConfig:
     #   MUL=相乘(預設,向後相容)、ADD=相加、MAX=取最高。缺欄(舊 A.xlsx)→ MUL。
     #   固定套用順序(描述):單顆 → 全域 → 特色。
     mult_compose: str = "MUL"
+    # v8.39 / GAP-F1+軌道:全域補盤軌道('' = 現行重力/滾動補盤)與主盤跨局捲軸宣告
+    #   ('' / 0 = 不捲動)。缺鍵 → 預設(01_Global kv by-name)。
+    refill_track: str = ""
+    scroll_track: str = ""
+    scroll_step: float = 0.0
     # v6.4 / 缺漏#9+#10:合規數值披露(目標/實測)。None = 未填,由數值組重算後回填。
     disclosure: Optional["ComplianceDisclosure"] = None
 
@@ -289,6 +294,10 @@ class PanelDef:
     #   - 遮罩外的格子不被物化（不抽符號、不計連線、不計 symbol_count）→ 不規則盤 / 環形盤。
     #   - 與 join_payline 正交：遮罩決定「哪些格存在」，join_payline 決定「存在的格算不算主盤連線」。
     cells: Optional[list[str]] = None
+    # v8.39 / 軌道:面板跨局捲軸宣告。"" = 沿用現行隱含「往下滾」語意;step 可負=反向。
+    #   位移狀態(offset 累計)由下游追蹤,本工具只宣告軌道與步幅。缺欄 → 預設。
+    scroll_track: str = ""
+    scroll_step: float = 1.0
 
     def active_local_cells(self) -> list[tuple[int, int]]:
         """要物化的局部座標 (c, r)。cells=None → 整塊 width×height 矩形。
@@ -375,6 +384,10 @@ class SymbolDef:
     # P0-3:所屬符號家族 ID（"" = 不屬任何家族）。
     #   成員標籤；家族定義在 SymbolGroup / 03d_Symbol_Groups。純描述，引擎不消費。
     group_id: str = ""
+    # v8.35 / GAP-H1:per-landing 尺寸分佈 "1:80;2:15;3:4"(size 可為 N=N×N 或 WxH)。
+    #   原樣字串、不解析不求值(抽取語意交下游);"" = 沿用 mega_width/height 單一固定尺寸。
+    #   純描述,引擎不消費;is_mega 判定不受此欄影響(維持既有語意)。
+    mega_sizes: str = ""
 
     @property
     def is_mega(self) -> bool:
@@ -403,6 +416,41 @@ class SymbolGroup:
     #   某模式有覆寫則以此為該模式費率,否則沿用 pay_table。對應 03e_Symbol_Group_Pays。
     #   純描述,引擎不消費;additive:缺 sheet / 缺模式 → 沿用 base。
     pay_by_mode: dict[str, dict[int, float]] = field(default_factory=dict)
+    notes: str = ""
+
+
+@dataclass
+class ReelLink:
+    """v8.38 / GAP-T1:輪帶連動配置選項(Twin Spin 每局隨機 2–5 輪連動、內容鏡射/相同)。
+
+    一列 = 一個連動配置選項;每局在同 mode_scope 內依 weight 抽一列。
+    reels = 1-based 輪號逗號字串("2,3";"" = 本局無連動選項)。
+    link_kind:CLONE = 連動輪內容完全相同 / MIRROR = 左右鏡射。
+    純描述,本工具引擎不消費;抽取與同步語意由下游模擬工具實作。
+    additive:缺 sheet → [];缺欄安全降級。
+    """
+    link_id: str
+    mode_scope: str = "ALL"
+    reels: str = ""
+    weight: float = 0.0
+    link_kind: str = "CLONE"
+    notes: str = ""
+
+
+@dataclass
+class Track:
+    """v8.39 / GAP-F1+軌道 Phase 1:Track = 盤面上一條有序格子序列(純幾何)。
+
+    用途由消費端引用 track_id 決定:GlobalConfig.refill_track / ModeConfig.refill_track_override
+    (補盤路徑,Finn 螺旋)、WALK(track=)走位路徑、Panel.scroll_track / GlobalConfig.scroll_track
+    (跨局捲軸;位移狀態由下游追蹤,本工具只宣告軌道與步幅)。
+    cells = "r,c;r,c;…"(1-based 有序);entry = START/END(新內容由哪端進)。
+    純描述,引擎不消費;additive:缺 sheet → []。
+    """
+    track_id: str
+    scope: str = "MAIN"          # MAIN / PANEL:<pid>
+    cells: str = ""
+    entry: str = "START"
     notes: str = ""
 
 
@@ -778,6 +826,8 @@ class ModeConfig:
     # v8.28 / 缺口C:此模式的跨來源倍數複合方式覆寫(規格描述;引擎不消費)。
     #   "" = 沿用 01_Global.mult_compose;MUL/ADD/MAX = 此模式改用該複合方式。缺欄 → ""。
     mult_compose_override: str = ""
+    # v8.39 / GAP-F1:此模式補盤軌道覆寫("" = 沿用 GlobalConfig.refill_track)。缺欄 → ""。
+    refill_track_override: str = ""
 
 
 # ============================================================
@@ -843,6 +893,10 @@ class AConfig:
     # P0-3:符號家族（選用;對應 03d_Symbol_Groups）。ANY BAR 型混合賠付結構。
     #   純描述,引擎不消費;成員由 SymbolDef.group_id 反查。舊檔無 sheet → []。
     symbol_groups: list["SymbolGroup"] = field(default_factory=list)
+    # v8.38 / GAP-T1:輪帶連動(04c_Reel_Links;缺 sheet → [] = 無連動)
+    reel_links: list["ReelLink"] = field(default_factory=list)
+    # v8.39 / GAP-F1+軌道:軌道(02c_Tracks;缺 sheet → [] = 無軌道)
+    tracks: list["Track"] = field(default_factory=list)
 
     # v8.25 / G4:獎池級距（選用;對應 19_Jackpot_Tiers）+ 整體觸發方式。
     #   與 13_Jackpots(個別彩池定義)正交:此為 Grand/Major/Minor/Mini 式級距階梯 + 觸發描述。

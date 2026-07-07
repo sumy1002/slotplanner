@@ -90,6 +90,8 @@
       pay_rows: [],       // v6.1:動態賠付表(2–20 連);pay_3x–6x 為其同步出的相容欄
       mega_w: 1,          // Mega 寬度(覆蓋幾個 Reel)
       mega_h: 1,          // Mega 高度(覆蓋幾列)
+      mega_sizes: '',     // v8.35 / GAP-H1:per-landing 尺寸分佈 "1:80;2:15;3:4"(size 可為 N=N×N 或 WxH;
+                          //   原樣字串不求值;'' = 沿用 mega_w/h 單一固定尺寸現行語意)
       can_expand: false,  // v6.2 #10:此符號可擴張(實際擴張規則於規則頁設定,此處僅標籤)
       mult_values: [],    // v6.3 / Q3:「倍數」×N(× 數字前);加權隨機陣列
       prize_values: [],   // v6.3 / Q3:「彩金倍數」N× / 金幣面額;含 per-mode 權重與 link_jackpot
@@ -124,6 +126,7 @@
       pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
       mega_w:     s.mega_w     != null ? s.mega_w     : 1,
       mega_h:     s.mega_h     != null ? s.mega_h     : 1,
+      mega_sizes: s.mega_sizes != null ? String(s.mega_sizes) : '',   // v8.35 GAP-H1
       can_expand: s.can_expand != null ? !!s.can_expand : false,
       mult_values:  _normMultValues(s.mult_values),
       prize_values: _normPrizeValues(s.prize_values),
@@ -326,6 +329,7 @@
           pay_rows:   Array.isArray(s.pay_rows) ? s.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
           mega_w:     s.mega_w     || 1,
           mega_h:     s.mega_h     || 1,
+          mega_sizes: (s.mega_sizes != null ? String(s.mega_sizes) : ''),   // v8.35 GAP-H1
           can_expand: !!s.can_expand,
           mult_values:  _normMultValues(s.mult_values),
           prize_values: _normPrizeValues(s.prize_values),
@@ -367,6 +371,7 @@
           pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
           mega_w:     d.mega_w     || 1,
           mega_h:     d.mega_h     || 1,
+          mega_sizes: (d.mega_sizes != null ? String(d.mega_sizes) : ''),   // v8.35 GAP-H1
           can_expand: !!d.can_expand,
           mult_values:  _normMultValues(d.mult_values),
           prize_values: _normPrizeValues(d.prize_values),
@@ -432,6 +437,7 @@
             pay_rows:   Array.isArray(d.pay_rows) ? d.pay_rows.map(r => ({ count: Number(r.count) || 0, pay: Number(r.pay) || 0, count_to: Number(r.count_to) || 0 })) : [],
             mega_w:     d.mega_w     || 1,
             mega_h:     d.mega_h     || 1,
+          mega_sizes: (d.mega_sizes != null ? String(d.mega_sizes) : ''),   // v8.35 GAP-H1
             can_expand: !!d.can_expand,
             mult_values:  _normMultValues(d.mult_values),
             prize_values: _normPrizeValues(d.prize_values),

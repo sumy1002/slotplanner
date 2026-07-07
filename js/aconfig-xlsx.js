@@ -181,6 +181,7 @@
     const jackpots    = readLS('slotplanner.aconfig.jackpots.v1',     []);   // v5.1
     const betConfig   = readLS('slotplanner.aconfig.betconfig.v1',   {});  // v5.3
     const reelStrips  = readLS('slotplanner.aconfig.reelstrips.v1',   {});  // v6.0-b
+    const reelLinks   = readLS('slotplanner.aconfig.reellinks.v1',    []);   // v8.38 GAP-T1(30 授權新 key)
     const multipliers = readLS('slotplanner.aconfig.multipliers.v1', {});  // v5.4
     const coinValues  = readLS('slotplanner.aconfig.coinvalues.v1',  {});  // v5.4
     const genLimits   = readLS('slotplanner.aconfig.genLimits.v1',   []);  // v7.11
@@ -216,6 +217,8 @@
       ['03e_Symbol_Group_Pays', '家族 per-mode 費率覆寫(P0-3;每列一筆 家族×模式;無列則沿用 03d base)'],
       ['04_Reel_Weights', 'Reel 權重'],
       ['04b_Reel_Strips', '真實輪帶(v6.0-b:實體序列;啟用時引擎用視窗抽樣;選用)'],
+      ['02c_Tracks', '軌道(v8.39 GAP-F1:純幾何有序格子序列;補盤/走位/捲軸共用;選用)'],
+      ['04c_Reel_Links', '輪帶連動(v8.38 GAP-T1:每局隨機抽連動組;CLONE/MIRROR;選用)'],
       ['05_Grid_Size_Weights', '格數權重'],
       ['06_Paylines', '中獎線'],
       ['07_Constraints', '硬約束'],
@@ -270,7 +273,8 @@
     const wsPnl = wb.addWorksheet("02b_Panels");
     wsPnl.addRow(['Panel_ID', 'Col', 'Row', 'Width', 'Height',
                 'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note',
-                'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel', 'Cells']);
+                'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel', 'Cells',
+                'Scroll_Track', 'Scroll_Step']);   // v8.39 軌道:尾端 additive('' / 1 = 現行隱含語意)
     for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
       if (!p || !p.panel_id) continue;
       // v6.2:Scroll 由 panel_type 推導(向後相容:無 panel_type 時用舊 scroll)
@@ -281,9 +285,32 @@
         p.panel_id, p.col || 0, p.row || 0, p.width || 3, p.height || 3,
         (ptype === 'SCROLL'), p.symbol_set || '', !!p.inherit_weight, !!p.join_payline, p.note || '',
         ptype, p.trigger_symbol || '', p.collect_target_jp || '', Number(p.trigger_reel) || 0, cellsStr,
+        (p.scroll_track != null ? String(p.scroll_track).trim() : ''),          // v8.39 軌道
+        (p.scroll_step != null ? Number(p.scroll_step) || 0 : 1),               // v8.39 軌道
       ]);
     }
     boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12, 22]);
+
+    // 02c_Tracks(v8.39 / GAP-F1+軌道 Phase 1:Track = 純幾何有序格子序列;additive 新表,
+    //   舊下游不讀此表 = 無軌道。消費端引用 track_id:01.Refill_Track / 11.Refill_Track_Override /
+    //   02b.Scroll_Track / 01.Scroll_Track / WALK(track=)。by-name 讀。)
+    {
+      const wsTk = wb.addWorksheet('02c_Tracks');
+      wsTk.addRow(['Track_ID', 'Scope', 'Cells', 'Entry', 'Notes']);
+      const tks = readLS('slotplanner.aconfig.tracks.v1', []);
+      for (const t of (Array.isArray(tks) ? tks : [])) {
+        const tid = (t && t.track_id != null ? String(t.track_id).trim() : '');
+        if (!tid) continue;
+        wsTk.addRow([
+          tid,
+          (t.scope != null && String(t.scope).trim()) ? String(t.scope).trim() : 'MAIN',
+          (t.cells != null ? String(t.cells).trim() : ''),
+          (t.entry != null && String(t.entry).trim()) ? String(t.entry).trim().toUpperCase() : 'START',
+          (t.notes != null ? String(t.notes) : ''),
+        ]);
+      }
+      boldHdr(wsTk); setCols(wsTk, [10, 14, 60, 9, 26]);
+    }
 
     // 03b_Symbol_Sets(v4.7:符號集 D;{set: [sym,...]} 攤平成多列)
     const wsSS = wb.addWorksheet('03b_Symbol_Sets');
@@ -324,6 +351,7 @@
       'Instance_Mult',// v8.7 / R6 D-14:per-instance 乘數宣告;尾端 additive
       'Min_Match',    // P0-2:最少連線(達此數才成立;預設 3,可覆寫 1/2);尾端 additive
       'Group_ID',     // P0-3:所屬符號家族 ID(空=不屬任何家族);尾端 additive
+      'Mega_Sizes',   // v8.35 / GAP-H1:per-landing 尺寸分佈 "1:80;2:15;3:4";尾端 additive('' = 固定 mega_w/h)
     ]);
     const syms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     // v4.0 / #13:停用(enabled === false)的符號不匯出;同時建立啟用 id 集合供 04/08 過濾,
@@ -347,9 +375,10 @@
         s.instance_mult === true,                              // v8.7 D-14
         Math.max(1, Number(s.min_match) || 3),                 // P0-2(空/舊資料→3)
         (s.group_id != null ? String(s.group_id).trim() : ''), // P0-3
+        (s.mega_sizes != null ? String(s.mega_sizes).trim() : ''), // v8.35 GAP-H1(原樣字串)
       ]);
     }
-    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14, 12, 10, 14]);
+    boldHdr(wsS); setCols(wsS, [14, 16, 10, 12, 10, 10, 10, 10, 9, 9, 10, 11, 10, 12, 10, 18, 14, 12, 10, 14, 18]);
 
     // 03c_Paytable(v5.3:動態賠付表)
     // v8.3 / R1 A-1:尾端 additive 加 Count_From / Count_To(count 區間同賠)。
@@ -492,6 +521,28 @@
     }
     boldHdr(wsStrip); setCols(wsStrip, [13, 9, 9, 80]);
 
+    // 04c_Reel_Links(v8.38 / GAP-T1:輪帶連動;additive 新表,舊下游無此 sheet 讀取 → 無連動。
+    //   一列 = 一個連動配置選項;每局在同 Mode_Scope 內依 Weight 抽一列;
+    //   Reels 空 = 無連動選項;Link_Kind:CLONE 內容相同 / MIRROR 左右鏡射。by-name 讀。)
+    {
+      const wsRL = wb.addWorksheet('04c_Reel_Links');
+      wsRL.addRow(['Link_ID', 'Mode_Scope', 'Reels', 'Weight', 'Link_Kind', 'Notes']);
+      const links = Array.isArray(reelLinks) ? reelLinks : [];
+      for (const l of links) {
+        const lid = (l && l.link_id != null ? String(l.link_id).trim() : '');
+        if (!lid) continue;
+        wsRL.addRow([
+          lid,
+          (l.mode_scope != null && String(l.mode_scope).trim()) ? String(l.mode_scope).trim() : 'ALL',
+          (l.reels != null ? String(l.reels).trim() : ''),
+          Number(l.weight) || 0,
+          (l.link_kind != null && String(l.link_kind).trim()) ? String(l.link_kind).trim().toUpperCase() : 'CLONE',
+          (l.notes != null ? String(l.notes) : ''),
+        ]);
+      }
+      boldHdr(wsRL); setCols(wsRL, [10, 13, 14, 9, 11, 26]);
+    }
+
     // 05_Grid_Size_Weights(扁平化)
     const wsGW = wb.addWorksheet('05_Grid_Size_Weights');
     wsGW.addRow(['Mode_Scope', 'Reel_ID', 'Grid_Size', 'Weight', 'Notes']);
@@ -633,7 +684,8 @@
                 'Pay_Type_Override',
                 'Collect_Enabled', 'Respin_Reset_Symbol', 'Grid_Expand_In_Collect', 'Allow_Persistent',
                 'End_Condition',
-                'Unlock_Requires', 'Mult_Compose_Override']);
+                'Unlock_Requires', 'Mult_Compose_Override',
+                'Refill_Track_Override']);   // v8.39 GAP-F1:尾端 additive('' = 沿用全域)
     for (const m of modes) {
       wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
                   m.on_enter_reset_vars, m.notes, m.reset_scope || '',
@@ -649,9 +701,10 @@
                   m.allow_persistent ? 'TRUE' : 'FALSE',             // v8.22 G3
                   m.end_condition || '',                             // v8.24 G5
                   (Array.isArray(m.unlock_requires) ? m.unlock_requires.join(',') : (m.unlock_requires || '')), // v8.28 缺口B
-                  m.mult_compose_override || '']);                   // v8.28 缺口C
+                  m.mult_compose_override || '',                     // v8.28 缺口C
+                  m.refill_track_override || '']);                   // v8.39 GAP-F1
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22, 16, 14, 18, 20, 14, 28, 22, 20]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22, 16, 14, 18, 20, 14, 28, 22, 20, 20]);
 
     // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
     //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
@@ -965,6 +1018,8 @@
       cellattrs:    'slotplanner.aconfig.cellattrs.v1',     // v8.8:格子屬性(R4 B-6)
       symbolgroups: 'slotplanner.aconfig.symbolgroups.v1',  // P0-3:符號家族(D7:納快照)
       jackpottiers: 'slotplanner.aconfig.jackpot.v1',        // v8.25 G4:獎池級距(機主授權新 key)
+      reellinks:    'slotplanner.aconfig.reellinks.v1',       // v8.38 GAP-T1:輪帶連動(30 授權新 key)
+      tracks:       'slotplanner.aconfig.tracks.v1',          // v8.39 GAP-F1:軌道(30 授權新 key)
       registry:     'slotplanner.registry.v1',
     };
     const out = {};
@@ -1005,6 +1060,8 @@
       cellattrs:    'slotplanner.aconfig.cellattrs.v1',     // v8.8:格子屬性(R4 B-6)
       symbolgroups: 'slotplanner.aconfig.symbolgroups.v1',  // P0-3:符號家族(D7:納快照)
       jackpottiers: 'slotplanner.aconfig.jackpot.v1',        // v8.25 G4:獎池級距(機主授權新 key)
+      reellinks:    'slotplanner.aconfig.reellinks.v1',       // v8.38 GAP-T1:輪帶連動(30 授權新 key)
+      tracks:       'slotplanner.aconfig.tracks.v1',          // v8.39 GAP-F1:軌道(30 授權新 key)
       registry:     'slotplanner.registry.v1',
     };
     for (const [k, lsKey] of Object.entries(keys)) {

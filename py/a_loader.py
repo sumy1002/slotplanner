@@ -46,6 +46,8 @@ from core.schemas import (
     ConfigValidationError,
     RTPVariant, GambleConfig, CellAttr,
     JackpotTier,
+    ReelLink,
+    Track,
 )
 from core.condition_parser import parse_condition, parse_actions
 
@@ -157,6 +159,10 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # P0-3:03d_Symbol_Groups(符號家族 / ANY BAR 混合賠付)。選用,舊檔 → []。
     cfg.symbol_groups = _parse_symbol_groups(sheets.get('03d_Symbol_Groups'))
+    # v8.38 / GAP-T1:04c_Reel_Links(輪帶連動)。選用,舊檔 → [] = 無連動。
+    cfg.reel_links = _parse_reel_links(sheets.get('04c_Reel_Links'))
+    # v8.39 / GAP-F1+軌道:02c_Tracks(純幾何軌道)。選用,舊檔 → []。
+    cfg.tracks = _parse_tracks(sheets.get('02c_Tracks'))
     # P0-3(進階):03e_Symbol_Group_Pays(家族 per-mode 費率覆寫)。選用,舊檔 → 沿用 base。
     _gp_mode = _parse_symbol_group_pays(sheets.get('03e_Symbol_Group_Pays'))
     if _gp_mode:
@@ -223,6 +229,10 @@ def _parse_global(df: pd.DataFrame) -> GlobalConfig:
             max_win_cap=_parse_max_win_cap(kv.get("max_win_cap")),
             # v8.28 / 缺口C:跨來源倍數複合方式(缺 key/空 → MUL;規格描述,引擎不消費,交下游)
             mult_compose=(str(kv.get("mult_compose", "MUL")).strip().upper() or "MUL"),
+            # v8.39 / GAP-F1+軌道(kv by-name;缺鍵 → 預設)
+            refill_track=_to_str(kv.get("refill_track")).strip(),
+            scroll_track=_to_str(kv.get("scroll_track")).strip(),
+            scroll_step=_num_or(kv.get("scroll_step"), 0.0),
         )
     except ValueError as e:
         raise ConfigValidationError(sheet, f"型別解析失敗: {e}")
@@ -300,6 +310,9 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
                 note=_to_str(r.get("Note")),
                 # v7.x Layer B:選用欄,以欄名 .get 讀取（守則 #81）。缺欄 / 空 → None。
                 cells=_parse_panel_cells(r.get("Cells"), width, height),
+                # v8.39 / 軌道:缺欄安全降級(守則 #81)
+                scroll_track=_to_str(r.get("Scroll_Track")).strip(),
+                scroll_step=_num_or(r.get("Scroll_Step"), 1.0),
             )
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Panel {pid} 解析失敗: {e}", row=idx + 2)
@@ -891,12 +904,75 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 instance_mult=_to_bool(r.get("Instance_Mult")),   # v8.7 R6 D-14(缺欄 → False)
                 min_match=min_match_val,                          # P0-2(缺欄 / ≤0 → 3)
                 group_id=_to_str(r.get("Group_ID")).strip(),      # P0-3(缺欄 → "")
+                mega_sizes=_to_str(r.get("Mega_Sizes")).strip(),  # v8.35 GAP-H1(缺欄 → "";原樣字串)
             )
             out[sid] = sym
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Symbol {sid} 解析失敗: {e}", row=idx + 2)
     if not out:
         raise ConfigValidationError(sheet, "至少需定義 1 個符號")
+    return out
+
+
+def _num_or(v, default: float) -> float:
+    """v8.39:數值欄安全轉換(缺欄 / 空 / NaN → default)。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    return default if pd.isna(f) else f
+
+
+def _parse_tracks(df) -> list["Track"]:
+    """v8.39 / GAP-F1+軌道:02c_Tracks(純幾何有序格子序列)。
+
+    additive:sheet 不存在 → []。by-name .get 缺欄安全降級。Track_ID 空列略過。
+    純描述,引擎不消費;補盤推進 / 走位 / 捲軸位移語意由下游實作。
+    """
+    out: list[Track] = []
+    if df is None:
+        return out
+    for _idx, r in df.iterrows():
+        tid = _to_str(r.get("Track_ID")).strip()
+        if not tid:
+            continue
+        out.append(Track(
+            track_id=tid,
+            scope=_to_str(r.get("Scope")).strip() or "MAIN",
+            cells=_to_str(r.get("Cells")).strip(),
+            entry=(_to_str(r.get("Entry")).strip().upper() or "START"),
+            notes=_to_str(r.get("Notes")).strip(),
+        ))
+    return out
+
+
+def _parse_reel_links(df) -> list["ReelLink"]:
+    """v8.38 / GAP-T1:04c_Reel_Links(輪帶連動)。
+
+    additive 契約:sheet 不存在 → [](安全降級)。by-name .get 讀、缺欄安全降級。
+    純描述,引擎不消費;每局抽取與同步語意由下游實作。Link_ID 空列略過。
+    """
+    out: list[ReelLink] = []
+    if df is None:
+        return out
+    for _idx, r in df.iterrows():
+        lid = _to_str(r.get("Link_ID")).strip()
+        if not lid:
+            continue
+        try:
+            w = float(r.get("Weight"))
+        except (TypeError, ValueError):
+            w = 0.0
+        if pd.isna(w):
+            w = 0.0
+        out.append(ReelLink(
+            link_id=lid,
+            mode_scope=_to_str(r.get("Mode_Scope")).strip() or "ALL",
+            reels=_to_str(r.get("Reels")).strip(),
+            weight=w,
+            link_kind=(_to_str(r.get("Link_Kind")).strip().upper() or "CLONE"),
+            notes=_to_str(r.get("Notes")).strip(),
+        ))
     return out
 
 
@@ -1578,6 +1654,7 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 unlock_requires=[s.strip() for s in _to_str(r.get("Unlock_Requires")).split(",") if s.strip()],
                 # v8.28 / 缺口C:此模式的倍數複合覆寫(缺欄/空 → "";純描述引擎不消費)
                 mult_compose_override=_to_str(r.get("Mult_Compose_Override")).strip().upper(),
+                refill_track_override=_to_str(r.get("Refill_Track_Override")).strip(),   # v8.39(缺欄 → "")
             )
         except ConfigValidationError:
             raise

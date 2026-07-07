@@ -76,6 +76,11 @@
       //   0=沿用字串(不另封頂)、-1=明示無上限、>0=硬封頂值(注額倍數)。缺欄(舊 LS)→ 0 安全降級。
       //   01_Global 匯出走 Object.entries(g) 自動帶 max_win_cap;Python 端 _parse_max_win_cap 同規則降級。
       if (g.max_win_cap == null) g.max_win_cap = 0;
+      // v8.39 / GAP-F1+軌道:全域補盤軌道('' = 現行滾動/重力補盤)與主盤跨局位移宣告
+      //   ('' / 0 = 主盤不滾動)。01_Global 匯出走 Object.entries(g) 自動帶;Python by-name 降級。
+      if (g.refill_track == null) g.refill_track = '';
+      if (g.scroll_track == null) g.scroll_track = '';
+      if (g.scroll_step == null) g.scroll_step = 0;
       // v8.28 / 缺口C:跨來源倍數複合方式(規格描述;引擎不消費,交下游)。
       //   MUL=相乘(預設,向後相容)、ADD=相加、MAX=取最高。缺欄(舊 LS)→ MUL 安全降級。
       //   01_Global 匯出走 Object.entries(g) 自動帶 mult_compose;Python 端 _parse_global 同規則降級。
@@ -711,6 +716,11 @@
         cell_value:             { label: '格子值', needsSubkey: true, subkeyPrefix: '' },
         respins_left:           { label: '剩餘 respin 局數' },
         feature_value_total:    { label: '特色累計值' },
+        // v8.37 / GAP-F2 + 🟢-4/🟢-5
+        object_pos:             { label: '物件座標', needsSubkey: true, subkeyPrefix: '' },
+        reel_count:             { label: '當前輪數' },
+        symbol_ways:            { label: '符號 ways 數', needsSubkey: true, subkeyPrefix: '' },
+        cluster_shape:          { label: '形狀群數', needsSubkey: true, subkeyPrefix: '' },   // v8.40 🟢-3
       };
 
       // 運算子 → 白話
@@ -1542,6 +1552,8 @@
         if (!Array.isArray(m.unlock_requires)) m.unlock_requires = [];
         // v8.28 / 缺口C:此模式的倍數複合覆寫('' = 沿用全域 mult_compose)。
         if (m.mult_compose_override == null) m.mult_compose_override = '';
+        // v8.39 / GAP-F1:此模式的補盤軌道覆寫('' = 沿用全域 refill_track)。makeMode 在 helpers 凍結。
+        if (m.refill_track_override == null) m.refill_track_override = '';
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1742,7 +1754,7 @@
         const _hasTok = (v) => !!(v && v !== 'ALL' &&
           String(v).split(',').map(x => x.trim()).includes(name));
         try {
-          [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups].forEach(arr => {
+          [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
             if (Array.isArray(arr)) arr.forEach(o => { if (_hasTok(o && o.mode_scope)) refs++; });
           });
           const _escN = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1817,7 +1829,7 @@
           const next = parts.map(p => (p === old ? (changed = true, newName) : p));
           if (changed) o.mode_scope = Array.from(new Set(next)).join(',');
         };
-        [rules, discards, constraints, genLimits, cellAttrs, symbolGroups].forEach(arr => {
+        [rules, discards, constraints, genLimits, cellAttrs, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
           if (Array.isArray(arr)) arr.forEach(_renScope);
         });
         // 3c) v8.16:條件 DSL 內的 mode 字面值 — 「mode == OLD」與「mode in [.., OLD, ..]」
@@ -1855,6 +1867,12 @@
 
       // ── v4.7:自由副盤 (Panel) + 符號集狀態 ──
       const panels = reactive(loadPanels());
+      // v8.39 / 軌道:面板跨局位移宣告(makePanel/loadPanels 在 helpers 凍結 → 此處補預設)。
+      //   scroll_track '' = 沿用現行隱含「往下滾」語意;scroll_step 每局位移格數(可負)。
+      panels.forEach(p => {
+        if (p.scroll_track == null) p.scroll_track = '';
+        if (p.scroll_step == null) p.scroll_step = 1;
+      });
       const symbolSets = reactive(loadSymbolSets());
       const activePanelIdx = ref(-1);   // -1 = 未選 panel（在編主輪）
       const activePanel = computed(() =>
@@ -4692,6 +4710,144 @@
         } catch (e) { return []; }
       }
       const cellAttrs = reactive(_loadCellAttrs());
+      // ── v8.38 / GAP-T1:輪帶連動(Twin Spin 每局隨機抽連動組;純描述,抽取語意交下游)──
+      //   新 LS key slotplanner.aconfig.reellinks.v1(30 授權);A.xlsx 對應新表 04c_Reel_Links
+      //   (additive;舊檔無此 sheet → loader 降級 [] = 無連動)。
+      //   一列 = 一個連動配置選項;每局在同 mode_scope 內依 Weight 抽一列。
+      //   reels 空字串 = 「本局無連動」選項(供權重分佈含無連動結果)。
+      const REELLINKS_LS_KEY = 'slotplanner.aconfig.reellinks.v1';
+      function _normReelLink(l) {
+        l = (l && typeof l === 'object') ? l : {};
+        return {
+          link_id:   (l.link_id != null ? String(l.link_id).trim() : ''),
+          mode_scope:(l.mode_scope != null && String(l.mode_scope).trim()) ? String(l.mode_scope).trim() : 'ALL',
+          reels:     (l.reels != null ? String(l.reels).trim() : ''),          // "2,3"(1-based,逗號分隔;'' = 無連動選項)
+          weight:    Number(l.weight) || 0,
+          link_kind: (l.link_kind != null && String(l.link_kind).trim()) ? String(l.link_kind).trim().toUpperCase() : 'CLONE',  // CLONE=內容相同 / MIRROR=左右鏡射
+          notes:     (l.notes != null ? String(l.notes) : ''),
+        };
+      }
+      function _loadReelLinks() {
+        try {
+          const raw = localStorage.getItem(REELLINKS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(_normReelLink) : [];
+        } catch (e) { return []; }
+      }
+      const reelLinks = reactive(_loadReelLinks());
+      function addReelLink() {
+        const taken = new Set(reelLinks.map(l => l.link_id).filter(Boolean));
+        let i = reelLinks.length + 1;
+        let id = `RL${String(i).padStart(3, '0')}`;
+        while (taken.has(id)) { i++; id = `RL${String(i).padStart(3, '0')}`; }
+        reelLinks.push(_normReelLink({ link_id: id, mode_scope: 'ALL', reels: '', weight: 100, link_kind: 'CLONE', notes: '' }));
+      }
+      function removeReelLink(idx) { if (idx >= 0 && idx < reelLinks.length) reelLinks.splice(idx, 1); }
+      // 軟性 lint:reels 應為 1-based 逗號清單且至少 2 輪('' = 無連動選項合法)
+      // ── v8.39 / GAP-F1+軌道系統 Phase 1:Track = 純幾何有序格子序列(30 授權新 LS key)──
+      //   消費端:全域/模式 refill_track(_override)、WALK track 參數、02b/01 scroll_track。
+      //   新表 02c_Tracks;缺表 → [] = 無軌道(安全降級)。純描述,推進/位移語意交下游。
+      const TRACKS_LS_KEY = 'slotplanner.aconfig.tracks.v1';
+      function _normTrack(t) {
+        t = (t && typeof t === 'object') ? t : {};
+        return {
+          track_id: (t.track_id != null ? String(t.track_id).trim() : ''),
+          scope:    (t.scope != null && String(t.scope).trim()) ? String(t.scope).trim() : 'MAIN',   // MAIN / PANEL:<pid>
+          cells:    (t.cells != null ? String(t.cells).trim() : ''),   // "r,c;r,c;…"(1-based 有序)
+          entry:    (t.entry != null && String(t.entry).trim()) ? String(t.entry).trim().toUpperCase() : 'START',
+          notes:    (t.notes != null ? String(t.notes) : ''),
+        };
+      }
+      function _loadTracks() {
+        try {
+          const raw = localStorage.getItem(TRACKS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(_normTrack) : [];
+        } catch (e) { return []; }
+      }
+      const tracks = reactive(_loadTracks());
+      function addTrack() {
+        const taken = new Set(tracks.map(t => t.track_id).filter(Boolean));
+        let i = tracks.length + 1;
+        let id = `T${String(i).padStart(3, '0')}`;
+        while (taken.has(id)) { i++; id = `T${String(i).padStart(3, '0')}`; }
+        tracks.push(_normTrack({ track_id: id, scope: 'MAIN', cells: '', entry: 'START', notes: '' }));
+      }
+      function removeTrack(idx) { if (idx >= 0 && idx < tracks.length) tracks.splice(idx, 1); }
+      // 軟性 lint(警示不阻擋):格式 r,c 分號串、無重複;不相鄰連續格 → 警示(容許跳點軌道,決策點 5)
+      function trackCellsWarn(t) {
+        const s = String(t && t.cells || '').trim();
+        if (!s) return '⚠ 路徑序列不可為空';
+        const parts = s.split(';').map(p => p.trim()).filter(Boolean);
+        const seen = new Set();
+        let prev = null, jump = false;
+        for (const p of parts) {
+          const m = p.match(/^(\d+)\s*,\s*(\d+)$/);
+          if (!m) return `⚠ 片段「${p}」格式應為 r,c(1-based)`;
+          const r = Number(m[1]), c = Number(m[2]);
+          if (r < 1 || c < 1) return `⚠ 片段「${p}」座標需 1-based`;
+          const k = r + ',' + c;
+          if (seen.has(k)) return `⚠ 座標 (${k}) 重複`;
+          seen.add(k);
+          if (prev && (Math.abs(prev[0] - r) + Math.abs(prev[1] - c)) !== 1) jump = true;
+          prev = [r, c];
+        }
+        if (parts.length < 2) return '⚠ 軌道至少需 2 格';
+        if (jump) return '⚠ 含不相鄰的連續格(跳點軌道;若非刻意請檢查序列)';
+        return '';
+      }
+      // 供各消費端下拉(全域/模式/面板/WALK)
+      const trackOptions = computed(() => tracks
+        .filter(t => String(t.track_id || '').trim())
+        .map(t => ({ value: t.track_id, label: t.track_id + (String(t.notes || '').trim() ? `（${String(t.notes).trim().slice(0, 12)}）` : '') })));
+      // 孤兒軌道參照(v8.36 isOrphanGroupRef 同款哲學)
+      function isOrphanTrackRef(v) {
+        const s = String(v == null ? '' : v).trim();
+        if (!s) return false;
+        return !tracks.some(t => String(t.track_id || '').trim() === s);
+      }
+      // canvas 唯讀疊加預覽:選中軌道 → 依 scope 取盤面尺寸,產 SVG 格線 + 序號 + 連線
+      const trackPreviewIdx = ref(0);
+      const trackPreview = computed(() => {
+        const t = tracks[trackPreviewIdx.value];
+        if (!t) return null;
+        const scope = String(t.scope || 'MAIN');
+        let cols, rows;
+        if (scope.startsWith('PANEL:')) {
+          const pid = scope.slice(6);
+          const p = panels.find(x => x.panel_id === pid);
+          cols = p ? (Number(p.width) || 1) : 5;
+          rows = p ? (Number(p.height) || 1) : 3;
+        } else {
+          cols = layout.length || 5;
+          rows = Math.max(1, ...layout.map(r => Number(r.max_rows) || 0), 3);
+        }
+        const CS = 34;   // cell size
+        const pts = [];
+        const s = String(t.cells || '').trim();
+        for (const p of s.split(';').map(x => x.trim()).filter(Boolean)) {
+          const m = p.match(/^(\d+)\s*,\s*(\d+)$/);
+          if (!m) continue;
+          const r = Number(m[1]), c = Number(m[2]);
+          pts.push({ r, c, x: (c - 0.5) * CS, y: (r - 0.5) * CS, oob: (r > rows || c > cols) });
+        }
+        const grid = [];
+        for (let r = 1; r <= rows; r++) for (let c = 1; c <= cols; c++)
+          grid.push({ k: r + '-' + c, x: (c - 1) * CS, y: (r - 1) * CS });
+        const line = pts.map(p => `${p.x},${p.y}`).join(' ');
+        return { cols, rows, CS, w: cols * CS, h: rows * CS, grid, pts, line,
+                 hasOob: pts.some(p => p.oob), entry: t.entry || 'START' };
+      });
+
+      function reelLinkWarn(l) {
+        const s = String(l && l.reels || '').trim();
+        if (!s) return '';
+        const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+        if (!parts.every(p => /^\d+$/.test(p) && Number(p) >= 1)) return '⚠ 應為 1-based 輪號逗號清單(如 2,3)';
+        if (parts.length < 2) return '⚠ 連動至少需 2 輪(留空 = 無連動選項)';
+        if (new Set(parts).size !== parts.length) return '⚠ 輪號重複';
+        return '';
+      }
       const CELL_ATTR_OPTIONS = [
         { value: 'MULT',     label: '固定格乘數(MULT)' },
         { value: 'ENHANCER', label: '強化格(ENHANCER)' },
@@ -4747,6 +4903,29 @@
         } catch (e) { return []; }
       }
       const symbolGroups = reactive(_loadSymbolGroups());
+      // v8.36 / 🟢-2:規則頁「可家族化」符號參數的下拉選項(group:<gid> 全員 / group_any:<gid> 隨機一種)。
+      //   讀單一真相 symbolGroups;無家族時回空陣列(下拉不出現家族段)。
+      const symGroupOptions = computed(() => {
+        const out = [];
+        for (const g of symbolGroups) {
+          const gid = String(g && g.group_id || '').trim();
+          if (!gid) continue;
+          const nm = String(g.display_name || '').trim();
+          const suffix = nm ? `（${nm}）` : '';
+          out.push({ value: `group:${gid}`,     label: `group:${gid}${suffix} — 家族全員` });
+          out.push({ value: `group_any:${gid}`, label: `group_any:${gid}${suffix} — 隨機一種` });
+        }
+        return out;
+      });
+      // v8.36 / 🟢-2:孤兒家族參照(值為 group:/group_any: 但家族已不存在)→ 下拉補顯示 + ⚠ 提示;
+      //   沿用「提示回退、不自動清孤兒」哲學(renamePanel / symbol.group_id 前例)。
+      function isOrphanGroupRef(v) {
+        const s = String(v == null ? '' : v).trim();
+        const m = s.match(/^group(?:_any)?:(.+)$/);
+        if (!m) return false;
+        const gid = m[1].trim();
+        return !symbolGroups.some(g => String(g && g.group_id || '').trim() === gid);
+      }
       // 註:symbol-page 與 config-page 互斥掛載(page 1 / 3),不同時存在 →
       //   兩元件各自讀寫同一 LS key(slotplanner.aconfig.symbolgroups.v1),以 LS 為交換媒介
       //   (符合本工具「LS 權威 + buildAxlsxBufferFromLS 唯一匯出」哲學),不走跨元件共用參照。
@@ -7361,6 +7540,28 @@
           act.params[key] = value;
         }
       }
+      // ── v8.34 / GAP-S1:dyn 參數(數字或動態公式)──
+      //   純數字字串存 Number(維持舊資料型別);其餘原樣字串存放不求值(求值交下游)。
+      function setActParamDyn(act, key, value) {
+        const s = String(value == null ? '' : value).trim();
+        if (s === '') { setActParam(act, key, ''); return; }
+        setActParam(act, key, /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : s);
+      }
+      // 軟性 lint(R-P0-5 於 UI 層落地:警示可見、不阻擋、不吞值)。
+      //   合法:空 / 數字 / 範圍 N-M / 動態式(變數鏈與數字之四則組合;變數鏈容許
+      //   cell_value.<r,c> 座標段)。回傳警示文字,'' = 無警示。
+      function dynParamWarn(v) {
+        if (v == null || v === '') return '';
+        if (typeof v === 'number') return '';
+        const s = String(v).trim();
+        if (s === '') return '';
+        if (/^-?\d+(\.\d+)?$/.test(s)) return '';
+        if (/^\d+\s*-\s*\d+$/.test(s)) return '';                       // 範圍 2-5
+        const TERM = '(?:-?\\d+(?:\\.\\d+)?|[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)*(?:\\.\\d+,\\d+)?)';
+        const EXPR = new RegExp('^' + TERM + '(?:\\s*[-+*/]\\s*' + TERM + ')*$');
+        if (EXPR.test(s)) return '';
+        return '⚠ 非數字/範圍/公式;將以原樣字串輸出(下游可能無法解讀)';
+      }
 
       // ── list 操作 ──
       function addAction(rule_idx, atype) {
@@ -7584,6 +7785,8 @@
               p.trigger_symbol    = asStr(C2b(row, 'Trigger_Symbol')).trim();
               p.collect_target_jp = asStr(C2b(row, 'Collect_Target_JP')).trim();
               p.trigger_reel      = asNum(C2b(row, 'Trigger_Reel'), 0);
+              p.scroll_track      = asStr(C2b(row, 'Scroll_Track')).trim();       // v8.39 軌道(缺欄→'')
+              p.scroll_step       = asNum(C2b(row, 'Scroll_Step'), 1);            // v8.39 軌道(缺欄→1)
               // Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
               const cellsRaw = asStr(C2b(row, 'Cells')).trim();
               const cellsArr = cellsRaw ? cellsRaw.split(/[;\s]+/).filter(Boolean) : null;
@@ -7628,6 +7831,48 @@
             for (const k of Object.keys(reelStrips.strips)) delete reelStrips.strips[k];
             Object.assign(reelStrips.strips, strips);
           } else warnings.push('找不到 04b_Reel_Strips(舊檔?輪帶未更新)');
+
+          // ── 02c_Tracks ── v8.39 / GAP-F1+軌道:sheet 存在→以檔案為準整批替換,不存在→維持。
+          const ws2c = wb.getWorksheet('02c_Tracks');
+          if (ws2c) {
+            const C2c = _rowReader(ws2c);   // by-name(R-P0-4)
+            const nt = [];
+            ws2c.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const tid = asStr(C2c(row, 'Track_ID')).trim();
+              if (!tid) return;
+              nt.push(_normTrack({
+                track_id: tid,
+                scope: asStr(C2c(row, 'Scope')).trim() || 'MAIN',
+                cells: asStr(C2c(row, 'Cells')).trim(),
+                entry: asStr(C2c(row, 'Entry')).trim() || 'START',
+                notes: asStr(C2c(row, 'Notes')),
+              }));
+            });
+            tracks.splice(0, tracks.length, ...nt);
+          }
+
+          // ── 04c_Reel_Links ── v8.38 / GAP-T1:輪帶連動(additive)。
+          //   sheet 存在 → 以檔案為準整批替換;不存在(舊檔)→ reelLinks 維持(03d 前例)。
+          const ws4c = wb.getWorksheet('04c_Reel_Links');
+          if (ws4c) {
+            const C4c = _rowReader(ws4c);   // by-name(R-P0-4)
+            const nl = [];
+            ws4c.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const lid = asStr(C4c(row, 'Link_ID')).trim();
+              if (!lid) return;
+              nl.push(_normReelLink({
+                link_id: lid,
+                mode_scope: asStr(C4c(row, 'Mode_Scope')).trim() || 'ALL',
+                reels: asStr(C4c(row, 'Reels')).trim(),
+                weight: asNum(C4c(row, 'Weight'), 0),
+                link_kind: asStr(C4c(row, 'Link_Kind')).trim() || 'CLONE',
+                notes: asStr(C4c(row, 'Notes')),
+              }));
+            });
+            reelLinks.splice(0, reelLinks.length, ...nl);
+          }
 
           // ── 13_Jackpots ── 14 欄,以 makeJackpot 為基底覆蓋。有分頁 → 以檔案為準覆蓋。
           const ws13 = wb.getWorksheet('13_Jackpots');
@@ -7866,6 +8111,7 @@
                 // v8.28 / 缺口B+C:解鎖前提清單/倍數複合覆寫
                 unlock_requires:        asStr(C11(row, 'Unlock_Requires')).split(',').map(s => s.trim()).filter(Boolean),
                 mult_compose_override:  asStr(C11(row, 'Mult_Compose_Override')).trim().toUpperCase(),
+                refill_track_override:   asStr(C11(row, 'Refill_Track_Override')).trim(),   // v8.39 GAP-F1(缺欄→'')
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -8209,6 +8455,7 @@
             const colInstMult  = headers['Instance_Mult']   || null;   // v8.7 / R6 D-14(缺欄→null,舊檔安全)
             const colMinMatch  = headers['Min_Match']       || null;   // P0-2(缺欄→null,舊檔安全)
             const colGroupId   = headers['Group_ID']        || null;   // P0-3(缺欄→null,舊檔安全)
+            const colMegaSizes = headers['Mega_Sizes']      || null;   // v8.35 GAP-H1(缺欄→null,舊檔安全)
 
             let updated = 0;
             let skipped = 0;
@@ -8239,6 +8486,7 @@
               if (colInstMult)  matched.instance_mult = asBool(row.getCell(colInstMult).value);        // v8.7 D-14
               if (colMinMatch)  matched.min_match = asNum(row.getCell(colMinMatch).value, 3); // P0-2(applyAll→cloneSymbol 正規化 0/≤0→3)
               if (colGroupId)   matched.group_id = asStr(row.getCell(colGroupId).value).trim(); // P0-3
+              if (colMegaSizes) matched.mega_sizes = asStr(row.getCell(colMegaSizes).value).trim(); // v8.35 GAP-H1(原樣字串)
               updated++;
             });
             // 把更新後的 symbols 套回 registry(觸發 changed)
@@ -9247,6 +9495,8 @@
           case '產牌限制': return () => saveGenLimits(genLimits.map(g => ({ ...g })));
           case '格子屬性': return () => { try { localStorage.setItem(CELLATTRS_LS_KEY, JSON.stringify(cellAttrs.map(c => ({ ...c })))); } catch (e) {} };
           case '符號家族': return () => { try { localStorage.setItem(SYMGROUPS_LS_KEY, JSON.stringify(symbolGroups.map(g => ({ ...g })))); } catch (e) {} };   // P0-3
+          case '輪帶連動': return () => { try { localStorage.setItem(REELLINKS_LS_KEY, JSON.stringify(reelLinks.map(l => ({ ...l })))); } catch (e) {} };   // v8.38 GAP-T1
+          case '軌道':     return () => { try { localStorage.setItem(TRACKS_LS_KEY, JSON.stringify(tracks.map(t => ({ ...t })))); } catch (e) {} };   // v8.39 GAP-F1
           case 'Reel 權重': return () => saveReelWeights(JSON.parse(JSON.stringify(reelWeights)));
           case '格數權重': return () => saveGridWeights(JSON.parse(JSON.stringify(gridWeights)));
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
@@ -9299,6 +9549,8 @@
       watch(genLimits,    () => scheduleSave('產牌限制'), { deep: true });
       watch(cellAttrs,    () => scheduleSave('格子屬性'), { deep: true });   // v8.8 R4
       watch(symbolGroups, () => scheduleSave('符號家族'), { deep: true });   // P0-3
+      watch(reelLinks, () => scheduleSave('輪帶連動'), { deep: true });        // v8.38 GAP-T1
+      watch(tracks, () => scheduleSave('軌道'), { deep: true });               // v8.39 GAP-F1
       watch(reelWeights,  () => scheduleSave('Reel 權重'), { deep: true });
       watch(gridWeights,  () => scheduleSave('格數權重'), { deep: true });
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
@@ -10739,6 +10991,11 @@
         ACTION_CATALOG, ACTION_BY_TYPE, actionsByGroup,
         actionEditMode, actionsParseError,
         actionMeta, actParamValue, setActParam,
+        setActParamDyn, dynParamWarn,   // v8.34 GAP-S1
+        symGroupOptions, isOrphanGroupRef,   // v8.36 🟢-2
+        reelLinks, addReelLink, removeReelLink, reelLinkWarn,   // v8.38 GAP-T1
+        tracks, addTrack, removeTrack, trackCellsWarn, trackOptions, isOrphanTrackRef,
+        trackPreviewIdx, trackPreview,   // v8.39 GAP-F1+軌道
         addAction, removeAction, moveAction, duplicateAction,
         changeActionAtType, setActionsFromDSL, setActionEditMode,
         buildActionsDSL,

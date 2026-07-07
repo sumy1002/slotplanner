@@ -798,6 +798,20 @@
               </div>
             </div>
 
+            <!-- v8.39 / 軌道:面板跨局捲軸宣告(SCROLL 型才顯示) -->
+            <div v-if="(activePanel.panel_type||'SCROLL') === 'SCROLL'" class="cfg-field">
+              <label class="cfg-label">捲軸軌道(可選) <span class="cfg-key">Scroll_Track / Scroll_Step</span></label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select class="input input-w-name" v-model="activePanel.scroll_track">
+                  <option value="">（沿用預設:往下滾）</option>
+                  <option v-for="to in trackOptions" :key="'pst'+to.value" :value="to.value">{{ to.label }}</option>
+                  <option v-if="isOrphanTrackRef(activePanel.scroll_track)" :value="activePanel.scroll_track">{{ activePanel.scroll_track }}（⚠ 軌道不存在）</option>
+                </select>
+                <input class="input input-sm cfg-mono" type="number" v-model.number="activePanel.scroll_step" style="width:90px;" title="每局位移格數(可負=反向)">
+              </div>
+              <div class="cfg-hint">本面板內容每局沿軌道位移 N 格;空 = 現行隱含「往下滾」語意。軌道 scope 建議設 PANEL:{{ activePanel.panel_id }}。</div>
+            </div>
+
             <!-- 觸發型:觸發符號 -->
             <div v-if="(activePanel.panel_type||'SCROLL') === 'TRIGGER'" class="cfg-field">
               <label class="cfg-label">觸發符號 <span class="cfg-key">Trigger_Symbol</span></label>
@@ -1182,6 +1196,59 @@
             <span style="font-size:16px">+</span>
             <span>新增格子屬性</span>
           </button>
+        </div>
+
+        <!-- ── v8.39 / GAP-F1+軌道 Phase 1:軌道(02c_Tracks)── -->
+        <div class="cfg-section">
+          <details class="cfg-section-collapsible" :open="tracks.length > 0">
+            <summary class="cfg-section-title">軌道 <span class="cfg-key">02c_Tracks</span></summary>
+            <div class="cfg-hint">
+              盤面上一條「有序格子序列」(純幾何)。用途由引用端決定:全域/模式的補盤路徑(Finn 螺旋)、
+              WALK 走位路徑、面板/主盤跨局捲軸。座標 r,c(1-based)以分號串接,順序即行進方向。
+            </div>
+            <div v-for="(tk, ti) in tracks" :key="tk.track_id || ti" class="cfg-field cfg-field-compact" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+              <span class="cfg-key" style="min-width:48px;">{{ tk.track_id }}</span>
+              <select class="input input-sm" v-model="tk.scope" style="width:130px;" title="所屬盤面">
+                <option value="MAIN">MAIN 主盤</option>
+                <option v-for="p in panels" :key="'ts'+p.panel_id" :value="'PANEL:' + p.panel_id">PANEL:{{ p.panel_id }}</option>
+              </select>
+              <input class="input input-sm cfg-mono" v-model.trim="tk.cells" placeholder="1,1;1,2;2,2;…(r,c 序列)" style="flex:2; min-width:220px;" title="有序座標序列">
+              <span class="cfg-chip-row">
+                <button class="cfg-chip cfg-chip-sm" :class="{ active: tk.entry !== 'END' }" @click="tk.entry = 'START'" title="新符號/內容由序列首端進入">入口:首</button>
+                <button class="cfg-chip cfg-chip-sm" :class="{ active: tk.entry === 'END' }" @click="tk.entry = 'END'" title="新符號/內容由序列尾端進入">入口:尾</button>
+              </span>
+              <input class="input input-sm" v-model="tk.notes" placeholder="備註(如:順時針螺旋)" style="flex:1; min-width:120px;">
+              <button class="btn-pill" :class="{ active: trackPreviewIdx === ti }" @click="trackPreviewIdx = ti" title="於下方預覽此軌道">👁 預覽</button>
+              <button class="btn-pill" @click="removeTrack(ti)" title="刪除此軌道">✕</button>
+              <div v-if="trackCellsWarn(tk)" class="cfg-warn cfg-warn-inline" style="width:100%;">{{ trackCellsWarn(tk) }}</div>
+            </div>
+            <button class="cfg-mode-add-btn" @click="addTrack">
+              <span style="font-size:16px">+</span>
+              <span>新增軌道</span>
+            </button>
+
+            <!-- 唯讀疊加預覽(決策點 6):格線 + 序號 + 行進連線 -->
+            <div v-if="tracks.length && trackPreview" class="cfg-field" style="margin-top:10px;">
+              <label class="cfg-label">預覽:{{ tracks[trackPreviewIdx] ? tracks[trackPreviewIdx].track_id : '' }}
+                <span class="cfg-key">{{ tracks[trackPreviewIdx] ? tracks[trackPreviewIdx].scope : '' }}</span></label>
+              <svg :viewBox="'0 0 ' + trackPreview.w + ' ' + trackPreview.h"
+                   :style="{ width: Math.min(trackPreview.w, 420) + 'px', height: 'auto', display: 'block' }"
+                   xmlns="http://www.w3.org/2000/svg">
+                <rect v-for="cell in trackPreview.grid" :key="'tg'+cell.k"
+                      :x="cell.x + 1" :y="cell.y + 1"
+                      :width="trackPreview.CS - 2" :height="trackPreview.CS - 2"
+                      fill="rgb(var(--tint-2) / 0.25)" stroke="rgb(var(--tint-4) / 0.5)" rx="3" />
+                <polyline v-if="trackPreview.pts.length > 1" :points="trackPreview.line"
+                          fill="none" stroke="rgb(var(--tint-6) / 0.85)" stroke-width="2.5" stroke-linejoin="round" />
+                <template v-for="(pt, pi) in trackPreview.pts" :key="'tp'+pi">
+                  <circle :cx="pt.x" :cy="pt.y" :r="trackPreview.CS * 0.32"
+                          :fill="pt.oob ? 'rgb(200 60 40 / 0.85)' : ((pi === 0 && trackPreview.entry !== 'END') || (pi === trackPreview.pts.length - 1 && trackPreview.entry === 'END')) ? 'rgb(var(--tint-7) / 0.95)' : 'rgb(var(--tint-5) / 0.9)'" />
+                  <text :x="pt.x" :y="pt.y + 4" text-anchor="middle" font-size="12" fill="#fff">{{ pi + 1 }}</text>
+                </template>
+              </svg>
+              <div class="cfg-hint">序號 = 行進順序;深色圓 = 入口端{{ trackPreview.hasOob ? ';⚠ 紅色 = 座標超出盤面範圍' : '' }}。</div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4124,6 +4191,12 @@
                         <option value="">(選擇符號)</option>
                         <!-- v8.4 / R2 P3:哨兵值(param 有宣告 sentinels 才出現) -->
                         <option v-for="sv in (param.sentinels || [])" :key="'sv'+sv" :value="sv">{{ sv }}（{{ sv === 'BEST' ? '取最有利' : '隨機挑選' }}）</option>
+                        <!-- v8.36 / 🟢-2:可家族化參數(groupable)追加符號家族選項 -->
+                        <template v-if="param.groupable && symGroupOptions.length">
+                          <option v-for="go in symGroupOptions" :key="'g'+go.value" :value="go.value">{{ go.label }}</option>
+                        </template>
+                        <option v-if="param.groupable && isOrphanGroupRef(actParamValue(act, param.key))"
+                                :value="actParamValue(act, param.key)">{{ actParamValue(act, param.key) }}（⚠ 家族不存在）</option>
                         <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
                       </select>
                       <input v-else class="input cfg-mono"
@@ -4158,6 +4231,17 @@
                            :value="actParamValue(act, param.key)"
                            @input="setActParam(act, param.key, $event.target.value)"
                            :placeholder="param.placeholder || '[0,1]'">
+
+                    <!-- dyn:數字或動態公式(v8.34 GAP-S1;必排在 number 之前) -->
+                    <template v-else-if="param.dyn">
+                      <input class="input cfg-mono"
+                             type="text"
+                             :value="actParamValue(act, param.key)"
+                             @input="setActParamDyn(act, param.key, $event.target.value)"
+                             :placeholder="param.placeholder || '數字或公式'">
+                      <div v-if="dynParamWarn(actParamValue(act, param.key))"
+                           class="cfg-warn cfg-warn-inline">{{ dynParamWarn(actParamValue(act, param.key)) }}</div>
+                    </template>
 
                     <!-- number -->
                     <input v-else-if="param.type === 'number'"
@@ -4756,6 +4840,12 @@
                               @change="setActParam(ruleDlg.action, param.key, $event.target.value)">
                         <option value="">(選擇符號)</option>
                         <option v-for="sv in (param.sentinels || [])" :key="'sv'+sv" :value="sv">{{ sv }}（{{ sv === 'BEST' ? '取最有利' : '隨機挑選' }}）</option>
+                        <!-- v8.36 / 🟢-2:可家族化參數(groupable)追加符號家族選項 -->
+                        <template v-if="param.groupable && symGroupOptions.length">
+                          <option v-for="go in symGroupOptions" :key="'g'+go.value" :value="go.value">{{ go.label }}</option>
+                        </template>
+                        <option v-if="param.groupable && isOrphanGroupRef(actParamValue(ruleDlg.action, param.key))"
+                                :value="actParamValue(ruleDlg.action, param.key)">{{ actParamValue(ruleDlg.action, param.key) }}（⚠ 家族不存在）</option>
                         <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
                       </select>
                       <input v-else class="input cfg-mono" type="text"
@@ -4781,6 +4871,15 @@
                            :value="actParamValue(ruleDlg.action, param.key)"
                            @input="setActParam(ruleDlg.action, param.key, $event.target.value)"
                            :placeholder="param.placeholder || '[0,1]'">
+                    <!-- v8.34 GAP-S1:dyn 分支必排在 number 之前 -->
+                    <template v-else-if="param.dyn">
+                      <input class="input cfg-mono" type="text"
+                             :value="actParamValue(ruleDlg.action, param.key)"
+                             @input="setActParamDyn(ruleDlg.action, param.key, $event.target.value)"
+                             :placeholder="param.placeholder || '數字或公式'">
+                      <div v-if="dynParamWarn(actParamValue(ruleDlg.action, param.key))"
+                           class="cfg-warn cfg-warn-inline">{{ dynParamWarn(actParamValue(ruleDlg.action, param.key)) }}</div>
+                    </template>
                     <input v-else-if="param.type === 'number'" class="input cfg-mono input-w-num" type="number" step="any"
                            :value="actParamValue(ruleDlg.action, param.key)"
                            @input="setActParam(ruleDlg.action, param.key, $event.target.value === '' ? '' : Number($event.target.value))"
@@ -4884,6 +4983,29 @@
               <button class="cfg-chip" :class="{ active: g.mult_compose === 'MAX' }" @click="g.mult_compose = 'MAX'">取最高</button>
             </div>
             <div class="cfg-hint">多來源倍數(單顆 instance_mult × 全域連鎖 × 特色)如何複合。固定套用順序：單顆 → 全域 → 特色。規格描述,交下游遵循;各模式可於下方「模式清單」個別覆寫。</div>
+          </div>
+
+          <!-- v8.39 / GAP-F1+軌道:全域補盤軌道 + 主盤跨局捲軸宣告 -->
+          <div class="cfg-field">
+            <label class="cfg-label">補盤路徑(可選) <span class="cfg-key">refill_track</span></label>
+            <select class="input input-w-name" v-model="g.refill_track">
+              <option value="">（沿用重力/滾動補盤）</option>
+              <option v-for="to in trackOptions" :key="'rt'+to.value" :value="to.value">{{ to.label }}</option>
+              <option v-if="isOrphanTrackRef(g.refill_track)" :value="g.refill_track">{{ g.refill_track }}（⚠ 軌道不存在）</option>
+            </select>
+            <div class="cfg-hint">消除後補盤沿此軌道推進(Finn 螺旋式);空 = 現行重力/滾動補盤。軌道於 02_Layout 頁定義;推進實作歸下游。</div>
+          </div>
+          <div class="cfg-field">
+            <label class="cfg-label">主盤跨局捲軸(可選) <span class="cfg-key">scroll_track / scroll_step</span></label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select class="input input-w-name" v-model="g.scroll_track">
+                <option value="">（主盤不捲動）</option>
+                <option v-for="to in trackOptions" :key="'st'+to.value" :value="to.value">{{ to.label }}</option>
+                <option v-if="isOrphanTrackRef(g.scroll_track)" :value="g.scroll_track">{{ g.scroll_track }}（⚠ 軌道不存在）</option>
+              </select>
+              <input class="input input-sm cfg-mono" type="number" v-model.number="g.scroll_step" style="width:90px;" title="每局位移格數(可負=反向)">
+            </div>
+            <div class="cfg-hint">每局盤面內容沿軌道位移 N 格;位移狀態跨局累計由下游追蹤,本工具只宣告軌道與步幅。</div>
           </div>
           </div><!-- /cfg-card-body -->
         </div><!-- /賠付模型 -->
@@ -5298,6 +5420,16 @@
                         <option value="MAX">取最高</option>
                       </select>
                       <div class="cfg-hint">此模式的多來源倍數複合方式;留空 = 沿用全域「跨來源倍數複合」設定。純描述,計分實作歸下游。</div>
+                    </div>
+                    <!-- v8.39 / GAP-F1:此模式的補盤軌道覆寫 -->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">補盤路徑覆寫(可選) <span class="cfg-key">refill_track_override</span></label>
+                      <select class="input input-w-name" v-model="m.refill_track_override">
+                        <option value="">（沿用全域）</option>
+                        <option v-for="to in trackOptions" :key="'rto'+to.value" :value="to.value">{{ to.label }}</option>
+                        <option v-if="isOrphanTrackRef(m.refill_track_override)" :value="m.refill_track_override">{{ m.refill_track_override }}（⚠ 軌道不存在）</option>
+                      </select>
+                      <div class="cfg-hint">此模式的補盤軌道;留空 = 沿用全域「補盤路徑」。軌道於 02_Layout 頁定義。</div>
                     </div>
 
                     <!-- v8.22 / G3:Hold&Win 設定面(常見收集玩法走設定;罕見互動走 G1 拼圖)-->
@@ -6043,6 +6175,33 @@
             </div>
           </template>
         </template>
+        <!-- ── v8.38 / GAP-T1:輪帶連動(04c_Reel_Links;Twin Spin 每局隨機抽連動組)── -->
+        <div class="cfg-section">
+          <details class="cfg-section-collapsible" :open="reelLinks.length > 0">
+            <summary class="cfg-section-title">輪帶連動 <span class="cfg-key">04c_Reel_Links</span></summary>
+            <div class="cfg-hint">
+              相鄰/指定輪帶同步(內容相同或鏡射)。一列 = 一個連動配置選項,每局在同適用模式內依權重抽一列;
+              「輪帶」留空 = 本局無連動選項。純描述,抽取與同步由下游實作。
+            </div>
+            <div v-for="(lk, li) in reelLinks" :key="lk.link_id || li" class="cfg-field cfg-field-compact" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+              <span class="cfg-key" style="min-width:56px;">{{ lk.link_id }}</span>
+              <select class="input input-sm" v-model="lk.mode_scope" style="width:110px;" title="適用模式">
+                <option value="ALL">ALL</option>
+                <option v-for="m in modeNames" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <input class="input input-sm cfg-mono" v-model.trim="lk.reels" placeholder="輪帶(如 2,3;空=無連動)" style="width:150px;" title="1-based 輪號逗號清單">
+              <input class="input input-sm cfg-mono" type="number" v-model.number="lk.weight" placeholder="權重" style="width:80px;" title="每局抽選權重">
+              <span class="cfg-chip-row">
+                <button class="cfg-chip cfg-chip-sm" :class="{ active: lk.link_kind === 'CLONE' }" @click="lk.link_kind = 'CLONE'" title="連動輪內容完全相同">相同</button>
+                <button class="cfg-chip cfg-chip-sm" :class="{ active: lk.link_kind === 'MIRROR' }" @click="lk.link_kind = 'MIRROR'" title="連動輪內容左右鏡射">鏡射</button>
+              </span>
+              <input class="input input-sm" v-model="lk.notes" placeholder="備註" style="flex:1; min-width:120px;">
+              <button class="btn-pill" @click="removeReelLink(li)" title="刪除此列">✕</button>
+              <div v-if="reelLinkWarn(lk)" class="cfg-warn cfg-warn-inline" style="width:100%;">{{ reelLinkWarn(lk) }}</div>
+            </div>
+            <button class="btn-pill" @click="addReelLink">＋ 新增連動選項</button>
+          </details>
+        </div>
       </div><!-- /reel_strips -->
 
       <!-- v6.4 死碼移除:15_Multipliers / 16_Coin_Values 編輯 UI 區塊(分頁不可達)已移除。

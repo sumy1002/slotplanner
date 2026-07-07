@@ -1851,6 +1851,25 @@
       desc: 'Hold&Win 剩餘回補次數;「respins_left == 0」= 收集結束(可連動 END_FEATURE)' },
     { id: 'feature_value_total',   label: 'feature_value_total',   needsSubkey: false, valueType: 'number',
       desc: '本 feature 累計值總和;可當 PAY 動態值,或「>= 門檻」升級彩池' },
+    // ── v8.37 / GAP-F2 + 🟢-4/🟢-5:條件變數三枚(純描述詞彙;沿 v8.4/v8.9/v8.21
+    //    常數增列前例,parse_condition 任意識別字皆合法、Python 端零改;
+    //    求值語意由下游模擬工具實作;evalCondition 即時預覽不支援 = 既有變數同級限制) ──
+    { id: 'object_pos',            label: 'object_pos',            needsSubkey: true,
+      subkeyHint: '符號.row|col',  valueType: 'number', subkeySource: 'text',
+      desc: '特定物件當前座標;subkey 格式「SID.row」或「SID.col」(1-based;首點切分同 ' +
+            'adjacent_count 前例)。「object_pos.KEY.row == 5」= 鑰匙走到第 5 列(Finn 觸發)。' +
+            '同符號多實例時取哪顆由規則備註宣告,預設語意為單物件類符號。' },
+    { id: 'reel_count',            label: 'reel_count',            needsSubkey: false, valueType: 'number',
+      desc: '當前輪數(GROW_BOARD 後讀取;Odin 加輪條件「reel_count >= 7」)' },
+    { id: 'symbol_ways',           label: 'symbol_ways',           needsSubkey: true,
+      subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
+      desc: '該符號構成的 ways 數(相鄰輪連續出現的路徑數;Odin「symbol_ways.WILD >= 243」)' },
+    // ── v8.40 / 🟢-3:cluster_shape(清單末位;Finn 特定形狀 cluster;沿常數增列前例) ──
+    { id: 'cluster_shape',         label: 'cluster_shape',         needsSubkey: true,
+      subkeyHint: '符號.形狀名',   valueType: 'number', subkeySource: 'text',
+      desc: '該符號構成「指定形狀」的 4 鄰連通群數;subkey 格式「SID.SHAPE」(首點切分同 ' +
+            'adjacent_count 前例)。形狀名為自由詞彙(如 L / SQUARE / LINE_H),幾何定義寫在' +
+            '規則備註、判定由下游實作。「cluster_shape.KEY.L >= 1」= 存在 L 形群(Finn)。' },
   ];
   const VAR_CATEGORY_MAP = Object.fromEntries(VAR_CATEGORIES.map(c => [c.id, c]));
 
@@ -2481,14 +2500,16 @@
       desc: '在當前 spin 的 multiplier 上做加/乘/設定運算',
       params: [
         { key: 'op',    label: '運算',   type: 'enum',   options: ['add', 'mul', 'set'], default: 'add', required: true },
-        { key: 'value', label: '數值',   type: 'number', placeholder: '1', required: true },
+        // v8.34 / GAP-S1:dyn — 數字或動態公式(原樣字串不求值,求值交下游)
+        { key: 'value', label: '數值',   type: 'number', dyn: true, placeholder: '1 或 symbol_count.WILD + 1', required: true },
       ] },
     { type: 'UPDATE_GLOBAL', label: '更新全域變數', icon: '🌐',
       desc: '修改 global.X(跨 spin 持久)',
       params: [
         { key: 'var',   label: '變數名(不含 global. 前綴)', type: 'text', placeholder: 'coin_pool', required: true },
         { key: 'op',    label: '運算',   type: 'enum',   options: ['add', 'sub', 'mul', 'set'], default: 'add', required: true },
-        { key: 'value', label: '數值',   type: 'number', placeholder: '1', required: true },
+        // v8.34 / GAP-S1:dyn — SF2 量表+=得分符號數、Hades 狩獵計量+=被轉格數 皆此路
+        { key: 'value', label: '數值',   type: 'number', dyn: true, placeholder: '1 或 symbol_count.SCAT + 1', required: true },
         // v8.4 / R2 P3(C-7 收編):變數生命週期宣告(收集計量表/跨 session 解鎖;描述層)
         { key: 'lifecycle', label: '生命週期(可選)', type: 'enum', options: ['', 'SPIN', 'FEATURE', 'SESSION'], default: '',
           desc: '變數重置範圍:SPIN=每局/FEATURE=feature 結束/SESSION=跨局跨 session 持久;留空=沿用預設' },
@@ -2500,7 +2521,8 @@
       params: [
         { key: 'var',   label: '變數名(不含 spin. 前綴)', type: 'text', placeholder: 'fg_combo_count', required: true },
         { key: 'op',    label: '運算',   type: 'enum',   options: ['add', 'sub', 'mul', 'set'], default: 'add', required: true },
-        { key: 'value', label: '數值',   type: 'number', placeholder: '1', required: true },
+        // v8.34 / GAP-S1:dyn — 數字或動態公式
+        { key: 'value', label: '數值',   type: 'number', dyn: true, placeholder: '1 或 cluster_max.PINK', required: true },
       ] },
 
     // ── 流程控制 ──
@@ -2520,7 +2542,8 @@
     { type: 'AWARD_FREE_SPIN', label: '給予免費局', icon: '🎁',
       desc: 'FG 模式下加 N 局免費 spin',
       params: [
-        { key: 'count', label: '局數',         type: 'number', placeholder: '5', required: true },
+        // v8.34 / GAP-S1:dyn — Hades FS 局數=symbol_count.SCAT(5–36)即此路
+        { key: 'count', label: '局數',         type: 'number', dyn: true, placeholder: '5 或 symbol_count.SCAT', required: true },
         { key: 'mode',  label: '目標模式(可選)', type: 'mode' },
         // v8.4 / R2 P3:respin 鏈累計上限(Starburst 最多 3 次;描述層)
         { key: 'max_total', label: '累計上限(可選)', type: 'number', placeholder: '3',
@@ -2537,11 +2560,19 @@
         { key: 'symbol_id', label: '符號',        type: 'symbol', required: true, sentinels: ['RANDOM'] },
         { key: 'positions', label: '位置清單(可選)', type: 'text',
           placeholder: '[[0,1],[2,3]]', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...]' },
+        // v8.34 / GAP-S1+🟢-1:填入顆數(Finn 2–5 / SF2 3–7 / Holy Diver 1–4 皆範圍式)。
+        //   additive 加參數尾;留空=填所有 destroyed 格(現行語意不變)。
+        { key: 'count', label: '數量(可選)', type: 'number', dyn: true, placeholder: '3 或 "2-5"',
+          desc: '固定數、範圍 "2-5"(含引號)、或公式;留空=填所有 destroyed 格' },
       ] },
     { type: 'BOARD_TRANSFORM', label: '盤面轉換', icon: '🔁',
       desc: '把盤面上指定符號轉成另一個符號',
       params: [
-        { key: 'from_symbol', label: '原符號', type: 'symbol', required: true, sentinels: ['RANDOM'] },
+        // v8.36 / 🟢-2:from_symbol 支援符號家族參照 —
+        //   group:<gid> = 家族全員一起轉;group_any:<gid> = 隨機挑家族中「一種」全轉
+        //   (Holy Diver 皇家 / Hades 怪物「隨機一種低分全轉X」)。純描述,抽取語意交下游。
+        { key: 'from_symbol', label: '原符號', type: 'symbol', required: true, sentinels: ['RANDOM'], groupable: true,
+          desc: '單一符號、RANDOM、或家族:group:<家族ID>(全員)/ group_any:<家族ID>(隨機一種)' },
         { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true, sentinels: ['RANDOM', 'BEST'] },
       ] },
     { type: 'BOARD_DESTROY', label: '盤面銷毀', icon: '💥',
@@ -2607,7 +2638,10 @@
         { key: 'steps',   label: '每次步數', type: 'number', placeholder: '1', default: 1 },
         // v8.28 / 缺口A:走位方向(不含隨機;PATH=自訂路徑,細節填規則備註)
         { key: 'dir',     label: '方向',    type: 'enum', options: ['UP', 'DOWN', 'LEFT', 'RIGHT', 'PATH'], default: 'UP',
-          desc: '走位方向;PATH=依自訂路徑(如「水平先再垂直」「最短路徑」——細節寫在規則備註)' },
+          desc: '走位方向;PATH=依自訂路徑(引用下方軌道,或細節寫在規則備註)' },
+        // v8.39 / GAP-F1+軌道:dir=PATH 時可引用 02c_Tracks 軌道(結構化路徑;其他 dir 忽略)
+        { key: 'track',   label: '軌道(可選)', type: 'text', placeholder: 'T001',
+          desc: 'dir=PATH 時引用的軌道 ID(02_Layout 頁定義);留空 = 路徑細節寫規則備註' },
         { key: 'persist', label: '存續範圍', type: 'enum', options: ['SPIN', 'CHAIN', 'FEATURE'], default: 'CHAIN',
           desc: 'SPIN=僅本局;CHAIN=跨連鎖;FEATURE=至 feature 結束' },
       ] },
@@ -2671,16 +2705,16 @@
     { type: 'PAY', label: '直接派彩', icon: '💰',
       desc: '直接給付一個值(即時派彩;不經連線結算)',
       params: [
-        { key: 'value',  label: '數值',   type: 'text', placeholder: '10 或 feature_value_total', required: true,
-          desc: '固定數值,或動態值(feature_value_total / symbol_count.<SID>)' },
+        { key: 'value',  label: '數值',   type: 'text', dyn: true, placeholder: '10 或 feature_value_total', required: true,
+          desc: '固定數值,或動態值/公式(feature_value_total / symbol_count.<SID> + 1)' },   // v8.34 GAP-S1:泛化為公式
         { key: 'source', label: '值來源(可選)', type: 'text', placeholder: 'symbol_value / meter',
           desc: '派彩依據;留空=直接用 value' },
       ] },
     { type: 'MULTIPLY_VALUE', label: '值乘算', icon: '✳️',
       desc: '對盤面 / 某格的「值」做乘算(值成長,不同於 ADJUST_MULTIPLIER 的贏分倍數)',
       params: [
-        { key: 'factor', label: '乘數', type: 'text', placeholder: '2 或 symbol_count.WILD', required: true,
-          desc: '固定乘數或動態值(symbol_count.<SID>)' },
+        { key: 'factor', label: '乘數', type: 'text', dyn: true, placeholder: '2 或 symbol_count.WILD', required: true,
+          desc: '固定乘數或動態值/公式(symbol_count.<SID> * 2)' },   // v8.34 GAP-S1:泛化為公式
         { key: 'target', label: '標的(可選)', type: 'text', placeholder: 'symbol_value.COIN / cell_value',
           desc: '要乘算哪個值;留空=範圍內所有帶值格' },
         { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'same_column / adjacent_8 …',
