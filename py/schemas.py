@@ -80,6 +80,25 @@ class ActionType(Enum):
     SPLIT              = "SPLIT"              # 符號一分為 N(razor split / xSplit)
     DESTROY_ADJACENT   = "DESTROY_ADJACENT"   # 相鄰範圍消除(+開列;xBomb)
     GROW_BOARD         = "GROW_BOARD"         # 事件驅動加列/加輪/開格(Nitro / Infinity Reels)
+    # ── v8.21 / G1 價值引擎:值動作(純描述,本工具不執行、不算 RTP) ──
+    #   同 v8.4 描述型 action 慣例:a_loader.parse_actions 照收(enum 成員即合法);
+    #   logic_parser 不註冊 handler(值如何演化 / 命中率 / RTP 由下游模擬工具實作)。
+    #   docgen 照印進「特色規則」。CONVERT 為獨立 atype,不沿用 BOARD_TRANSFORM。
+    COLLECT            = "COLLECT"            # 收集盤面值到計量表/彩池(Hold&Win 收金幣)
+    PAY                = "PAY"                # 直接給付一個值(即時派彩;可餵動態值)
+    MULTIPLY_VALUE     = "MULTIPLY_VALUE"     # 對盤面/格值做乘算(值成長)
+    REVIVE             = "REVIVE"             # 重置/延長 respin(新符落定回補次數;界-2 sticky 重跑)
+    COMPACT            = "COMPACT"            # 消除空隙、盤面壓實(值格向某方向聚攏)
+    CONVERT            = "CONVERT"            # 值/型態轉換(獨立;非 BOARD_TRANSFORM,可依值轉換)
+    # ── v8.24 / G5 生存結束:流程控制動作(純描述,本工具不執行) ──
+    #   語意最接近 HALT_RESOLUTION;帶 when 謂詞 param(END_FEATURE{when:<predicate>}),
+    #   與 ModeConfig.end_condition 連動。logic_parser 不註冊 handler(結束語意交下游)。
+    END_FEATURE        = "END_FEATURE"        # 結束當前 feature(when 謂詞;生存局/條件式結束)
+    # ── v8.28 / 缺口A:物件初始放置(純描述,本工具不執行) ──
+    #   語意=於新一局(ON_SPIN_START)將物件置於指定格;初始位置以 params cell="r,c" 承載
+    #   (幾何座標,沿用 cell_value.<r,c> 記法)。移動方向以 params dir(up/down/left/right/path)
+    #   承載(WALK/MOVE 共用)。logic_parser 不註冊 handler(放置/移動語意交下游模擬工具)。
+    SPAWN              = "SPAWN"              # 物件初始放置(cell="r,c";新一局觸發)
 
 
 class ConditionOp(Enum):
@@ -142,6 +161,16 @@ class GlobalConfig:
     # v8.7 / R6 A-4:雙向 WAYS 去重宣告(規格描述;引擎不消費)。
     #   True = ways_direction=BOTH 時,同一符號組合左右兩向皆成立僅計分一次。
     ways_both_dedup: bool = True
+    # v8.20 / G 界-3:結構化最大贏分封頂(規格描述;引擎不消費,交下游遵循)。
+    #   與 disclosure.max_win 字串並存 — 前者可含區間/多來源備註(監理揭露用),
+    #   本欄為單一結構化上限值(注額倍數):0 = 沿用 disclosure.max_win 字串(不另封頂)、
+    #   -1 = 明示無上限、>0 = 硬封頂值。缺欄(舊 A.xlsx)→ 0(安全降級)。
+    max_win_cap: float = 0.0
+    # v8.28 / 缺口C:跨來源倍數複合方式(規格描述;引擎不消費,交下游遵循)。
+    #   多來源倍數(單顆 instance_mult × 全域連鎖 × 特色)如何複合:
+    #   MUL=相乘(預設,向後相容)、ADD=相加、MAX=取最高。缺欄(舊 A.xlsx)→ MUL。
+    #   固定套用順序(描述):單顆 → 全域 → 特色。
+    mult_compose: str = "MUL"
     # v6.4 / 缺漏#9+#10:合規數值披露(目標/實測)。None = 未填,由數值組重算後回填。
     disclosure: Optional["ComplianceDisclosure"] = None
 
@@ -369,7 +398,25 @@ class SymbolGroup:
     match_mode: str = "ANY_MIXED"          # 比對語義:任意混合成員即成家族
     members_keep_individual: bool = True   # 成員是否同時保留自身賠率(混合走家族賠,下游取高者)
     mode_scope: str = ""                   # 出現/生效模式(比照符號;"" = 所有模式)
-    pay_table: dict[int, float] = field(default_factory=dict)   # {3:.., 4:.., 5:.., 6:..}
+    pay_table: dict[int, float] = field(default_factory=dict)   # {3:.., 4:.., 5:.., 6:..} 基準費率
+    # P0-3(進階):per-mode 家族費率覆寫。{ "<mode>": {3:.., 4:.., ...}, ... }。
+    #   某模式有覆寫則以此為該模式費率,否則沿用 pay_table。對應 03e_Symbol_Group_Pays。
+    #   純描述,引擎不消費;additive:缺 sheet / 缺模式 → 沿用 base。
+    pay_by_mode: dict[str, dict[int, float]] = field(default_factory=dict)
+    notes: str = ""
+
+
+# ============================================================
+# 獎池級距 (v8.25 / G4;對應 19_Jackpot_Tiers)
+#   Grand/Major/Minor/Mini 式級距階梯的單一層。與 13_Jackpots(個別彩池定義)正交。
+#   只描述級距與觸發方式,不模擬命中率。純描述,引擎不消費;供 docgen 與下游模擬工具。
+#   additive:缺 sheet → [];缺欄安全降級。
+# ============================================================
+@dataclass
+class JackpotTier:
+    tier: str = ""            # 層級序號或代號(如 1 / GRAND;自由)
+    label: str = ""           # 顯示名(如 GRAND / MAJOR / MINOR / MINI)
+    value: float = 0.0        # 級距值(×注額)
     notes: str = ""
 
 
@@ -384,6 +431,15 @@ class BonusItem:
     weight:       float = 100.0
     is_end:       bool = False
     link_jackpot: str = ""
+    # v8.22 / G3:此獎項在收集玩法中的角色(描述用,寬鬆;引擎不消費)。
+    #   "" / COIN(金幣值) / COLLECTOR(收集器) / MULTIPLIER(倍數) / BOOST(增益) / JACKPOT(彩池)。
+    #   Hold&Win 常見收集玩法走設定(此欄);罕見遊戲特有互動走 G1 拼圖。缺欄 → ""。
+    item_role:    str = ""
+    # v8.27 / 批8:此獎項連結進入的模式名(通用原語,寬鬆;引擎不消費)。
+    #   同構於 link_jackpot(item→彩池):此為 item→模式。一個原語同時表達:
+    #     Pick 多層(抽到此項 → 進入下一層 pick 模式)、Wheel 分段跳轉(此分段 → 進入某模式)。
+    #   "" = 無連結;缺欄(舊 A.xlsx)→ ""。與 mode 層 wheel_upgrade_to(整輪升級)並存、更細粒度。
+    link_mode:    str = ""
 
 # ============================================================
 # 倍數系統 (對應 15_Multipliers, v5.4)
@@ -489,6 +545,10 @@ class GambleConfig:
     applies_to:       str   = "ALL_WINS"    # ALL_WINS / BELOW_LIMIT(僅低於門檻的贏分可比)
     applies_limit:    float = 0.0           # BELOW_LIMIT 門檻(×注額)
     collect_anytime:  bool  = True          # 可隨時收下
+    # v8.23 / G2 比倍補強:非現金賭注/獎勵(規格描述;引擎不消費)。缺欄 → 預設(等同現金比倍,向後相容)。
+    stake_type:       str   = "WIN"         # 賭注:WIN(贏分)/FREE_SPINS/BONUS_ENTRY/BONUS_LEVEL
+    reward_type:      str   = "MULTIPLY_WIN"# 獎勵:MULTIPLY_WIN(倍增贏分)/ADD_SPINS/ENTER_BONUS/UPGRADE_LEVEL
+    gamble_trigger:   str   = ""            # 何時可比倍(自由描述,寬鬆;如 ON_ANY_WIN / BONUS_END)
     notes:            str   = ""
 
 # ============================================================
@@ -624,6 +684,15 @@ class PuzzleRule:
     #   (描述層;抽選由下游實作。Girl Power 三選一施放式)。"" = 不屬任何隨機組。
     random_group: str = ""
     random_weight: float = 100.0
+    # v8.21 / G1 價值引擎:persistent 規則層修飾子(★機主拍板:放規則層布林,非動作 params)。
+    #   語意=此規則的動作「每回合(spin/respin)重跑」,同時完成界-2 sticky「重跑」。
+    #   純描述,引擎不消費;缺欄(舊 A.xlsx)→ False(安全降級,行為與舊檔一致)。
+    persistent: bool = False
+    # v8.28 / 缺口A:補充判斷說明(自由文字;給前端/下游的「判斷規則」)。
+    #   承載無法結構化、但須寫給前端/下游的軟規則:移動順序(水平先再垂直)、
+    #   最短路徑選擇等。純描述,引擎不消費;與 description(人看的規則摘要)分離。
+    #   缺欄(舊 A.xlsx)→ ""(安全降級)。
+    notes: str = ""
 
     # 統計埋點 (跑測時動態累加)
     trigger_count: int = 0
@@ -687,10 +756,28 @@ class ModeConfig:
     respin_base: int = 0             # 初始 respin 數(0 = 未啟用 Hold&Win 描述)
     respin_reset_on: str = ""        # "" / NEW_SYMBOL(落新符號重置) / ANY_WIN / NEVER
     respin_stop_cond: str = ""       # 開放式停止條件(自由文字)
+    # v8.24 / G5 生存結束:結構化結束謂詞(規格描述;引擎不消費)。
+    #   與自由文字 respin_stop_cond 並存(後者當備援/補充);可填謂詞如
+    #   「respins_left == 0」「symbol_count.SEVEN >= 1」;拼圖層以 END_FEATURE{when} 連動。
+    #   缺欄(舊 A.xlsx)→ ""(僅靠 respin_stop_cond,向後相容)。
+    end_condition: str = ""
     # v8.7 / R6 A-2:per-mode 賠付模型覆寫(規格描述;引擎不消費)。
     #   "" = 繼承全域 pay_type;LINE/WAYS/SCATTER/CLUSTER = 此模式改用該賠付模型
     #   (NG=LINE、FG=SCATTER 混模型遊戲)。
     pay_type_override: str = ""
+    # v8.22 / G3 Hold&Win 設定面(規格描述;引擎不消費、不執行、不算 RTP)。
+    #   常見收集玩法走此設定;罕見遊戲特有互動走 G1 拼圖。缺欄 → 預設(安全降級)。
+    collect_enabled: bool = False        # 此模式是否為收集型(Hold&Win)
+    respin_reset_symbol: str = ""        # 落哪種符號重置 respin(符號 id;"" = 依 respin_reset_on)
+    grid_expand_in_collect: bool = False # 收集中盤面是否擴張(Money Train 式加格)
+    allow_persistent: bool = False       # 此模式是否允許 persistent 規則(每回合重跑)
+    # v8.28 / 缺口B:解鎖前提(規格描述;引擎不消費)。此模式需先「玩過/解鎖」哪些模式
+    #   才可進入/選取(漸進解鎖 FS:Immortal Romance 密室鏈)。模式名清單(可多個);
+    #   空 = 無前提。與 choice_group 正交(擇一 vs 解鎖前提)。缺欄 → [](安全降級)。
+    unlock_requires: list[str] = field(default_factory=list)
+    # v8.28 / 缺口C:此模式的跨來源倍數複合方式覆寫(規格描述;引擎不消費)。
+    #   "" = 沿用 01_Global.mult_compose;MUL/ADD/MAX = 此模式改用該複合方式。缺欄 → ""。
+    mult_compose_override: str = ""
 
 
 # ============================================================
@@ -756,6 +843,13 @@ class AConfig:
     # P0-3:符號家族（選用;對應 03d_Symbol_Groups）。ANY BAR 型混合賠付結構。
     #   純描述,引擎不消費;成員由 SymbolDef.group_id 反查。舊檔無 sheet → []。
     symbol_groups: list["SymbolGroup"] = field(default_factory=list)
+
+    # v8.25 / G4:獎池級距（選用;對應 19_Jackpot_Tiers）+ 整體觸發方式。
+    #   與 13_Jackpots(個別彩池定義)正交:此為 Grand/Major/Minor/Mini 式級距階梯 + 觸發描述。
+    #   只描述級距與觸發方式,不模擬命中率。純描述,引擎不消費。舊檔無 sheet → []。
+    #   jackpot_trigger:PROBABILITY(機率)/COLLECT_METER(集滿進度)/TOKEN_COUNT(收滿 N 枚);"" = 未指定。
+    jackpot_tiers: list["JackpotTier"] = field(default_factory=list)
+    jackpot_trigger: str = ""
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)

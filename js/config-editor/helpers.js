@@ -1839,6 +1839,18 @@
       desc: '盤面現存符號總數;== 0 即「清空全盤」(Moon Princess +100×)' },
     { id: 'rightmost_reel_in_win', label: 'rightmost_reel_in_win', needsSubkey: false, valueType: 'number',
       desc: '最右輪是否參與中獎(1/0);Infinity Reels 延續加輪條件' },
+    // ── v8.21 / G1 價值引擎:值變數(四枚;純描述,parse_condition 任意識別字皆合法,
+    //    Python 端零改;求值語意由下游模擬工具實作) ──
+    { id: 'symbol_value',          label: 'symbol_value',          needsSubkey: true,
+      subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
+      desc: '某符號當前攜帶的值(如金幣面額);「symbol_value.COIN >= 100」= 金幣值達門檻' },
+    { id: 'cell_value',            label: 'cell_value',            needsSubkey: true,
+      subkeyHint: '座標(reel,row)', valueType: 'number', subkeySource: 'text',
+      desc: '某格當前值;subkey 格式「reel,row」(1-based);「cell_value.3,2 > 0」= 該格有值' },
+    { id: 'respins_left',          label: 'respins_left',          needsSubkey: false, valueType: 'number',
+      desc: 'Hold&Win 剩餘回補次數;「respins_left == 0」= 收集結束(可連動 END_FEATURE)' },
+    { id: 'feature_value_total',   label: 'feature_value_total',   needsSubkey: false, valueType: 'number',
+      desc: '本 feature 累計值總和;可當 PAY 動態值,或「>= 門檻」升級彩池' },
   ];
   const VAR_CATEGORY_MAP = Object.fromEntries(VAR_CATEGORIES.map(c => [c.id, c]));
 
@@ -1860,6 +1872,7 @@
       enabled: true,              // 對應後端 PuzzleRule.enabled
       priority: 100,
       description: '',            // 對應後端 PuzzleRule.description(舊欄位名 notes)
+      persistent: false,          // v8.21 G1:規則層修飾子,動作每回合重跑(界-2 sticky 重跑)
     };
   }
 
@@ -2588,12 +2601,23 @@
           desc: '乘數=推移步數的耦合(xNudge);0/留空=無' },
       ] },
     { type: 'WALK', label: '走位符號', icon: '🚶',
-      desc: '符號每次消除/每局隨機走 N 步且持續存在(Jammin\' Jars / Toro)',
+      desc: '符號每次消除/每局依方向走 N 步且持續存在(Jammin\' Jars / Toro)',
       params: [
         { key: 'symbol',  label: '符號',    type: 'symbol', required: true },
         { key: 'steps',   label: '每次步數', type: 'number', placeholder: '1', default: 1 },
+        // v8.28 / 缺口A:走位方向(不含隨機;PATH=自訂路徑,細節填規則備註)
+        { key: 'dir',     label: '方向',    type: 'enum', options: ['UP', 'DOWN', 'LEFT', 'RIGHT', 'PATH'], default: 'UP',
+          desc: '走位方向;PATH=依自訂路徑(如「水平先再垂直」「最短路徑」——細節寫在規則備註)' },
         { key: 'persist', label: '存續範圍', type: 'enum', options: ['SPIN', 'CHAIN', 'FEATURE'], default: 'CHAIN',
           desc: 'SPIN=僅本局;CHAIN=跨連鎖;FEATURE=至 feature 結束' },
+      ] },
+    // v8.28 / 缺口A:物件初始放置(純描述,本工具不執行;新一局 ON_SPIN_START 觸發)
+    { type: 'SPAWN', label: '放置物件', icon: '📍',
+      desc: '於新一局把物件放到指定格(初始位置;搭配 WALK 走位。四角鳥即四條 SPAWN)',
+      params: [
+        { key: 'target', label: '物件符號', type: 'symbol', required: true },
+        { key: 'cell',   label: '初始位置(r,c)', type: 'text', placeholder: '2,3', required: true,
+          desc: '幾何座標,列,欄(沿用 cell_value.<r,c> 記法);於新一局觸發放置' },
       ] },
     { type: 'REVEAL_AS', label: '揭示符號', icon: '🎭',
       desc: '佔位符號落定後統一揭示為其他符號(Mystery Stack / ER 罐 / xWays)',
@@ -2628,6 +2652,76 @@
         { key: 'cap',     label: '上限(可選)', type: 'number', placeholder: '12',
           desc: '成長上限(如 White Rabbit 高度 12、Infinity 12 輪巨獎門檻搭配 reel_height 條件)' },
         { key: 'persist', label: '持久範圍', type: 'enum', options: ['SPIN', 'FEATURE'], default: 'FEATURE' },
+      ] },
+
+    // ── v8.21 / G1 價值引擎:值動作(六枚) ──
+    //   純描述:本工具不執行、不算 RTP;a_loader.parse_actions 照收(schemas.ActionType additive)、
+    //   logic_parser 無 handler(值如何演化 / 命中率 / RTP 由下游模擬工具實作)。docgen 照印進「特色規則」。
+    //   value / factor 等數值 param 可填動態值 symbol_count.<SID>(A-11);scope 可搭 G5 範圍謂詞。
+    { type: 'COLLECT', label: '收集值', icon: '🧺',
+      desc: '把盤面上的值收集到計量表 / 彩池(Hold&Win 收金幣、集滿進度)',
+      params: [
+        { key: 'target', label: '收集標的', type: 'text', placeholder: 'METER / JACKPOT / coin_pool', required: true,
+          desc: '收進哪裡:METER=進度計量、JACKPOT=彩池、或自訂 global 變數名' },
+        { key: 'source', label: '值來源(可選)', type: 'text', placeholder: 'symbol_value / cell_value',
+          desc: '收集哪種值;留空=盤面上帶值的符號' },
+        { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'all_visible / adjacent_4 …',
+          desc: 'G5 範圍謂詞;留空=全盤' },
+      ] },
+    { type: 'PAY', label: '直接派彩', icon: '💰',
+      desc: '直接給付一個值(即時派彩;不經連線結算)',
+      params: [
+        { key: 'value',  label: '數值',   type: 'text', placeholder: '10 或 feature_value_total', required: true,
+          desc: '固定數值,或動態值(feature_value_total / symbol_count.<SID>)' },
+        { key: 'source', label: '值來源(可選)', type: 'text', placeholder: 'symbol_value / meter',
+          desc: '派彩依據;留空=直接用 value' },
+      ] },
+    { type: 'MULTIPLY_VALUE', label: '值乘算', icon: '✳️',
+      desc: '對盤面 / 某格的「值」做乘算(值成長,不同於 ADJUST_MULTIPLIER 的贏分倍數)',
+      params: [
+        { key: 'factor', label: '乘數', type: 'text', placeholder: '2 或 symbol_count.WILD', required: true,
+          desc: '固定乘數或動態值(symbol_count.<SID>)' },
+        { key: 'target', label: '標的(可選)', type: 'text', placeholder: 'symbol_value.COIN / cell_value',
+          desc: '要乘算哪個值;留空=範圍內所有帶值格' },
+        { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'same_column / adjacent_8 …',
+          desc: 'G5 範圍謂詞;留空=全盤' },
+      ] },
+    { type: 'REVIVE', label: '回補回合', icon: '🔁',
+      desc: '重置 / 延長 respin 次數(Hold&Win 新符落定回補;界-2 sticky「重跑」)',
+      params: [
+        { key: 'respins', label: '回補局數', type: 'number', placeholder: '3', required: true,
+          desc: '重置或增加的 respin 次數' },
+        { key: 'trigger', label: '觸發描述(可選)', type: 'text', placeholder: 'NEW_SYMBOL / ANY_WIN',
+          desc: '何時回補;純描述,實際判定交下游' },
+      ] },
+    { type: 'COMPACT', label: '盤面壓實', icon: '🧲',
+      desc: '消除空隙、把值格向某方向聚攏(收集型盤面整理)',
+      params: [
+        { key: 'direction', label: '方向', type: 'enum', options: ['DOWN', 'UP', 'LEFT', 'RIGHT'], default: 'DOWN', required: true },
+        { key: 'scope',     label: '作用範圍(可選)', type: 'text', placeholder: 'same_column / all_visible …',
+          desc: 'G5 範圍謂詞;留空=全盤' },
+      ] },
+    { type: 'CONVERT', label: '值/型態轉換', icon: '🔀',
+      desc: '按規則把值 / 型態轉成另一種(★獨立 atype,非 BOARD_TRANSFORM;可依值轉換)',
+      params: [
+        { key: 'from', label: '來源型態/符號', type: 'text', placeholder: 'COIN / SILVER', required: true,
+          desc: '要轉換的來源(符號 id 或值型態)' },
+        { key: 'to',   label: '目標型態/符號', type: 'text', placeholder: 'GOLD / JACKPOT', required: true,
+          desc: '轉換後的目標' },
+        { key: 'by_value', label: '依值轉換', type: 'enum', options: ['Y', 'N'], default: 'N',
+          desc: 'Y=依攜帶值決定轉換結果(如值達門檻升級);N=直接型態轉換' },
+        { key: 'scope', label: '作用範圍(可選)', type: 'text', placeholder: 'all_visible / adjacent_4 …',
+          desc: 'G5 範圍謂詞;留空=全盤' },
+      ] },
+
+    // ── v8.24 / G5 生存結束:流程控制動作 ──
+    //   純描述:本工具不執行、不算 RTP;a_loader.parse_actions 照收(schemas.ActionType additive)、
+    //   logic_parser 無 handler(結束語意交下游)。與 ModeConfig.end_condition 連動。
+    { type: 'END_FEATURE', label: '結束 feature', icon: '🏁',
+      desc: '結束當前 feature(生存局 / 條件式結束;White Rabbit 活到某條件、Toro 直到某符號出現)',
+      params: [
+        { key: 'when', label: '結束條件(謂詞,可選)', type: 'text', placeholder: 'respins_left == 0 / symbol_count.SEVEN >= 1',
+          desc: '滿足此謂詞即結束;留空=無條件立即結束。與模式 End_Condition 連動,語意由下游實作' },
       ] },
   ];
   const ACTION_BY_TYPE = Object.fromEntries(ACTION_CATALOG.map(a => [a.type, a]));

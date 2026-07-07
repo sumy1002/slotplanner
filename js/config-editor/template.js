@@ -3752,6 +3752,22 @@
               <div class="cfg-hint">數字越大越優先(同 trigger 下執行順序)</div>
             </div>
 
+            <!-- v8.21 / G1:persistent 規則層修飾子(動作每回合重跑;界-2 sticky 重跑) -->
+            <div class="cfg-field cfg-field-compact">
+              <label class="cfg-label">
+                每回合重跑 <span class="cfg-key">persistent</span>
+              </label>
+              <div class="cfg-chip-row">
+                <button class="cfg-chip cfg-chip-sm"
+                        :class="{ active: rules[selectedRuleIdx].persistent === true }"
+                        @click="rules[selectedRuleIdx].persistent = true">開</button>
+                <button class="cfg-chip cfg-chip-sm"
+                        :class="{ active: rules[selectedRuleIdx].persistent !== true }"
+                        @click="rules[selectedRuleIdx].persistent = false">關</button>
+              </div>
+              <div class="cfg-hint">開啟後此規則的動作每個 spin / respin 重跑(如黏著符號逐回合再結算);純描述,執行交下游。</div>
+            </div>
+
             <!-- v8.4 / R2 P5:隨機擇一組(同組同時觸發時依權重抽一條執行;描述層,由下游實作) -->
             <div class="cfg-field cfg-field-compact">
               <label class="cfg-label">
@@ -3770,6 +3786,17 @@
                      v-model.number="rules[selectedRuleIdx].random_weight">
               <div class="cfg-hint">同組內依權重抽選</div>
             </div>
+          </div>
+
+          <!-- v8.28 / 缺口A:補充判斷說明(自由文字;給前端/下游的判斷規則,無法結構化者以文字補述) -->
+          <div class="cfg-field">
+            <label class="cfg-label">
+              補充判斷說明(可選) <span class="cfg-key">notes</span>
+            </label>
+            <textarea class="input" rows="2"
+                      v-model.trim="rules[selectedRuleIdx].notes"
+                      placeholder="例:鳥的走位＝水平先、再垂直;同距取最短路徑"></textarea>
+            <div class="cfg-hint">寫給前端 / 下游的「判斷規則」——無法用上方條件 / 動作結構化、但實作時須遵循者(移動順序、最短路徑等)。與規則說明分離;純描述,本工具不執行。</div>
           </div>
 
           <div class="cfg-field">
@@ -4155,6 +4182,27 @@
 
                 <div v-else-if="actionMeta(act.atype) && actionMeta(act.atype).params.length === 0"
                      class="cfg-hint">此動作不需要參數</div>
+
+                <!-- v8.20 / G5:範圍謂詞 scope(選用;動作層修飾子,任何動作皆可加) -->
+                <div v-if="act.atype" class="cfg-field cfg-field-compact cfg-action-scope">
+                  <label class="cfg-label">
+                    作用範圍 <span class="cfg-key">scope · 選用</span>
+                  </label>
+                  <select class="input cfg-mono"
+                          :value="scopeBaseOf(act)"
+                          @change="setScope(act, $event.target.value, scopeArgOf(act))">
+                    <option value="">（全盤 / 不限範圍）</option>
+                    <option v-for="sc in SCOPE_CATALOG" :key="sc.key" :value="sc.key">{{ sc.zh }}（{{ sc.key }}）</option>
+                  </select>
+                  <!-- range / random_cells 帶參數 -->
+                  <input v-if="scopeBaseOf(act) === 'range' || scopeBaseOf(act) === 'random_cells'"
+                         class="input cfg-mono input-w-id"
+                         type="text"
+                         :value="scopeArgOf(act)"
+                         @input="setScope(act, scopeBaseOf(act), $event.target.value)"
+                         :placeholder="scopeBaseOf(act) === 'range' ? 'n..m（如 3..8）' : 'N（格數，如 5）'">
+                  <div class="cfg-hint">限定動作作用的盤面範圍；純規格描述，實際命中交下游模擬工具。</div>
+                </div>
                 </template>
               </div>
 
@@ -4824,6 +4872,19 @@
             </div>
             <div class="cfg-hint">CLUSTER Pay 達多少個相連同符算中獎(2–20)</div>
           </div>
+
+          <!-- v8.28 / 缺口C:跨來源倍數複合方式(全域;規格描述,交下游遵循) -->
+          <div class="cfg-field">
+            <label class="cfg-label">
+              跨來源倍數複合 <span class="cfg-key">mult_compose</span>
+            </label>
+            <div class="cfg-chip-row">
+              <button class="cfg-chip" :class="{ active: (g.mult_compose || 'MUL') === 'MUL' }" @click="g.mult_compose = 'MUL'">相乘</button>
+              <button class="cfg-chip" :class="{ active: g.mult_compose === 'ADD' }" @click="g.mult_compose = 'ADD'">相加</button>
+              <button class="cfg-chip" :class="{ active: g.mult_compose === 'MAX' }" @click="g.mult_compose = 'MAX'">取最高</button>
+            </div>
+            <div class="cfg-hint">多來源倍數(單顆 instance_mult × 全域連鎖 × 特色)如何複合。固定套用順序：單顆 → 全域 → 特色。規格描述,交下游遵循;各模式可於下方「模式清單」個別覆寫。</div>
+          </div>
           </div><!-- /cfg-card-body -->
         </div><!-- /賠付模型 -->
           </div>
@@ -5196,6 +5257,13 @@
                              v-model.trim="m.respin_stop_cond" :disabled="!(Number(m.respin_base) > 0)">
                       <div class="cfg-hint">符號落地即鎖、respin 計數的 Hold&Win 描述(Money Train / Lucky Wagon);0 = 未啟用。開放式停止條件(Toro「直到某符號出現」)寫在停止條件欄。</div>
                     </div>
+                    <!-- v8.24 / G5:結構化結束謂詞(生存局 / 條件式結束;與上方自由文字停止條件並存)-->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">結束條件(結構化,可選) <span class="cfg-key">end_condition</span></label>
+                      <input class="input cfg-mono" type="text" v-model.trim="m.end_condition"
+                             placeholder="respins_left == 0 / symbol_count.SEVEN >= 1 …">
+                      <div class="cfg-hint">生存局 / 條件式結束的結構化謂詞(White Rabbit 活到某條件、Toro 直到某符號)；拼圖層可用「結束 feature（END_FEATURE）」動作連動。與上方自由文字停止條件並存;純描述,判定交下游。</div>
+                    </div>
                     <!-- v8.7 / R6 A-2:per-mode 賠付模型覆寫(規格描述) -->
                     <div class="cfg-field" style="margin-top:8px;">
                       <label class="cfg-label">賠付模型覆寫(可選) <span class="cfg-key">pay_type_override</span></label>
@@ -5207,6 +5275,71 @@
                         <option value="CLUSTER">CLUSTER（相鄰成群）</option>
                       </select>
                       <div class="cfg-hint">混賠付模型遊戲用（NG 走 LINE、FG 走 SCATTER 等）；留空 = 沿用全域賠付模型。純描述,計分實作歸下游。</div>
+                    </div>
+                    <!-- v8.28 / 缺口B:解鎖前提(需先解鎖哪些模式才可進入;與擇一正交) -->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">解鎖前提(可選) <span class="cfg-key">unlock_requires</span></label>
+                      <div v-if="modeNames.filter(x => x !== m.mode).length" class="cfg-chip-row">
+                        <button v-for="nm in modeNames.filter(x => x !== m.mode)" :key="'ulk'+m.mode+nm"
+                                class="cfg-chip cfg-chip-sm"
+                                :class="{ active: modeUnlockHas(m, nm) }"
+                                @click="modeUnlockToggle(m, nm)">{{ nm }}</button>
+                      </div>
+                      <div v-else class="cfg-hint">尚無其他模式可作為前提。</div>
+                      <div class="cfg-hint">此模式需先「玩過 / 解鎖」勾選的模式才可進入（漸進解鎖 FS，如 Immortal Romance 密室鏈）。與「玩家擇一」正交（擇一＝互斥選擇；前提＝進入門檻）。空＝無前提。純描述,交下游遵循。</div>
+                    </div>
+                    <!-- v8.28 / 缺口C:此模式的跨來源倍數複合覆寫 -->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">倍數複合覆寫(可選) <span class="cfg-key">mult_compose_override</span></label>
+                      <select class="input input-w-name" v-model="m.mult_compose_override">
+                        <option value="">（沿用全域）</option>
+                        <option value="MUL">相乘</option>
+                        <option value="ADD">相加</option>
+                        <option value="MAX">取最高</option>
+                      </select>
+                      <div class="cfg-hint">此模式的多來源倍數複合方式;留空 = 沿用全域「跨來源倍數複合」設定。純描述,計分實作歸下游。</div>
+                    </div>
+
+                    <!-- v8.22 / G3:Hold&Win 設定面(常見收集玩法走設定;罕見互動走 G1 拼圖)-->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">Hold&amp;Win 收集設定 <span class="cfg-key">collect_*</span></label>
+                      <div class="cfg-collect-grid">
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">收集型 <span class="cfg-key">collect_enabled</span></span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.collect_enabled === true }"
+                                    @click="m.collect_enabled = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.collect_enabled !== true }"
+                                    @click="m.collect_enabled = false">關</button>
+                          </div>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">重置符號 <span class="cfg-key">respin_reset_symbol</span></span>
+                          <select class="input input-w-id" v-model="m.respin_reset_symbol">
+                            <option value="">（依重置條件）</option>
+                            <option v-for="s in symbolNames" :key="'rrs'+s" :value="s">{{ s }}</option>
+                          </select>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">收集中擴張 <span class="cfg-key">grid_expand_in_collect</span></span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.grid_expand_in_collect === true }"
+                                    @click="m.grid_expand_in_collect = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.grid_expand_in_collect !== true }"
+                                    @click="m.grid_expand_in_collect = false">關</button>
+                          </div>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">允許 persistent <span class="cfg-key">allow_persistent</span></span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.allow_persistent === true }"
+                                    @click="m.allow_persistent = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: m.allow_persistent !== true }"
+                                    @click="m.allow_persistent = false">關</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="cfg-hint">Hold&amp;Win 常見收集玩法用此設定描述；落「重置符號」補回合、收集中可擴張盤面、允許 persistent 規則每回合重跑。純描述,執行交下游。</div>
                     </div>
                   </div>
 
@@ -5257,6 +5390,21 @@
                           <select class="input input-w-id" v-model="it.link_jackpot">
                             <option value="">—</option>
                             <option v-for="j in modeItemJpOptions(m, it)" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                          </select>
+                        </div>
+                        <!-- v8.22 / G3:獎項角色 Item_Role -->
+                        <div class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">角色 <span class="cfg-key">item_role</span></span>
+                          <select class="input input-w-id" v-model="it.item_role">
+                            <option v-for="r in MODE_ITEM_ROLES" :key="'ir'+r.key" :value="r.key">{{ r.zh }}</option>
+                          </select>
+                        </div>
+                        <!-- v8.27 / 批8:item→模式連結(WHEEL 分段跳轉 / PICK 多層進下一池)-->
+                        <div v-if="m.mode_kind !== 'COLLECTION'" class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">連結模式 <span class="cfg-key">link_mode</span></span>
+                          <select class="input input-w-id" v-model="it.link_mode">
+                            <option value="">—</option>
+                            <option v-for="mm in modeItemModeOptions(m)" :key="'lm'+mm" :value="mm">{{ mm }}</option>
                           </select>
                         </div>
                         <button class="cfg-mode-delete-btn cfg-reveal" @click="removeModeItem(m, ii)" title="刪除">✕</button>
@@ -5737,12 +5885,66 @@
                 <span>可隨時收下 <span class="cfg-key">collect_anytime</span></span>
               </label>
             </div>
+            <!-- v8.23 / G2:非現金賭注/獎勵(規格描述;現金比倍留預設即可)-->
+            <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+              <div class="cfg-field">
+                <label class="cfg-label">賭注 <span class="cfg-key">stake_type</span></label>
+                <select class="input input-w-name" v-model="gamble.stake_type">
+                  <option value="WIN">贏分（WIN）</option>
+                  <option value="FREE_SPINS">免費局（FREE_SPINS）</option>
+                  <option value="BONUS_ENTRY">進 bonus 資格（BONUS_ENTRY）</option>
+                  <option value="BONUS_LEVEL">bonus 等級（BONUS_LEVEL）</option>
+                </select>
+              </div>
+              <div class="cfg-field">
+                <label class="cfg-label">獎勵 <span class="cfg-key">reward_type</span></label>
+                <select class="input input-w-name" v-model="gamble.reward_type">
+                  <option value="MULTIPLY_WIN">倍增贏分（MULTIPLY_WIN）</option>
+                  <option value="ADD_SPINS">加免費局（ADD_SPINS）</option>
+                  <option value="ENTER_BONUS">進入 bonus（ENTER_BONUS）</option>
+                  <option value="UPGRADE_LEVEL">升級等級（UPGRADE_LEVEL）</option>
+                </select>
+              </div>
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label">觸發時機（可選）<span class="cfg-key">trigger</span></label>
+              <input class="input cfg-mono" type="text" v-model.trim="gamble.gamble_trigger"
+                     placeholder="ON_ANY_WIN / BONUS_END …">
+              <div class="cfg-hint">何時可比倍（自由描述）；留空 = 沿用型式預設。純描述,判定交下游。</div>
+            </div>
             <div class="cfg-field">
               <label class="cfg-label">備註 <span class="cfg-key">notes</span></label>
               <input class="input" type="text" v-model.trim="gamble.notes" placeholder="免費局贏分不可比倍…">
             </div>
           </template>
           <div v-else class="cfg-section-off-hint">比倍未啟用 —— 贏分後猜牌色 / 花色 / 階梯翻倍。開啟開關以設定。</div>
+        </div>
+
+        <!-- v8.25 / G4:獎池級距(與 13_Jackpots 正交;Grand/Major/Minor/Mini + 觸發方式)-->
+        <div class="cfg-section" style="margin-top:14px;">
+          <div class="cfg-section-title">獎池級距 <span class="cfg-key">19_Jackpot_Tiers</span></div>
+          <div class="cfg-hint">Grand / Major / Minor / Mini 式級距階梯 + 整體觸發方式。只描述級距與觸發,不模擬命中率;執行交下游。</div>
+          <div class="cfg-field" style="margin-top:8px;">
+            <label class="cfg-label">觸發方式 <span class="cfg-key">jackpot_trigger</span></label>
+            <select class="input input-w-name" v-model="jackpotCfg.trigger">
+              <option v-for="o in JACKPOT_TRIGGER_OPTIONS" :key="'jt'+o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+          </div>
+          <div class="cfg-field" style="margin-top:8px;">
+            <label class="cfg-label">級距清單</label>
+            <div v-if="jackpotCfg.tiers.length === 0" class="cfg-hint" style="margin:4px 0;">尚無級距。</div>
+            <div v-for="(t, ti) in jackpotCfg.tiers" :key="'jpt'+ti" class="cfg-bonus-item-row cfg-reveal-zone">
+              <input class="input input-w-id" type="text" v-model.trim="t.tier" placeholder="層級">
+              <input class="input input-w-id" type="text" v-model.trim="t.label" placeholder="名稱（GRAND…）">
+              <div class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">值×注額</span>
+                <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="t.value">
+              </div>
+              <input class="input" type="text" v-model.trim="t.notes" placeholder="備註">
+              <button class="cfg-mode-delete-btn cfg-reveal" @click="removeJackpotTier(ti)" title="刪除">✕</button>
+            </div>
+            <button class="cfg-action-add-btn" style="margin-top:6px;" @click="addJackpotTier">＋ 新增級距</button>
+          </div>
         </div>
       </div><!-- /gamble -->
 

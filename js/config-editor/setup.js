@@ -72,6 +72,14 @@
       // v8.7 / R6 A-4:全域 additive 欄位正規化(DEFAULT_GLOBAL 在 helpers,不在 scope;此處補預設)。
       //   ways_both_dedup:雙向 WAYS 同組合僅計一次(規格描述)。01_Global 匯出走 Object.entries(g) 自動帶。
       if (g.ways_both_dedup == null) g.ways_both_dedup = true;
+      // v8.20 / G 界-3:結構化最大贏分封頂(規格描述;與 disclosure.max_win 字串並存)。
+      //   0=沿用字串(不另封頂)、-1=明示無上限、>0=硬封頂值(注額倍數)。缺欄(舊 LS)→ 0 安全降級。
+      //   01_Global 匯出走 Object.entries(g) 自動帶 max_win_cap;Python 端 _parse_max_win_cap 同規則降級。
+      if (g.max_win_cap == null) g.max_win_cap = 0;
+      // v8.28 / 缺口C:跨來源倍數複合方式(規格描述;引擎不消費,交下游)。
+      //   MUL=相乘(預設,向後相容)、ADD=相加、MAX=取最高。缺欄(舊 LS)→ MUL 安全降級。
+      //   01_Global 匯出走 Object.entries(g) 自動帶 mult_compose;Python 端 _parse_global 同規則降級。
+      if (g.mult_compose == null) g.mult_compose = 'MUL';
 
       // ──────────────────────────────────────────────────────────
       //  v5.0-b:主題單源化 — C12 重複實作已移除
@@ -550,6 +558,98 @@
       const ENUM_OPT_ZH = { add: '加上', sub: '減去', mul: '乘以', set: '設為' };
       function enumOptLabel(v) { return ENUM_OPT_ZH[v] ? `${ENUM_OPT_ZH[v]} ${v}` : v; }
 
+      // ──────────────────────────────────────────────────────
+      //  v8.22 / G3:獎項角色 Item_Role(Hold&Win 設定面;setup-local 顯示詞彙)
+      //  英文 key 為唯一真相(寫進 11c_Mode_Items Item_Role 欄);純描述,引擎不消費。
+      //  makeBonusItem 在 helpers 凍結,item_role 於 addModeItem/normalize 補預設。
+      const MODE_ITEM_ROLES = [
+        { key: '',           zh: '（未指定）' },
+        { key: 'COIN',       zh: '金幣值' },
+        { key: 'COLLECTOR',  zh: '收集器' },
+        { key: 'MULTIPLIER', zh: '倍數' },
+        { key: 'BOOST',      zh: '增益' },
+        { key: 'JACKPOT',    zh: '彩池' },
+      ];
+      const _ITEM_ROLE_ZH = Object.fromEntries(MODE_ITEM_ROLES.map(r => [r.key, r.zh]));
+      function itemRoleLabel(v) {
+        const s = String(v == null ? '' : v).trim().toUpperCase();
+        return _ITEM_ROLE_ZH[s] != null ? _ITEM_ROLE_ZH[s] : s;   // 未知 → 原樣(寬鬆,安全降級)
+      }
+
+      // ──────────────────────────────────────────────────────
+      //  v8.20 / G5 界-1:範圍謂詞 scope(動作/事件的空間範圍修飾子)
+      //  ★設計決策(選項 3,機主 2026 拍板)★:scope 是「動作層修飾子」,
+      //   本質不是條件變數,故不進 helpers.js 的 VAR_CATEGORIES(鐵律 #1:
+      //   helpers byte-perfect 不動)。以 setup-local 常數持有,純供:
+      //     (a) 前端動作 params 的 scope 下拉顯示中文
+      //     (b) humanize 白話膠囊
+      //     (c) docgen 描述(docgen 為獨立 IIFE,持有各自唯讀 label map)
+      //   英文 key(enum 值)為唯一真相,寫進動作 params 的 scope key(KEY=VAL DSL
+      //   既有格式,零 schema 變更);引擎不消費,值/命中率交下游模擬工具。
+      //   range(n..m) / random_cells(n) 為帶參數謂詞:value 直接存字串,label 動態組。
+      const SCOPE_CATALOG = [
+        { key: 'all_visible',  zh: '全部可見格',   desc: '盤面上所有可見活格(不含洞格/遮罩外)' },
+        { key: 'adjacent_8',   zh: '八方相鄰',     desc: '目標格的上下左右 + 四斜角(8 鄰)' },
+        { key: 'adjacent_4',   zh: '四方相鄰',     desc: '目標格的上下左右正交 4 鄰(不含斜角)' },
+        { key: 'same_column',  zh: '同一直行',     desc: '與目標格同一 reel(直行)的所有格' },
+        { key: 'same_row',     zh: '同一橫列',     desc: '與目標格同一 row(橫列)的所有格' },
+        { key: 'column_above', zh: '同行上方',     desc: '同一直行中位於目標格上方的所有格(落下型機制常用)' },
+        { key: 'edge',         zh: '邊緣格',       desc: '盤面最外圈(首末 reel / 首末 row)的所有格' },
+        { key: 'range',        zh: '範圍區間',     desc: '指定線性索引區間 range(n..m);n/m 由參數填', hasParam: true, paramHint: 'n..m(如 3..8)' },
+        { key: 'random_cells', zh: '隨機取格',     desc: '隨機挑選 N 格 random_cells(n);N 由參數填', hasParam: true, paramHint: 'N(格數,如 5)' },
+      ];
+      const SCOPE_BY_KEY = Object.fromEntries(SCOPE_CATALOG.map(s => [s.key, s]));
+      // scope 顯示中文:支援帶參數 range(3..8) / random_cells(5) → 拆 base 與參數
+      function scopeLabel(raw) {
+        const s = String(raw == null ? '' : raw).trim();
+        if (!s) return '';
+        const m = s.match(/^(\w+)\s*\((.*)\)\s*$/);
+        const base = m ? m[1] : s;
+        const arg = m ? m[2].trim() : '';
+        const meta = SCOPE_BY_KEY[base];
+        if (!meta) return s;   // 未知 → 原樣(安全降級)
+        if (meta.hasParam && arg) return `${meta.zh}（${arg}）`;
+        return meta.zh;
+      }
+      // v8.20 / G5:symbol_count.<SID> 當「動態值」餵給乘數(A-11 另一半)。
+      //   純描述:值欄若填 symbol_count.<SID> 形式,humanize 譯成「<SID> 的盤面數量」。
+      //   非此形式一律原樣回傳;引擎不消費,值語意交下游。
+      function dynValueLabel(v) {
+        const s = String(v == null ? '' : v).trim();
+        let m = s.match(/^symbol_count\.([A-Za-z0-9_]+)$/);
+        if (m) return `「${m[1]}」的盤面數量`;
+        // v8.21 / G1:值變數當動態值
+        m = s.match(/^symbol_value\.([A-Za-z0-9_]+)$/);
+        if (m) return `「${m[1]}」的攜帶值`;
+        m = s.match(/^cell_value\.([0-9]+,[0-9]+)$/);
+        if (m) return `格(${m[1]})的值`;
+        if (s === 'feature_value_total') return '本 feature 累計值';
+        if (s === 'respins_left') return '剩餘回合數';
+        return s;
+      }
+      // v8.20 / G5:動作 scope 存取器(scope 存在 act.params.scope,值為 base 或 base(arg))。
+      //   template 用 scopeBaseOf/scopeArgOf 拆顯示,setScope 合成寫回;無參數謂詞省略括號。
+      function scopeBaseOf(act) {
+        const s = String((act && act.params && act.params.scope) || '').trim();
+        if (!s) return '';
+        const m = s.match(/^(\w+)\s*\(.*\)\s*$/);
+        return m ? m[1] : s;
+      }
+      function scopeArgOf(act) {
+        const s = String((act && act.params && act.params.scope) || '').trim();
+        const m = s.match(/^\w+\s*\((.*)\)\s*$/);
+        return m ? m[1].trim() : '';
+      }
+      function setScope(act, base, arg) {
+        if (!act) return;
+        if (!act.params || typeof act.params !== 'object') act.params = {};
+        const b = String(base || '').trim();
+        if (!b) { delete act.params.scope; return; }   // 清空 → 移除 scope(等同全盤,不落痕)
+        const meta = SCOPE_BY_KEY[b];
+        const a = String(arg == null ? '' : arg).trim();
+        act.params.scope = (meta && meta.hasParam && a) ? `${b}(${a})` : b;
+      }
+
       // #F:產牌限制併入合併清單 — 搜尋比對 + 點擊跳頁選中
       const glSelectedIdx = ref(-1);
       function genLimitMatchesSearch(gl) {
@@ -600,6 +700,13 @@
         adjacent_count:         { label: '相鄰計數', needsSubkey: true, subkeyPrefix: '' },
         cluster_max:            { label: '連通群大小', needsSubkey: true, subkeyPrefix: '' },
         board_symbol_total:     { label: '盤面符號總數' },
+        // v8.26 批7:補齊仍顯示英文的變數中文(只改顯示,英文 key/契約不動)
+        //   rightmost_reel_in_win 為既有漏補;其餘四個為批次 2 / G1 價值引擎新增變數。
+        rightmost_reel_in_win:  { label: '中獎最右輪' },
+        symbol_value:           { label: '符號攜帶值', needsSubkey: true, subkeyPrefix: '' },
+        cell_value:             { label: '格子值', needsSubkey: true, subkeyPrefix: '' },
+        respins_left:           { label: '剩餘 respin 局數' },
+        feature_value_total:    { label: '特色累計值' },
       };
 
       // 運算子 → 白話
@@ -659,44 +766,92 @@
         const meta = ACTION_BY_TYPE[action.atype];
         const p = action.params || {};
         const fb = meta ? meta.label : action.atype;
+        // v8.20 / G5:通用 scope 後綴 —— 任何動作若帶 scope param,一律附「範圍:…」白話。
+        //   scope 是動作層修飾子(不進 VAR_CATEGORIES);此處統一在 base 描述後綴。
+        const scopeSuffix = () => {
+          const sl = scopeLabel(p.scope);
+          return sl ? `（範圍：${sl}）` : '';
+        };
+        // v8.20 / G5:value param 若為 symbol_count.<SID> 動態值 → 譯白話;否則原樣。
+        const vLabel = (raw) => dynValueLabel(raw ?? '?');
+        let base;
         switch (action.atype) {
           case 'ADJUST_MULTIPLIER': {
             const op = { add: '加上', sub: '減去', mul: '乘以', set: '設為' }[p.op] || p.op || '?';
-            return `將當前倍數 ${op} ${p.value ?? '?'}`;
+            base = `將當前倍數 ${op} ${vLabel(p.value)}`;
+            break;
           }
           case 'UPDATE_GLOBAL': {
             const op = { add: '加上', sub: '減去', mul: '乘以', set: '設為' }[p.op] || p.op || '?';
-            return `全域變數 ${p.var || '?'} ${op} ${p.value ?? '?'}`;
+            base = `全域變數 ${p.var || '?'} ${op} ${vLabel(p.value)}`;
+            break;
           }
           case 'UPDATE_LOCAL': {
             const op = { add: '加上', sub: '減去', mul: '乘以', set: '設為' }[p.op] || p.op || '?';
-            return `本局變數 ${p.var || '?'} ${op} ${p.value ?? '?'}`;
+            base = `本局變數 ${p.var || '?'} ${op} ${vLabel(p.value)}`;
+            break;
           }
           case 'EMIT_EVENT':
-            return `廣播事件「${p.name || '?'}」` + (p.payload ? `(附資料)` : '');
+            base = `廣播事件「${p.name || '?'}」` + (p.payload ? `(附資料)` : '');
+            break;
           case 'SWITCH_MODE':
-            return `切換到「${p.target || '?'}」模式` + (p.inherit_globals ? '(繼承 globals)' : '');
+            base = `切換到「${p.target || '?'}」模式` + (p.inherit_globals ? '(繼承 globals)' : '');
+            break;
           case 'AWARD_FREE_SPIN':
-            return `給 ${p.count ?? '?'} 局免費 spin` + (p.mode ? `(${p.mode} 模式)` : '');
+            base = `給 ${p.count ?? '?'} 局免費 spin` + (p.mode ? `(${p.mode} 模式)` : '');
+            break;
           case 'HALT_RESOLUTION':
-            return '立即中斷本 trigger 後續所有規則';
+            base = '立即中斷本 trigger 後續所有規則';
+            break;
           case 'BOARD_FILL':
-            return `在盤面填補「${p.symbol_id || '?'}」` + (p.positions ? `到 ${p.positions}` : '到所有空格');
+            base = `在盤面填補「${p.symbol_id || '?'}」` + (p.positions ? `到 ${p.positions}` : '到所有空格');
+            break;
           case 'BOARD_TRANSFORM':
-            return `把盤面上的「${p.from_symbol || '?'}」全部轉成「${p.to_symbol || '?'}」`;
+            base = `把盤面上的「${p.from_symbol || '?'}」全部轉成「${p.to_symbol || '?'}」`;
+            break;
           case 'BOARD_DESTROY':
-            return p.symbol_id ? `銷毀盤面上所有「${p.symbol_id}」` : `銷毀位置 ${p.positions || '?'}`;
+            base = p.symbol_id ? `銷毀盤面上所有「${p.symbol_id}」` : `銷毀位置 ${p.positions || '?'}`;
+            break;
           case 'MOVE':
-            return `把 ${p.from || '?'} 的符號移到 ${p.to || '?'}`;
+            base = `把 ${p.from || '?'} 的符號移到 ${p.to || '?'}`;
+            break;
           case 'SWAP':
-            return `交換 ${p.a || '?'} 與 ${p.b || '?'} 的符號`;
+            base = `交換 ${p.a || '?'} 與 ${p.b || '?'} 的符號`;
+            break;
           case 'STICKY':
-            return `黏著 ${p.positions || '所有中獎符號'} ${p.duration ?? '?'} 局`;
+            base = `黏著 ${p.positions || '所有中獎符號'} ${p.duration ?? '?'} 局`;
+            break;
           case 'LOCK_REEL':
-            return `鎖定 reel ${p.reel ?? '?'} 不重抽,持續 ${p.duration ?? '?'} 局`;
+            base = `鎖定 reel ${p.reel ?? '?'} 不重抽,持續 ${p.duration ?? '?'} 局`;
+            break;
+          // ── v8.21 / G1 價值引擎:值動作(六枚) ──
+          case 'COLLECT':
+            base = `把${p.source ? `「${p.source}」的值` : '盤面上的值'}收集到「${p.target || '?'}」`;
+            break;
+          case 'PAY':
+            base = `直接派彩 ${vLabel(p.value)}` + (p.source ? `(依 ${p.source})` : '');
+            break;
+          case 'MULTIPLY_VALUE':
+            base = `把${p.target ? `「${p.target}」` : '範圍內的值'}乘以 ${vLabel(p.factor)}`;
+            break;
+          case 'REVIVE':
+            base = `回補 ${p.respins ?? '?'} 次回合` + (p.trigger ? `(觸發:${p.trigger})` : '');
+            break;
+          case 'COMPACT': {
+            const dir = { DOWN: '向下', UP: '向上', LEFT: '向左', RIGHT: '向右' }[p.direction] || p.direction || '?';
+            base = `盤面${dir}壓實(消除空隙、值格聚攏)`;
+            break;
+          }
+          case 'CONVERT':
+            base = `把「${p.from || '?'}」轉換成「${p.to || '?'}」` + (p.by_value === 'Y' ? '(依攜帶值決定結果)' : '');
+            break;
+          case 'END_FEATURE':
+            base = (p.when || '').trim() ? `當「${p.when}」時結束當前 feature` : '結束當前 feature';
+            break;
           default:
-            return fb;
+            base = fb;
         }
+        return base + scopeSuffix();
       }
 
       // 把整條規則翻成一段白話描述
@@ -719,13 +874,15 @@
           actDesc = `${humanizeAction(actions[0])},然後 ${humanizeAction(actions[1])}(還有 ${actions.length - 2} 個動作)`;
         }
         const scope = (rule.mode_scope && rule.mode_scope !== 'ALL') ? `(僅限 ${rule.mode_scope} 模式)` : '';
+        // v8.21 / G1:persistent 規則層修飾子 → 前綴標記(每回合重跑)
+        const persist = rule.persistent ? '〔每回合重跑〕' : '';
         if (condStr === null) {
-          return `當 ${trigLabel} 時${scope},則 ${actDesc}`;
+          return `${persist}當 ${trigLabel} 時${scope},則 ${actDesc}`;
         }
         if (condStr === '(無條件,直接觸發)') {
-          return `當 ${trigLabel} 時${scope},則 ${actDesc}`;
+          return `${persist}當 ${trigLabel} 時${scope},則 ${actDesc}`;
         }
-        return `當 ${trigLabel} 時${scope},若 ${condStr},則 ${actDesc}`;
+        return `${persist}當 ${trigLabel} 時${scope},若 ${condStr},則 ${actDesc}`;
       }
 
       // 棄牌規則的白話翻譯
@@ -1360,6 +1517,17 @@
         if (m.respin_stop_cond == null) m.respin_stop_cond = '';
         // v8.7 / R6 A-2:per-mode 賠付模型覆寫('' = 繼承全域)
         if (m.pay_type_override == null) m.pay_type_override = '';
+        // v8.22 / G3 Hold&Win 設定面(additive;makeMode 在 helpers 凍結,此處補預設)
+        if (m.collect_enabled == null) m.collect_enabled = false;          // 是否收集型
+        if (m.respin_reset_symbol == null) m.respin_reset_symbol = '';     // 落哪種符號重置 respin
+        if (m.grid_expand_in_collect == null) m.grid_expand_in_collect = false;  // 收集中盤面擴張
+        if (m.allow_persistent == null) m.allow_persistent = false;        // 允許 persistent 規則
+        // v8.24 / G5 生存結束:結構化結束謂詞(additive;與 respin_stop_cond 並存)
+        if (m.end_condition == null) m.end_condition = '';
+        // v8.28 / 缺口B:解鎖前提(模式名清單;[] = 無前提)。additive;makeMode 在 helpers 凍結。
+        if (!Array.isArray(m.unlock_requires)) m.unlock_requires = [];
+        // v8.28 / 缺口C:此模式的倍數複合覆寫('' = 沿用全域 mult_compose)。
+        if (m.mult_compose_override == null) m.mult_compose_override = '';
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1443,6 +1611,8 @@
         if ((m.trigger_pays || []).length > 0) return true;
         if ((m.choice_group || '') || Number(m.respin_base) > 0) return true;   // v8.5 R3
         if ((m.pay_type_override || '')) return true;                            // v8.7 R6 A-2
+        if (m.collect_enabled || (m.respin_reset_symbol || '')
+            || m.grid_expand_in_collect || m.allow_persistent) return true;      // v8.22 G3
         return false;
       }
       // 玩法設定收合摘要:精要描述
@@ -1460,6 +1630,11 @@
         if (m.choice_group) parts.push('擇一組 ' + m.choice_group);
         if (Number(m.respin_base) > 0) parts.push('Respin ' + m.respin_base);
         if (m.pay_type_override) parts.push('賠付 ' + m.pay_type_override);   // v8.7 R6 A-2
+        // v8.22 / G3 Hold&Win 設定面
+        if (m.collect_enabled) parts.push('收集型');
+        if (m.respin_reset_symbol) parts.push('重置符 ' + m.respin_reset_symbol);
+        if (m.grid_expand_in_collect) parts.push('收集擴張');
+        if (m.allow_persistent) parts.push('允許 persistent');
         return parts.join(' · ');
       }
       // v8.0:關聯 Bonus 子卡已移除(bonus 併入 mode 玩法種類);modeBn* helpers 一併移除。
@@ -3474,7 +3649,9 @@
       function _defaultGamble() {
         return { enabled: false, gamble_type: 'CARD_COLOR', type_desc: '',
                  win_mult_options: '2', max_rounds: 5, cap_mult: 0,
-                 applies_to: 'ALL_WINS', applies_limit: 0, collect_anytime: true, notes: '' };
+                 applies_to: 'ALL_WINS', applies_limit: 0, collect_anytime: true,
+                 stake_type: 'WIN', reward_type: 'MULTIPLY_WIN', gamble_trigger: '',
+                 notes: '' };
       }
       function _loadGamble() {
         try {
@@ -3491,6 +3668,35 @@
         { value: 'WHEEL',      label: '轉輪比倍' },
         { value: 'CUSTOM',     label: '自訂(於補充描述)' },
       ];
+
+      // ── v8.25 / G4:獎池級距(★機主授權新 LS key slotplanner.aconfig.jackpot.v1)──
+      //   與 13_Jackpots(jackpots.v1,個別彩池定義)正交:此為 Grand/Major/Minor/Mini 級距 + 觸發方式。
+      //   只描述級距與觸發方式,不模擬命中率。
+      const JACKPOT_LS_KEY = 'slotplanner.aconfig.jackpot.v1';
+      function _defaultJackpot() {
+        return { tiers: [], trigger: '' };   // trigger: '' | PROBABILITY | COLLECT_METER | TOKEN_COUNT
+      }
+      function _loadJackpot() {
+        try {
+          const raw = localStorage.getItem(JACKPOT_LS_KEY);
+          if (!raw) return _defaultJackpot();
+          const o = { ..._defaultJackpot(), ...JSON.parse(raw) };
+          if (!Array.isArray(o.tiers)) o.tiers = [];
+          return o;
+        } catch (e) { return _defaultJackpot(); }
+      }
+      const jackpotCfg = reactive(_loadJackpot());
+      const JACKPOT_TRIGGER_OPTIONS = [
+        { value: '',              label: '（未指定）' },
+        { value: 'PROBABILITY',   label: '機率觸發(PROBABILITY)' },
+        { value: 'COLLECT_METER', label: '集滿進度(COLLECT_METER)' },
+        { value: 'TOKEN_COUNT',   label: '收滿 N 枚(TOKEN_COUNT)' },
+      ];
+      function addJackpotTier() {
+        jackpotCfg.tiers.push({ tier: String(jackpotCfg.tiers.length + 1), label: '', value: 0, notes: '' });
+      }
+      function removeJackpotTier(idx) { jackpotCfg.tiers.splice(idx, 1); }
+
       function addBuyFeature() {
         const usedModes = new Set(betConfig.buy_features.map(bf => bf.target_mode));
         const unusedMode = modes.find(m => m.mode && !usedModes.has(m.mode));
@@ -3565,7 +3771,10 @@
       function isBonusKind(m) { return !!(m && m.mode_kind && m.mode_kind !== 'SPIN'); }
       function addModeItem(m) {
         _ensureModeGameplayFields(m);
-        m.items.push(makeBonusItem('', m.mode_kind === 'COLLECTION' ? 0 : 10, 100));
+        const it = makeBonusItem('', m.mode_kind === 'COLLECTION' ? 0 : 10, 100);
+        it.item_role = '';   // v8.22 / G3:角色標記(makeBonusItem 在 helpers 凍結,此處補;'' = 未指定)
+        it.link_mode = '';   // v8.27 / 批8:item→模式連結('' = 無連結)
+        m.items.push(it);
       }
       function removeModeItem(m, idx) { if (Array.isArray(m.items)) m.items.splice(idx, 1); }
       function modeItemJpOptions(m, it) {
@@ -3573,6 +3782,10 @@
           (m.items || []).filter(x => x !== it && x.link_jackpot).map(x => x.link_jackpot)
         );
         return jackpots.filter(j => !usedByOthers.has(j.jp_id) || j.jp_id === it.link_jackpot);
+      }
+      // v8.27 / 批8:item→模式連結的可選模式(排除自身;寬鬆,可任填)
+      function modeItemModeOptions(m) {
+        return modes.filter(x => x && x.mode && x.mode !== (m && m.mode)).map(x => x.mode);
       }
       function modeItemPct(m, idx) {
         if (m.mode_kind === 'COLLECTION') return null;
@@ -4498,6 +4711,17 @@
           members_keep_individual: g.members_keep_individual !== false,   // 缺/非 false → true
           mode_scope: (g.mode_scope != null ? String(g.mode_scope).trim() : ''),
           pay_3x: num(g.pay_3x), pay_4x: num(g.pay_4x), pay_5x: num(g.pay_5x), pay_6x: num(g.pay_6x),
+          pay_by_mode: (function (pbm) {   // P0-3 進階:per-mode 費率覆寫 { mode: {pay_3x..6x} }
+            const o = {};
+            if (pbm && typeof pbm === 'object') {
+              for (const mk of Object.keys(pbm)) {
+                const k = String(mk).trim(); if (!k) continue;
+                const s = pbm[mk] || {};
+                o[k] = { pay_3x: num(s.pay_3x), pay_4x: num(s.pay_4x), pay_5x: num(s.pay_5x), pay_6x: num(s.pay_6x) };
+              }
+            }
+            return o;
+          })(g.pay_by_mode),
           notes: (g.notes != null ? String(g.notes) : ''),
         };
       }
@@ -4589,6 +4813,17 @@
       }
       function scopeHasMode(o, s) { return scopeStrHas(o && o.mode_scope, s); }
       function toggleScopeMode(o, s) { if (o) o.mode_scope = toggleScopeStr(o.mode_scope, s); }
+      // v8.28 / 缺口B:模式解鎖前提多選(unlock_requires 為陣列;沿用 scope 多選晶片手感)。
+      function modeUnlockHas(m, name) {
+        return !!(m && Array.isArray(m.unlock_requires) && m.unlock_requires.includes(name));
+      }
+      function modeUnlockToggle(m, name) {
+        if (!m) return;
+        if (!Array.isArray(m.unlock_requires)) m.unlock_requires = [];
+        const i = m.unlock_requires.indexOf(name);
+        if (i >= 0) m.unlock_requires.splice(i, 1);
+        else m.unlock_requires.push(name);
+      }
 
       // v6.2 硬約束#2:套用模式多選(mode_scope='ALL' 或逗號分隔;py 端 mode_in_scope 已支援)
       function toggleConstraintMode(c, s) {
@@ -6513,6 +6748,8 @@
         if (r && typeof r === 'object') {
           if (r.random_group == null) r.random_group = '';
           if (r.random_weight == null || isNaN(Number(r.random_weight))) r.random_weight = 100;
+          // v8.28 / 缺口A:補充判斷說明(自由文字;與 description 分離)。makeRule 在 helpers 凍結,此處補預設。
+          if (r.notes == null) r.notes = '';
         }
         return r;
       }
@@ -7076,8 +7313,10 @@
 
       // 把 ACTION_CATALOG 按 type 開頭/語意分成三組,讓下拉的 optgroup 更好讀
       const actionsByGroup = computed(() => {
-        const numericTypes = new Set(['ADJUST_MULTIPLIER', 'UPDATE_GLOBAL', 'UPDATE_LOCAL']);
-        const flowTypes    = new Set(['EMIT_EVENT', 'SWITCH_MODE', 'AWARD_FREE_SPIN', 'HALT_RESOLUTION']);
+        // v8.21 / G1:值動作(COLLECT/PAY/MULTIPLY_VALUE/REVIVE/COMPACT/CONVERT)歸「數值/價值」組。
+        const numericTypes = new Set(['ADJUST_MULTIPLIER', 'UPDATE_GLOBAL', 'UPDATE_LOCAL',
+          'COLLECT', 'PAY', 'MULTIPLY_VALUE', 'REVIVE', 'COMPACT', 'CONVERT']);
+        const flowTypes    = new Set(['EMIT_EVENT', 'SWITCH_MODE', 'AWARD_FREE_SPIN', 'HALT_RESOLUTION', 'END_FEATURE']);
         // v8.9.1 bug 修復:此處原為硬編碼 boardTypes 白名單,v8.4 七枚新 action
         //   (EXPAND_REEL/NUDGE/WALK/REVEAL_AS/SPLIT/DESTROY_ADJACENT/GROW_BOARD)不在名單
         //   → 動作下拉完全選不到、UI 無法新增。改為「非 numeric/flow 一律歸盤面/圖示組」,
@@ -7480,9 +7719,31 @@
               else if (k === 'Applies_To')       g.applies_to = asStr(v).trim().toUpperCase() || 'ALL_WINS';
               else if (k === 'Applies_Limit')    g.applies_limit = asNum(v, 0);
               else if (k === 'Collect_Anytime')  g.collect_anytime = asBool(v);
+              // v8.23 / G2:非現金賭注/獎勵(缺 → 預設,向後相容)
+              else if (k === 'Stake_Type')       g.stake_type = asStr(v).trim().toUpperCase() || 'WIN';
+              else if (k === 'Reward_Type')      g.reward_type = asStr(v).trim().toUpperCase() || 'MULTIPLY_WIN';
+              else if (k === 'Trigger')          g.gamble_trigger = asStr(v).trim();
               else if (k === 'Notes')            g.notes = asStr(v);
             });
             Object.assign(gamble, g);
+          }
+
+          // ── v8.25 / G4:19_Jackpot_Tiers(獎池級距 + 觸發方式)匯入 ──
+          const ws19 = wb.getWorksheet('19_Jackpot_Tiers');
+          if (ws19) {
+            const jc = _defaultJackpot();
+            ws19.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const tier  = asStr(row.getCell(1).value).trim();
+              const label = asStr(row.getCell(2).value).trim();
+              const trig  = asStr(row.getCell(4).value).trim().toUpperCase();
+              if (trig && !jc.trigger) jc.trigger = trig;   // 第一個非空觸發為準
+              if (!tier && !label) return;                  // 純觸發承載列 → 不計級距
+              jc.tiers.push({ tier, label, value: asNum(row.getCell(3).value, 0),
+                              notes: asStr(row.getCell(5).value).trim() });
+            });
+            jackpotCfg.tiers = jc.tiers;
+            jackpotCfg.trigger = jc.trigger;
           }
 
           // ── v8.0:舊 A.xlsx 的 17_Bonus_Games 先解析成暫存,待 11/11c 匯入 modes 後再遷移進 modes。
@@ -8017,6 +8278,33 @@
               });
               symbolGroups.splice(0, symbolGroups.length, ...ng);
               warnings.push(`03d_Symbol_Groups:載入 ${ng.length} 個符號家族`);
+            }
+          }
+
+          // ── 03e_Symbol_Group_Pays ── P0-3 進階:家族 per-mode 費率覆寫(additive)。
+          //   併入已載入家族的 pay_by_mode(以 Group_ID 對應;缺 sheet → 略過)。
+          const ws03e = wb.getWorksheet('03e_Symbol_Group_Pays');
+          if (ws03e && symbolGroups.length) {
+            const hr = ws03e.getRow(1); const HE = {};
+            hr.eachCell((cell, col) => { HE[asStr(cell.value).trim()] = col; });
+            const byId = {};
+            symbolGroups.forEach(g0 => { if (g0.group_id) { byId[g0.group_id] = g0; g0.pay_by_mode = {}; } });
+            let gpN = 0;
+            if (HE['Group_ID'] && HE['Mode']) {
+              ws03e.eachRow((row, idx) => {
+                if (idx === 1) return;
+                const gid = asStr(row.getCell(HE['Group_ID']).value).trim();
+                const mode = asStr(row.getCell(HE['Mode']).value).trim();
+                if (!gid || !mode || !byId[gid]) return;
+                const p3 = asNum(HE['Pay_3x'] ? row.getCell(HE['Pay_3x']).value : 0, 0);
+                const p4 = asNum(HE['Pay_4x'] ? row.getCell(HE['Pay_4x']).value : 0, 0);
+                const p5 = asNum(HE['Pay_5x'] ? row.getCell(HE['Pay_5x']).value : 0, 0);
+                const p6 = asNum(HE['Pay_6x'] ? row.getCell(HE['Pay_6x']).value : 0, 0);
+                if (!(p3 || p4 || p5 || p6)) return;
+                byId[gid].pay_by_mode[mode] = { pay_3x: p3, pay_4x: p4, pay_5x: p5, pay_6x: p6 };
+                gpN++;
+              });
+              if (gpN) warnings.push(`03e_Symbol_Group_Pays:載入 ${gpN} 筆家族模式覆寫`);
             }
           }
 
@@ -8917,6 +9205,7 @@
           case '倍數系統': return () => saveMultipliers(JSON.parse(JSON.stringify(multipliers)));
           case '金幣面額': return () => saveCoinValues(JSON.parse(JSON.stringify(coinValues)));
           case 'JP 定義':  return () => saveJackpots(jackpots.map(j => ({ ...j })));
+          case '獎池級距': return () => { try { localStorage.setItem(JACKPOT_LS_KEY, JSON.stringify({ tiers: jackpotCfg.tiers.map(t => ({ ...t })), trigger: jackpotCfg.trigger || '' })); } catch (e) {} };
           default: return null;
         }
       }
@@ -8964,6 +9253,7 @@
       watch(rules,        () => scheduleSave('腳本規則'), { deep: true });
       watch(betConfig,    () => scheduleSave('投注結構'), { deep: true });
       watch(gamble,       () => scheduleSave('比倍'),     { deep: true });   // v8.6 R5
+      watch(jackpotCfg,   () => scheduleSave('獎池級距'), { deep: true });   // v8.25 G4
       watch(reelStrips,   () => scheduleSave('真實輪帶'), { deep: true });
       watch(multipliers,  () => scheduleSave('倍數系統'), { deep: true });
       watch(coinValues,   () => scheduleSave('金幣面額'), { deep: true });
@@ -10202,6 +10492,7 @@
         modes, modeNames, duplicateNames, modesDebugJson,
         addMode, removeMode, renameMode, modeCardKey, passStatus,
         scopeStrHas, toggleScopeStr, scopeHasMode, toggleScopeMode,
+        modeUnlockHas, modeUnlockToggle,
         // v8.14 批3 #3:新增模式彈窗
         modeAddDlg, openAddModeDlg, modeAddDlgPick, modeAddDlgNameTaken,
         modeAddDlgTpVisible, modeAddDlgTpAdd, modeAddDlgTpRemove, confirmAddModeDlg,
@@ -10347,6 +10638,8 @@
         modeGpHasContent, modeGpSummary,
         // v8.6 / R5:商業層
         gamble, GAMBLE_TYPE_OPTIONS, BF_KIND_OPTIONS, addRtpVariant, removeRtpVariant,
+        // v8.25 / G4:獎池級距
+        jackpotCfg, JACKPOT_TRIGGER_OPTIONS, addJackpotTier, removeJackpotTier,
         cellAttrs, CELL_ATTR_OPTIONS, addCellAttr, removeCellAttr,   // v8.8 R4 B-6
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
@@ -10364,6 +10657,9 @@
         // v7.14:mode 玩法種類 + mode-owned bonus 獎項
         MODE_KIND_OPTIONS, MODE_KIND_LABEL, isBonusKind,
         addModeItem, removeModeItem, modeItemJpOptions, modeItemPct, modeExpected,
+        modeItemModeOptions,   // v8.27 批8:item→模式連結下拉
+        // v8.22 / G3:獎項角色 + Hold&Win 設定面
+        MODE_ITEM_ROLES, itemRoleLabel,
         modeWheelTargets, modeKindSummary,
         tplLoadPreviewOpen, tplLoadPreviewData, showTemplateDiff, closeTemplateDiff,
         confirmTemplateDiffLoad,
@@ -10425,6 +10721,9 @@
         dlgAddRow, dlgRemoveRow, dlgChangeCat, dlgChangeActionType, dlgStepNext, confirmRuleDlg,
         // ── v8.15 批2:或分組 / 中文化 / 產牌限制入列 ──
         condRowGroups, opLabel, varCatLabel, enumOptLabel,
+        // ── v8.20 / G5:範圍謂詞 scope(動作層修飾子)+ symbol_count 動態值 ──
+        SCOPE_CATALOG, scopeLabel, dynValueLabel,
+        scopeBaseOf, scopeArgOf, setScope,
         glSelectedIdx, genListSub, selectGenLimitFromList,
         rulesSection, setRulesSection,
         rulesNavExpanded, onRulesParentClick, gotoRulesSub, onRailReopen,

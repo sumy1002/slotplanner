@@ -45,6 +45,7 @@ from core.schemas import (
     PayType, WaysDirection,
     ConfigValidationError,
     RTPVariant, GambleConfig, CellAttr,
+    JackpotTier,
 )
 from core.condition_parser import parse_condition, parse_actions
 
@@ -156,6 +157,14 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # P0-3:03d_Symbol_Groups(符號家族 / ANY BAR 混合賠付)。選用,舊檔 → []。
     cfg.symbol_groups = _parse_symbol_groups(sheets.get('03d_Symbol_Groups'))
+    # P0-3(進階):03e_Symbol_Group_Pays(家族 per-mode 費率覆寫)。選用,舊檔 → 沿用 base。
+    _gp_mode = _parse_symbol_group_pays(sheets.get('03e_Symbol_Group_Pays'))
+    if _gp_mode:
+        for _g in cfg.symbol_groups:
+            _g.pay_by_mode = _gp_mode.get(_g.group_id, {})
+
+    # v8.25 / G4:19_Jackpot_Tiers(獎池級距 + 觸發方式)。選用,舊檔 → []。
+    cfg.jackpot_tiers, cfg.jackpot_trigger = _parse_jackpot_tiers(sheets.get('19_Jackpot_Tiers'))
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -209,6 +218,11 @@ def _parse_global(df: pd.DataFrame) -> GlobalConfig:
             dead_spin_buckets=_parse_csv_ints(kv.get("dead_spin_buckets", "2,3,4,5")),
             # v8.7 / R6 A-4:雙向 WAYS 去重宣告(缺 key → True;規格描述,引擎不消費)
             ways_both_dedup=_to_bool(kv.get("ways_both_dedup", True)) if "ways_both_dedup" in kv else True,
+            # v8.20 / G 界-3:結構化最大贏分封頂(缺 key/空/NaN → 0.0=沿用 max_win 字串;
+            #   規格描述,引擎不消費)。表頭名 .get() 讀取,守 additive 契約(守則 #81)。
+            max_win_cap=_parse_max_win_cap(kv.get("max_win_cap")),
+            # v8.28 / 缺口C:跨來源倍數複合方式(缺 key/空 → MUL;規格描述,引擎不消費,交下游)
+            mult_compose=(str(kv.get("mult_compose", "MUL")).strip().upper() or "MUL"),
         )
     except ValueError as e:
         raise ConfigValidationError(sheet, f"型別解析失敗: {e}")
@@ -517,6 +531,9 @@ _BET_KV_KEYS = frozenset((
 ))
 _VALID_BF_KINDS = ("DIRECT", "BOOST_RATE", "SUPER")
 _VALID_GAMBLE_TYPES = ("CARD_COLOR", "CARD_SUIT", "LADDER", "WHEEL", "CUSTOM")
+# v8.23 / G2:比倍非現金賭注/獎勵合法值(嚴格;Trigger 寬鬆不列此)
+_VALID_STAKE_TYPES = ("WIN", "FREE_SPINS", "BONUS_ENTRY", "BONUS_LEVEL")
+_VALID_REWARD_TYPES = ("MULTIPLY_WIN", "ADD_SPINS", "ENTER_BONUS", "UPGRADE_LEVEL")
 
 
 def _parse_rtp_variants(df) -> list:
@@ -590,6 +607,19 @@ def _parse_gamble(df) -> "GambleConfig":
     ca = kv.get("Collect_Anytime")
     g.collect_anytime = True if ca is None or (isinstance(ca, float) and pd.isna(ca)) else _b(ca)
     g.notes = _to_str(kv.get("Notes"))
+    # v8.23 / G2 比倍補強:非現金賭注/獎勵(缺欄 → 預設,向後相容)。
+    #   Stake_Type / Reward_Type 嚴格(固定枚舉,下游分支需靠它);Trigger 寬鬆(時機自由描述)。
+    st_raw = _to_str(kv.get("Stake_Type")).strip().upper()
+    g.stake_type = st_raw or "WIN"
+    if g.stake_type not in _VALID_STAKE_TYPES:
+        raise ConfigValidationError(
+            sheet, f"Stake_Type '{st_raw}' 非合法值({'/'.join(_VALID_STAKE_TYPES)} 或留空)")
+    rt_raw = _to_str(kv.get("Reward_Type")).strip().upper()
+    g.reward_type = rt_raw or "MULTIPLY_WIN"
+    if g.reward_type not in _VALID_REWARD_TYPES:
+        raise ConfigValidationError(
+            sheet, f"Reward_Type '{rt_raw}' 非合法值({'/'.join(_VALID_REWARD_TYPES)} 或留空)")
+    g.gamble_trigger = _to_str(kv.get("Trigger")).strip()
     return g
 
 
@@ -908,6 +938,77 @@ def _parse_symbol_groups(df) -> list["SymbolGroup"]:
             notes=_to_str(r.get("Notes")).strip(),
         ))
     return out
+
+
+def _parse_symbol_group_pays(df) -> dict:
+    """P0-3(進階):03e_Symbol_Group_Pays（家族 per-mode 費率覆寫）。
+
+    additive:sheet 不存在 → {}。回傳 { group_id: { mode: {count: pay} } }。
+    by-name 讀;Group_ID / Mode 任一空則略過該列;pay>0 才收。純描述,引擎不消費。
+    """
+    out: dict = {}
+    if df is None:
+        return out
+    for _idx, r in df.iterrows():
+        gid = _to_str(r.get("Group_ID")).strip()
+        mode = _to_str(r.get("Mode")).strip()
+        if not gid or not mode:
+            continue
+        pt: dict[int, float] = {}
+        for n in (3, 4, 5, 6):
+            v = r.get(f"Pay_{n}x")
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                fv = 0.0
+            if pd.notna(fv) and fv > 0:
+                pt[n] = fv
+        if pt:
+            out.setdefault(gid, {})[mode] = pt
+    return out
+
+
+# v8.25 / G4:獎池觸發合法值(嚴格)
+_VALID_JACKPOT_TRIGGERS = ("PROBABILITY", "COLLECT_METER", "TOKEN_COUNT")
+
+
+def _parse_jackpot_tiers(df) -> tuple[list["JackpotTier"], str]:
+    """v8.25 / G4:19_Jackpot_Tiers(獎池級距 + 觸發方式)。
+
+    回傳 (tiers, trigger)。additive 契約:sheet 不存在 → ([], "")。
+    tidy 列:Tier | Label | Value | Jackpot_Trigger | Notes。
+    Tier 與 Label 皆空的列略過。Jackpot_Trigger 由第一個非空值決定(嚴格三選一);
+    純描述,只描述級距與觸發方式,不模擬命中率。引擎不消費。
+    """
+    tiers: list[JackpotTier] = []
+    trigger = ""
+    if df is None:
+        return tiers, trigger
+    sheet = "19_Jackpot_Tiers"
+    for idx, r in df.iterrows():
+        tier = _to_str(r.get("Tier")).strip()
+        label = _to_str(r.get("Label")).strip()
+        # 觸發:任一列的 Jackpot_Trigger 有值即採(以第一個為準)
+        if not trigger:
+            tg = _to_str(r.get("Jackpot_Trigger")).strip().upper()
+            if tg:
+                if tg not in _VALID_JACKPOT_TRIGGERS:
+                    raise ConfigValidationError(
+                        sheet,
+                        f"Jackpot_Trigger '{tg}' 非合法值({'/'.join(_VALID_JACKPOT_TRIGGERS)} 或留空)",
+                        row=idx + 2)
+                trigger = tg
+        if not tier and not label:
+            continue
+        try:
+            value = float(r.get("Value", 0) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        tiers.append(JackpotTier(
+            tier=tier, label=label, value=value,
+            notes=_to_str(r.get("Notes")).strip(),
+        ))
+    return tiers, trigger
 
 
 def _parse_reel_weights(
@@ -1331,6 +1432,10 @@ def _parse_puzzle_rules(df: pd.DataFrame) -> list[PuzzleRule]:
                 # v8.4 / R2 P5:隨機擇一組(缺欄/空 → 預設;安全降級)
                 random_group=_to_str(r.get("Random_Group")).strip(),
                 random_weight=float(r.get("Random_Weight")) if pd.notna(r.get("Random_Weight")) else 100.0,
+                # v8.21 / G1:persistent 規則層修飾子(缺欄/空 → False;安全降級,純描述引擎不消費)
+                persistent=_to_bool(r.get("Persistent")),
+                # v8.28 / 缺口A:補充判斷說明(自由文字,給前端/下游;缺欄 → "";純描述引擎不消費)
+                notes=_to_str(r.get("Notes")).strip(),
             ))
             seen_priorities[(trigger, priority)].append(rule_id)
         except ConfigValidationError:
@@ -1462,6 +1567,17 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 respin_reset_on=respin_reset_on,
                 respin_stop_cond=respin_stop_cond,
                 pay_type_override=pay_type_override,
+                # v8.22 / G3 Hold&Win 設定面(by-name .get;缺欄 → 預設,安全降級;純描述引擎不消費)
+                collect_enabled=_to_bool(r.get("Collect_Enabled")),
+                respin_reset_symbol=_to_str(r.get("Respin_Reset_Symbol")).strip(),
+                grid_expand_in_collect=_to_bool(r.get("Grid_Expand_In_Collect")),
+                allow_persistent=_to_bool(r.get("Allow_Persistent")),
+                # v8.24 / G5 生存結束:結構化結束謂詞(寬鬆,缺欄 → "";純描述引擎不消費)
+                end_condition=_to_str(r.get("End_Condition")).strip(),
+                # v8.28 / 缺口B:解鎖前提(逗號分隔模式名;缺欄/空 → [];by-name .get;純描述引擎不消費)
+                unlock_requires=[s.strip() for s in _to_str(r.get("Unlock_Requires")).split(",") if s.strip()],
+                # v8.28 / 缺口C:此模式的倍數複合覆寫(缺欄/空 → "";純描述引擎不消費)
+                mult_compose_override=_to_str(r.get("Mult_Compose_Override")).strip().upper(),
             )
         except ConfigValidationError:
             raise
@@ -1529,6 +1645,10 @@ def _parse_mode_items(df, modes: dict) -> None:
                 weight=float(r.get("Item_Weight", 100) or 0),
                 is_end=_to_bool(r.get("Item_Is_End")),
                 link_jackpot=_to_str(r.get("Item_Link_JP")),
+                # v8.22 / G3:Item_Role(寬鬆,缺欄/空 → "";純描述,引擎不消費)
+                item_role=_to_str(r.get("Item_Role")).strip().upper(),
+                # v8.27 / 批8:Item_Link_Mode(寬鬆,缺欄/空 → "";item→模式連結,引擎不消費)
+                link_mode=_to_str(r.get("Item_Link_Mode")).strip(),
             ))
         except (ValueError, TypeError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
@@ -1752,6 +1872,25 @@ def _to_str(v: Any, default: str = "") -> str:
     if s.lower() == "nan":
         return default
     return s
+
+
+def _parse_max_win_cap(v: Any) -> float:
+    """v8.20 / G 界-3:結構化最大贏分封頂解析。
+    語意:0.0 = 沿用 disclosure.max_win 字串(不另封頂)、-1 = 明示無上限、>0 = 硬封頂值。
+    安全降級:缺欄 / 空白 / NaN / 無法解析 → 0.0(沿用字串,與舊檔行為一致)。
+    負值(除 -1 外)一律歸 -1(無上限);純規格描述,引擎不消費。"""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return 0.0
+    s = str(v).strip()
+    if not s or s.lower() == "nan":
+        return 0.0
+    try:
+        f = float(s)
+    except ValueError:
+        return 0.0
+    if f < 0:
+        return -1.0
+    return f
 
 
 def _parse_csv_floats(s: Any) -> list[float]:

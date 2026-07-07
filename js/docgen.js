@@ -121,10 +121,49 @@
     // v8.4 / R2 P2:描述型 action(執行語意由下游模擬工具實作)
     EXPAND_REEL: '擴展整輪', NUDGE: '推移', WALK: '走位', REVEAL_AS: '揭示',
     SPLIT: '分裂', DESTROY_ADJACENT: '相鄰消除', GROW_BOARD: '盤面成長',
+    // v8.21 / G1 價值引擎:值動作(六枚;純描述,執行歸下游)
+    COLLECT: '收集值', PAY: '直接派彩', MULTIPLY_VALUE: '值乘算',
+    REVIVE: '回補回合', COMPACT: '盤面壓實', CONVERT: '值/型態轉換',
+    // v8.24 / G5 生存結束:流程控制動作
+    END_FEATURE: '結束 feature',
+    // v8.28 / 缺口A:物件初始放置(新一局將物件置於指定格)
+    SPAWN: '放置物件',
   };
   // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
   function _mdCell(v) {
     return String(v == null ? '' : v).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+  }
+  // v8.20 / G5:範圍謂詞 scope 中文對照(docgen 獨立 IIFE,持有唯讀 map;未知 → 原樣)。
+  const _SCOPE_ZH = {
+    all_visible: '全部可見格', adjacent_8: '八方相鄰', adjacent_4: '四方相鄰',
+    same_column: '同一直行', same_row: '同一橫列', column_above: '同行上方', edge: '邊緣格',
+    range: '範圍區間', random_cells: '隨機取格',
+  };
+  function _scopeDesc(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    const m = s.match(/^(\w+)\s*\((.*)\)\s*$/);
+    const base = m ? m[1] : s;
+    const arg = m ? m[2].trim() : '';
+    const zh = _SCOPE_ZH[base];
+    if (!zh) return s;
+    return (arg && (base === 'range' || base === 'random_cells')) ? `${zh}（${arg}）` : zh;
+  }
+  // v8.28 / 缺口A:走位方向中文對照(WALK.dir;未知 → 原樣)。
+  const _DIR_ZH = { UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右', PATH: '自訂路徑' };
+  // v8.20 / G5:symbol_count.<SID> 動態值 → 白話(餵乘數用);非此形式原樣。
+  //   v8.21 / G1:擴充值變數(symbol_value/cell_value/feature_value_total/respins_left)。
+  function _dynVal(v) {
+    const s = String(v == null ? '' : v).trim();
+    let m = s.match(/^symbol_count\.([A-Za-z0-9_]+)$/);
+    if (m) return `「${m[1]}」的盤面數量`;
+    m = s.match(/^symbol_value\.([A-Za-z0-9_]+)$/);
+    if (m) return `「${m[1]}」的攜帶值`;
+    m = s.match(/^cell_value\.([0-9]+,[0-9]+)$/);
+    if (m) return `格(${m[1]})的值`;
+    if (s === 'feature_value_total') return '本 feature 累計值';
+    if (s === 'respins_left') return '剩餘回合數';
+    return s;
   }
   // 單一 action → 「標籤(k=v, k=v)」;params 物件淺列印,未知型別安全
   // v8.4 勘誤:前端規則的 action 型別欄位為 atype(helpers.makeAction);
@@ -134,10 +173,24 @@
     const atype = a.atype || a.type || '';
     const label = _RULE_ACTION_LABEL[atype] || atype || '?';
     const p = (a.params && typeof a.params === 'object') ? a.params : {};
+    // v8.20 / G5:scope 抽離單獨後綴;value 若為 symbol_count.<SID> 動態值則譯白話。
+    const scopeStr = _scopeDesc(p.scope);
     const kv = Object.entries(p)
-      .filter(([, v]) => v !== '' && v != null)
-      .map(([k, v]) => `${k}=${Array.isArray(v) ? JSON.stringify(v) : v}`);
-    return kv.length ? `${label}（${kv.join(', ')}）` : label;
+      .filter(([k, v]) => v !== '' && v != null && k !== 'scope')
+      .map(([k, v]) => {
+        // v8.21 / G1:value / factor 皆可能為動態值(symbol_count / symbol_value / feature_value_total …)
+        // v8.28 / 缺口A:cell → 格(r,c);dir → 方向中文。
+        if (k === 'cell') return `位置=格(${v})`;
+        let vv;
+        if (k === 'value' || k === 'factor') vv = _dynVal(v);
+        else if (k === 'dir') vv = _DIR_ZH[String(v).toUpperCase()] || v;
+        else if (Array.isArray(v)) vv = JSON.stringify(v);
+        else vv = v;
+        return `${k}=${vv}`;
+      });
+    let out = kv.length ? `${label}（${kv.join(', ')}）` : label;
+    if (scopeStr) out += `〔範圍：${scopeStr}〕`;
+    return out;
   }
   // v8.2 / F-20:輪帶符號分佈摘要 —「SYM×n」依出現數降冪,超過 10 種截斷
   function _stripDistSummary(arr) {
@@ -166,6 +219,7 @@
     const coinValues  = _readLS('slotplanner.aconfig.coinvalues.v1', {});
     const genLimits   = _readLS('slotplanner.aconfig.genLimits.v1', []);    // v7.11
     const gamble      = _readLS('slotplanner.aconfig.gamble.v1', {});       // v8.6 R5:比倍(唯讀)
+    const jackpotTiers= _readLS('slotplanner.aconfig.jackpot.v1', {});      // v8.25 G4:獎池級距(唯讀)
     const cellAttrs   = _readLS('slotplanner.aconfig.cellattrs.v1', []);    // v8.8 R4:格子屬性(唯讀)
     const symbolGroups = _readLS('slotplanner.aconfig.symbolgroups.v1', []); // P0-3:符號家族(唯讀)
     // v8.2 / 缺失清單 F-19/F-20:機制文件補印 特色規則 / 棄牌 / 輪帶 / 格數分佈
@@ -216,6 +270,7 @@
       jackpots: Array.isArray(jackpots) ? jackpots : [],
       betConfig: (betConfig && typeof betConfig === 'object') ? betConfig : {},
       gamble: (gamble && typeof gamble === 'object') ? gamble : {},          // v8.6 R5
+      jackpotTiers: (jackpotTiers && typeof jackpotTiers === 'object') ? jackpotTiers : {},  // v8.25 G4
       cellAttrs: Array.isArray(cellAttrs) ? cellAttrs : [],                   // v8.8 R4
       symbolGroups: Array.isArray(symbolGroups) ? symbolGroups : [],         // P0-3
       multipliers: (multipliers && typeof multipliers === 'object') ? multipliers : {},
@@ -323,6 +378,24 @@
   function _modeKindDesc(md) {
     const k = String((md && md.mode_kind) || 'SPIN').toUpperCase();
     return _MODE_KIND_LABEL[k] ? (_MODE_KIND_LABEL[k] + '（' + k + '）') : k;
+  }
+  // v8.22 / G3:獎項角色 Item_Role 白話(docgen 獨立 IIFE 唯讀 map;未知/空 → '—')
+  const _ITEM_ROLE_LABEL = { COIN: '金幣值', COLLECTOR: '收集器', MULTIPLIER: '倍數', BOOST: '增益', JACKPOT: '彩池' };
+  function _itemRoleDesc(v) {
+    const s = String(v == null ? '' : v).trim().toUpperCase();
+    if (!s) return '—';
+    return _ITEM_ROLE_LABEL[s] || s;
+  }
+  // v8.22 / G3:Hold&Win 收集設定摘要(有設定才回字串;皆無 → '')
+  function _modeCollectDesc(md) {
+    if (!md) return '';
+    const parts = [];
+    if (md.collect_enabled) parts.push('收集型');
+    const rs = (md.respin_reset_symbol || '').trim();
+    if (rs) parts.push(`落「${rs}」重置回合`);
+    if (md.grid_expand_in_collect) parts.push('收集中盤面擴張');
+    if (md.allow_persistent) parts.push('允許 persistent 規則');
+    return parts.join(' · ');
   }
   // 某符號的「有效」倍數疊加方式:符號自帶 mult_stack_mode 優先,否則用文件層 meta.mult_stack_mode。
   function _symStackMode(s, meta) {
@@ -666,6 +739,13 @@
           const note = String(d.max_win_note ?? '').trim() ? `（${d.max_win_note}）` : '';
           kv('最大贏分', d.max_win + note);
         }
+        // v8.20 / G 界-3:結構化封頂(-1=無上限、>0=硬上限;與 max_win 字串並存)
+        {
+          const cap = Number((m.global || {}).max_win_cap);
+          if (Number.isFinite(cap) && cap !== 0) {
+            kv('最大贏分封頂', cap < 0 ? '明示無上限' : cap.toLocaleString('en-US') + '× 注額（硬上限）');
+          }
+        }
       }
     }
 
@@ -811,13 +891,13 @@
         const wsG = wb.addWorksheet('符號家族');
         wsG.columns = [{ width: 14 }, { width: 18 }, { width: 30 },
                        { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 },
-                       { width: 12 }, { width: 14 }, { width: 26 }];
+                       { width: 12 }, { width: 14 }, { width: 26 }, { width: 34 }];
         let GR = 1;
-        wsG.mergeCells(GR, 1, GR, 10);
+        wsG.mergeCells(GR, 1, GR, 11);
         _cell(wsG, GR, 1, '符號家族 / 混合賠付（ANY BAR 型；成員亦保留自身賠率時，混合走家族賠、同款走個別賠，取較高者）',
           { bold: true, bg: C.band, fg: C.bandFg, size: 11 });
         GR++;
-        ['家族 ID', '顯示名', '成員符號', '3 連', '4 連', '5 連', '6 連', '保留個別賠', '生效模式', '備註']
+        ['家族 ID', '顯示名', '成員符號', '3 連', '4 連', '5 連', '6 連', '保留個別賠', '生效模式', '備註', '各模式覆寫']
           .forEach((h, i) => _cell(wsG, GR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
         GR++;
         groups.forEach(gp => {
@@ -828,6 +908,12 @@
           const pt = (gp.pay_table && typeof gp.pay_table === 'object') ? gp.pay_table : {};
           const payN = (n) => { const v = (gp['pay_' + n + 'x'] != null) ? gp['pay_' + n + 'x'] : pt[n]; return Number(v) || 0; };
           const msc = String(gp.mode_scope || '').trim();
+          const pbm = (gp.pay_by_mode && typeof gp.pay_by_mode === 'object') ? gp.pay_by_mode : {};
+          const pbmTxt = Object.keys(pbm).map(mk => {
+            const row = pbm[mk] || {};
+            const parts = [3, 4, 5, 6].filter(n => Number(row['pay_' + n + 'x']) > 0).map(n => `${n}連×${Number(row['pay_' + n + 'x'])}`);
+            return parts.length ? `${mk}：${parts.join('、')}` : '';
+          }).filter(Boolean).join('；');
           _cell(wsG, GR, 1, gid, { h: 'center' });
           _cell(wsG, GR, 2, (gp.display_name && String(gp.display_name).trim()) || gid);
           _cell(wsG, GR, 3, members.length ? members.join('、') : '（尚未指定成員）', { wrap: true });
@@ -835,6 +921,7 @@
           _cell(wsG, GR, 8, gp.members_keep_individual !== false ? '是' : '否', { h: 'center' });
           _cell(wsG, GR, 9, (msc && msc !== 'ALL') ? msc : '全部', { h: 'center' });
           _cell(wsG, GR, 10, gp.notes ? String(gp.notes) : '', { wrap: true });
+          _cell(wsG, GR, 11, pbmTxt || '（無）', { wrap: true });
           GR++;
         });
       }
@@ -1036,7 +1123,15 @@
           _cell(wsV, VR, 2, gtL[gm.gamble_type] || gm.gamble_type || '', { h: 'center' });
           _cell(wsV, VR, 3, '×' + (gm.win_mult_options || '2'), { h: 'center' });
           _cell(wsV, VR, 4, (Number(gm.max_rounds) > 0 ? `${gm.max_rounds} 次` : '無限') + (Number(gm.cap_mult) > 0 ? ` / 封頂 ×${gm.cap_mult}` : ''), { h: 'center' });
-          _cell(wsV, VR, 5, [gm.type_desc, gm.applies_to === 'BELOW_LIMIT' ? `僅 <×${Number(gm.applies_limit) || 0} 可比` : '', gm.collect_anytime !== false ? '可隨時收下' : '', gm.notes].filter(Boolean).join('；'));
+          {
+            const stL = { WIN: '贏分', FREE_SPINS: '免費局', BONUS_ENTRY: 'bonus 資格', BONUS_LEVEL: 'bonus 等級' };
+            const rwL = { MULTIPLY_WIN: '倍增贏分', ADD_SPINS: '加免費局', ENTER_BONUS: '進入 bonus', UPGRADE_LEVEL: '升級等級' };
+            const st = String(gm.stake_type || 'WIN').toUpperCase();
+            const rw = String(gm.reward_type || 'MULTIPLY_WIN').toUpperCase();
+            const nc = (st !== 'WIN' || rw !== 'MULTIPLY_WIN') ? `賭 ${stL[st] || st}→${rwL[rw] || rw}` : '';
+            const trg = String(gm.gamble_trigger || '').trim();
+            _cell(wsV, VR, 5, [gm.type_desc, nc, trg ? `時機 ${trg}` : '', gm.applies_to === 'BELOW_LIMIT' ? `僅 <×${Number(gm.applies_limit) || 0} 可比` : '', gm.collect_anytime !== false ? '可隨時收下' : '', gm.notes].filter(Boolean).join('；'));
+          }
           VR++;
         }
         VR++;
@@ -1820,6 +1915,39 @@
           L.push('- 賠付模型覆寫：' + ovr.map(md => `${md.mode} 改用 **${String(md.pay_type_override).toUpperCase()}**`).join('；') + '。其餘模式沿用全域賠付模型。');
         }
       }
+      // v8.22 / G3:Hold&Win 收集設定說明(有設定才輸出)
+      {
+        const col = cfg.modes.filter(md => _modeCollectDesc(md));
+        if (col.length) {
+          L.push('- Hold&Win 收集設定：' + col.map(md => `${md.mode}（${_modeCollectDesc(md)}）`).join('；') + '。常見收集玩法以此描述,罕見特有互動改由特色規則(拼圖)表達。');
+        }
+      }
+      // v8.24 / G5:生存 / 條件式結束說明(有結構化 end_condition 才輸出)
+      {
+        const ec = cfg.modes.filter(md => (md.end_condition || '').trim());
+        if (ec.length) {
+          L.push('- 結束條件（結構化）：' + ec.map(md => `${md.mode} 當 \`${String(md.end_condition).trim()}\` 時結束`).join('；') + '。生存局 / 條件式結束;拼圖層以 END_FEATURE{when} 連動。供數值端遵循。');
+        }
+      }
+      // v8.28 / 缺口B:解鎖前提說明(有前提才輸出)
+      {
+        const norm = md => Array.isArray(md.unlock_requires) ? md.unlock_requires
+          : String(md.unlock_requires || '').split(',').map(s => s.trim()).filter(Boolean);
+        const ul = cfg.modes.filter(md => norm(md).length);
+        if (ul.length) {
+          L.push('- 解鎖前提：' + ul.map(md => `${md.mode} 需先解鎖 ${norm(md).join(' / ')}`).join('；') + '。與「玩家擇一」正交(擇一=互斥選擇;解鎖前提=進入門檻);漸進解鎖 FS。供數值端遵循。');
+        }
+      }
+      // v8.28 / 缺口C:跨來源倍數複合方式(全域 + 模式覆寫)
+      {
+        const _COMP = { MUL: '相乘', ADD: '相加', MAX: '取最高' };
+        const gc = String((cfg.global && cfg.global.mult_compose) || 'MUL').toUpperCase();
+        L.push(`- 跨來源倍數複合：全域採 **${_COMP[gc] || gc}**;固定套用順序＝單顆倍數 → 全域倍數 → 特色倍數。多來源倍數(單顆 instance_mult × 全域連鎖 × 特色)依此複合。供數值端遵循。`);
+        const ov = cfg.modes.filter(md => (md.mult_compose_override || '').trim());
+        if (ov.length) {
+          L.push('  - 模式覆寫：' + ov.map(md => `${md.mode} 改用 **${_COMP[String(md.mult_compose_override).toUpperCase()] || md.mult_compose_override}**`).join('；') + '。其餘模式沿用全域。');
+        }
+      }
       L.push('');
     }
 
@@ -1845,18 +1973,28 @@
           if (items.length) {
             L.push('');
             if (k === 'COLLECTION') {
-              L.push('| 獎勵 | 門檻 | 連結JP |');
-              L.push('| --- | --- | --- |');
-              items.forEach(it => L.push(`| ${it.label || ''} | ${Number(it.value) || 0} | ${it.link_jackpot || '—'} |`));
+              L.push('| 獎勵 | 門檻 | 角色 | 連結JP |');
+              L.push('| --- | --- | --- | --- |');
+              items.forEach(it => L.push(`| ${it.label || ''} | ${Number(it.value) || 0} | ${_itemRoleDesc(it.item_role)} | ${it.link_jackpot || '—'} |`));
             } else {
               const tot = items.reduce((a, it) => a + (Number(it.weight) || 0), 0) || 1;
-              L.push('| 項目 | 值×注額 | 權重 | 機率 |' + (k === 'PICK' ? ' 結束 |' : '') + ' 連結JP |');
-              L.push('| --- | --- | --- | --- |' + (k === 'PICK' ? ' --- |' : '') + ' --- |');
+              const _anyLM = items.some(it => (it.link_mode || '').trim());   // 有連結才加欄,避免冗欄
+              L.push('| 項目 | 值×注額 | 權重 | 機率 | 角色 |' + (k === 'PICK' ? ' 結束 |' : '') + ' 連結JP |' + (_anyLM ? ' 連結模式 |' : ''));
+              L.push('| --- | --- | --- | --- | --- |' + (k === 'PICK' ? ' --- |' : '') + ' --- |' + (_anyLM ? ' --- |' : ''));
               items.forEach(it => {
                 const pct = ((Number(it.weight) || 0) / tot * 100).toFixed(1) + '%';
-                L.push(`| ${it.label || ''} | ${it.link_jackpot ? '（依JP）' : (Number(it.value) || 0)} | ${Number(it.weight) || 0} | ${pct} |`
-                  + (k === 'PICK' ? ` ${it.is_end ? '✓' : ''} |` : '') + ` ${it.link_jackpot || '—'} |`);
+                L.push(`| ${it.label || ''} | ${it.link_jackpot ? '（依JP）' : (Number(it.value) || 0)} | ${Number(it.weight) || 0} | ${pct} | ${_itemRoleDesc(it.item_role)} |`
+                  + (k === 'PICK' ? ` ${it.is_end ? '✓' : ''} |` : '') + ` ${it.link_jackpot || '—'} |`
+                  + (_anyLM ? ` ${(it.link_mode || '').trim() || '—'} |` : ''));
               });
+            }
+          }
+          // v8.27 / 批8:item→模式連結彙整(Pick 多層 / Wheel 分段跳轉;有連結才輸出)
+          {
+            const links = items.filter(it => (it.link_mode || '').trim());
+            if (links.length) {
+              L.push('- 連結模式：' + links.map(it => `「${it.label || '?'}」→ ${String(it.link_mode).trim()}`).join('；')
+                + (k === 'PICK' ? '（多層抽選:抽到該項後進入連結模式）' : k === 'WHEEL' ? '（分段跳轉:轉到該段後進入連結模式）' : ''));
             }
           }
           L.push('');
@@ -1891,6 +2029,16 @@
         if (Number(gm.cap_mult) > 0) gp.push(`封頂 ×${gm.cap_mult} 注額`);
         gp.push(gm.applies_to === 'BELOW_LIMIT' ? `僅低於 ×${Number(gm.applies_limit) || 0} 注額的贏分可比` : '所有贏分可比');
         if (gm.collect_anytime !== false) gp.push('可隨時收下');
+        // v8.23 / G2:非現金賭注/獎勵(非預設才顯示,避免現金比倍冗字)
+        {
+          const stL = { WIN: '贏分', FREE_SPINS: '免費局', BONUS_ENTRY: 'bonus 資格', BONUS_LEVEL: 'bonus 等級' };
+          const rwL = { MULTIPLY_WIN: '倍增贏分', ADD_SPINS: '加免費局', ENTER_BONUS: '進入 bonus', UPGRADE_LEVEL: '升級等級' };
+          const st = String(gm.stake_type || 'WIN').toUpperCase();
+          const rw = String(gm.reward_type || 'MULTIPLY_WIN').toUpperCase();
+          if (st !== 'WIN' || rw !== 'MULTIPLY_WIN') gp.push(`賭注 ${stL[st] || st} → 獎勵 ${rwL[rw] || rw}`);
+          const trg = String(gm.gamble_trigger || '').trim();
+          if (trg) gp.push(`觸發時機 ${trg}`);
+        }
         biz.push(`- **比倍（Gamble）**：${gp.join('；')}${gm.notes ? `。${gm.notes}` : ''}`);
       }
       const rvs = Array.isArray(bc.rtp_variants) ? bc.rtp_variants.filter(v => v && String(v.variant || '').trim()) : [];
@@ -1912,8 +2060,28 @@
       }
     }
 
-    // 圖示定義
-    L.push('## 圖示定義');
+    // v8.25 / G4:獎池級距(有級距或觸發設定才輸出;與 13_Jackpots 正交)
+    {
+      const jc = cfg.jackpotTiers || {};
+      const jtiers = Array.isArray(jc.tiers) ? jc.tiers.filter(t => t && (String(t.tier || '').trim() || String(t.label || '').trim())) : [];
+      const jtrig = String(jc.trigger || '').trim();
+      if (jtiers.length || jtrig) {
+        const trigL = { PROBABILITY: '機率觸發', COLLECT_METER: '集滿進度', TOKEN_COUNT: '收滿 N 枚' };
+        L.push('## 獎池級距');
+        L.push('');
+        if (jtrig) L.push(`- 觸發方式：${trigL[jtrig.toUpperCase()] || jtrig}`);
+        if (jtiers.length) {
+          L.push('');
+          L.push('| 層級 | 名稱 | 值×注額 | 備註 |');
+          L.push('| --- | --- | --- | --- |');
+          jtiers.forEach(t => L.push(`| ${_mdCell(String(t.tier || ''))} | ${_mdCell(String(t.label || ''))} | ${Number(t.value) || 0} | ${_mdCell(String(t.notes || ''))} |`));
+        }
+        L.push('');
+        L.push('> 獎池級距與觸發方式為規格描述;只描述級距與觸發,不模擬命中率。供數值 / 模擬工具遵循。');
+        L.push('');
+      }
+    }
+
     L.push('');
     L.push(`- 一般圖示 ${cfg.normalSyms.length} 個、特殊圖示 ${cfg.specialSyms.length} 個。`);
     if (cfg.specialSyms.length) {
@@ -2004,6 +2172,16 @@
             ? '任意混合成員即成家族' : String(gp.match_mode);
           bits.push(`${mmLabel}，${payBits.length ? '以家族費率計 —— ' + payBits.join('、') + '。' : '（尚未設定家族賠率）'}`);
           if (gp.members_keep_individual !== false) bits.push('成員亦保留自身賠率，混合走家族賠、同款走個別賠，取較高者。');
+          // P0-3 進階:per-mode 費率覆寫
+          const pbm = (gp.pay_by_mode && typeof gp.pay_by_mode === 'object') ? gp.pay_by_mode : {};
+          const pbmBits = Object.keys(pbm).map(mk => {
+            const row = pbm[mk] || {};
+            const parts = [3, 4, 5, 6]
+              .filter(n => Number(row['pay_' + n + 'x']) > 0)
+              .map(n => `${n}連×${Number(row['pay_' + n + 'x'])}`);
+            return parts.length ? `${mk}（${parts.join('、')}）` : '';
+          }).filter(Boolean);
+          if (pbmBits.length) bits.push(`各模式覆寫：${pbmBits.join('；')}。`);
           const msc = String(gp.mode_scope || '').trim();
           if (msc && msc !== 'ALL') bits.push(`生效模式：${msc}。`);
           if (gp.notes && String(gp.notes).trim()) bits.push(`備註：${String(gp.notes).trim()}`);
@@ -2035,6 +2213,18 @@
         L.push(`- 計分方向：${dirLabel}`);
         if (dir === 'BOTH') {
           L.push(`- 雙向計分去重：${gg.ways_both_dedup !== false ? '同一符號組合左右兩向皆成立時僅計分一次' : '左右兩向各自計分（不去重）'}（規格宣告，供數值端遵循）`);
+        }
+      }
+    }
+    // v8.20 / G 界-3:結構化最大贏分封頂(0=沿用披露字串、-1=明示無上限、>0=硬封頂值)。
+    //   純規格描述,供下游遵循;與合規披露的 max_win 字串並存(職責不同)。
+    {
+      const cap = Number((cfg.global || {}).max_win_cap);
+      if (Number.isFinite(cap) && cap !== 0) {
+        if (cap < 0) {
+          L.push(`- 最大贏分封頂：明示無上限（規格宣告，供數值端遵循）`);
+        } else {
+          L.push(`- 最大贏分封頂：${cap.toLocaleString('en-US')}× 注額（硬上限；規格宣告，超過即截頂，供數值端遵循）`);
         }
       }
     }
@@ -2186,16 +2376,27 @@
         let rid   = _mdCell(r.rule_id || '?') + (r.enabled === false ? '（停用）' : '');
         // v8.4 / R2 P5:隨機擇一組標示
         if (r.random_group) rid += `〔隨機組 ${_mdCell(r.random_group)}｜權重 ${Number(r.random_weight) || 100}〕`;
+        // v8.21 / G1:persistent 規則層修飾子標示(每回合重跑)
+        if (r.persistent) rid += '〔每回合重跑〕';
         const scope = _mdCell(r.mode_scope || 'ALL');
         const trg   = _RULE_TRIGGER_LABEL[r.trigger] || _mdCell(r.trigger || '');
         const cond  = _mdCell(r.condition || '') || '—';
         const acts  = (Array.isArray(r.actions) ? r.actions : []).map(_ruleActionDesc).filter(Boolean);
-        const desc  = _mdCell(r.description || r.notes || '');
+        const desc  = _mdCell(r.description || '');
         L.push(`| ${rid} | ${r.priority != null ? r.priority : 100} | ${scope} | ${trg} | ${cond} | ${_mdCell(acts.join('；')) || '—'} | ${desc} |`);
       });
       L.push('');
       L.push('> 特色規則為結構化描述（觸發 / 條件 / 動作），供數值組 / 模擬工具實作時遵循；本工具不執行、不計算 RTP。');
-      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／揭示／分裂／相鄰消除／盤面成長）之執行語意由下游模擬工具實作。');
+      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／放置物件／揭示／分裂／相鄰消除／盤面成長；收集值／直接派彩／值乘算／回補回合／盤面壓實／值/型態轉換）之執行語意由下游模擬工具實作。標記「每回合重跑」（persistent）的規則，其動作於每個 spin／respin 重複套用。');
+      // v8.28 / 缺口A:補充判斷說明(自由文字,給前端/下游;有 notes 才輸出)
+      {
+        const wn = sorted.filter(r => (r.notes || '').trim());
+        if (wn.length) {
+          L.push('');
+          L.push('**補充判斷說明**（給前端 / 下游的「判斷規則」——無法結構化、但實作時須遵循者,以文字補述;本工具不執行）：');
+          wn.forEach(r => L.push(`- \`${_mdCell(r.rule_id || '?')}\`：${_mdCell(r.notes)}`));
+        }
+      }
       L.push('');
     }
     // 棄牌規則(10_Discard_Rules;有資料才輸出)
@@ -2288,6 +2489,13 @@
         if (String(d.max_win ?? '').trim() !== '') {
           const note = String(d.max_win_note ?? '').trim() ? `（${d.max_win_note}）` : '';
           L.push(`| 最大贏分 | ${d.max_win}${note} |`);
+        }
+        // v8.20 / G 界-3:結構化封頂(與上方 max_win 字串並存;-1=無上限、>0=硬上限)
+        {
+          const cap = Number((m.global || {}).max_win_cap);
+          if (Number.isFinite(cap) && cap !== 0) {
+            L.push(`| 最大贏分封頂 | ${cap < 0 ? '明示無上限' : cap.toLocaleString('en-US') + '× 注額（硬上限）'} |`);
+          }
         }
         L.push('');
         L.push('> 數值為規劃/披露起點，正式機率與 RTP 須由數值組重算後回填。');

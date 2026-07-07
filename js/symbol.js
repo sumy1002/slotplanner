@@ -153,6 +153,26 @@
             </template>
           </div>
           <input class="input input-sm" v-model="gp.notes" placeholder="備註（選填）" style="width:100%;">
+          <!-- P0-3 進階:各模式費率覆寫(不勾＝沿用上方 base) -->
+          <div style="margin-top:8px; border-top:1px dashed var(--line, #e3d9c7); padding-top:8px;">
+            <div class="sym-hint-inline" style="margin-bottom:4px;">各模式費率覆寫（不勾＝沿用上方基準）</div>
+            <div v-if="!groupModeNames.length" class="sym-hint-inline">（尚無模式；於「規則 → 模式」新增模式後可在此覆寫）</div>
+            <div v-for="mn in groupModeNames" :key="'gm'+gi+'-'+mn"
+                 style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+              <label class="chk" style="margin:0; min-width:96px;">
+                <input type="checkbox" :checked="!!(gp.pay_by_mode && gp.pay_by_mode[mn])"
+                       @change="toggleGroupModePay(gp, mn, $event.target.checked)"><span class="box"></span>
+                <span>{{ mn }}</span>
+              </label>
+              <template v-if="gp.pay_by_mode && gp.pay_by_mode[mn]">
+                <template v-for="n in [3,4,5,6]" :key="'gm'+gi+'-'+mn+'-'+n">
+                  <span class="sym-hint-inline">{{ n }}連</span>
+                  <input class="input input-sm cfg-mono" type="number" step="any" min="0"
+                         v-model.number="gp.pay_by_mode[mn]['pay_'+n+'x']" placeholder="0" style="width:58px;">
+                </template>
+              </template>
+            </div>
+          </div>
         </div>
         <button class="btn-pill add" @click="addSymbolGroup">＋ 新增家族</button>
       </div>
@@ -969,6 +989,17 @@
           members_keep_individual: g.members_keep_individual !== false,
           mode_scope: (g.mode_scope != null ? String(g.mode_scope).trim() : ''),
           pay_3x: num(g.pay_3x), pay_4x: num(g.pay_4x), pay_5x: num(g.pay_5x), pay_6x: num(g.pay_6x),
+          pay_by_mode: (function (pbm) {   // P0-3 進階:per-mode 費率覆寫 { mode: {pay_3x..6x} }
+            const o = {};
+            if (pbm && typeof pbm === 'object') {
+              for (const mk of Object.keys(pbm)) {
+                const k = String(mk).trim(); if (!k) continue;
+                const s = pbm[mk] || {};
+                o[k] = { pay_3x: num(s.pay_3x), pay_4x: num(s.pay_4x), pay_5x: num(s.pay_5x), pay_6x: num(s.pay_6x) };
+              }
+            }
+            return o;
+          })(g.pay_by_mode),
           notes: (g.notes != null ? String(g.notes) : ''),
         };
       }
@@ -1004,6 +1035,24 @@
         const g = String(gid || '').trim();
         if (!g) return 0;
         return symbols.value.filter(s => String(s.group_id || '').trim() === g && s.enabled !== false).length;
+      }
+      // P0-3 進階:家族 per-mode 費率覆寫。模式清單自 LS 讀(config-page 未掛載)。
+      function _loadModeNames() {
+        try {
+          const raw = localStorage.getItem('slotplanner.aconfig.modes.v1');
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(m => String((m && m.mode) || '').trim()).filter(Boolean) : [];
+        } catch (e) { return []; }
+      }
+      const groupModeNames = ref(_loadModeNames());
+      watch(groupsOpen, (v) => { if (v) groupModeNames.value = _loadModeNames(); });   // 展開時刷新(模式可能於規則頁變動)
+      function toggleGroupModePay(gp, mode, on) {
+        if (!gp.pay_by_mode || typeof gp.pay_by_mode !== 'object') gp.pay_by_mode = {};
+        if (on) {
+          if (!gp.pay_by_mode[mode]) gp.pay_by_mode[mode] = { pay_3x: 0, pay_4x: 0, pay_5x: 0, pay_6x: 0 };
+        } else {
+          delete gp.pay_by_mode[mode];
+        }
       }
 
       // ── v6.1:動態賠付表 helpers ──
@@ -1841,6 +1890,7 @@
         minMatchChoices, setMinMatch,   // P0-2
         symbolGroups, groupsOpen, SYMGROUP_MATCH_MODES,   // P0-3
         addSymbolGroup, removeSymbolGroup, groupMemberCount,   // P0-3
+        groupModeNames, toggleGroupModePay,   // P0-3 進階
         symbolRefs, refreshSymbolRefs, addRelatedConstraint,
         selectedId, selected, form,
         numErr, nameErr,
