@@ -126,7 +126,7 @@
     REVIVE: '回補回合', COMPACT: '盤面壓實', CONVERT: '值/型態轉換',
     // v8.24 / G5 生存結束:流程控制動作
     END_FEATURE: '結束 feature',
-    // v8.28 / 缺口A:物件初始放置(新一局將物件置於指定格)
+    // v8.29 / W-1:v8.28 缺口A 物件初始放置(漏補;參數經通用 kv 呈現)
     SPAWN: '放置物件',
   };
   // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
@@ -149,8 +149,6 @@
     if (!zh) return s;
     return (arg && (base === 'range' || base === 'random_cells')) ? `${zh}（${arg}）` : zh;
   }
-  // v8.28 / 缺口A:走位方向中文對照(WALK.dir;未知 → 原樣)。
-  const _DIR_ZH = { UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右', PATH: '自訂路徑' };
   // v8.20 / G5:symbol_count.<SID> 動態值 → 白話(餵乘數用);非此形式原樣。
   //   v8.21 / G1:擴充值變數(symbol_value/cell_value/feature_value_total/respins_left)。
   function _dynVal(v) {
@@ -179,13 +177,7 @@
       .filter(([k, v]) => v !== '' && v != null && k !== 'scope')
       .map(([k, v]) => {
         // v8.21 / G1:value / factor 皆可能為動態值(symbol_count / symbol_value / feature_value_total …)
-        // v8.28 / 缺口A:cell → 格(r,c);dir → 方向中文。
-        if (k === 'cell') return `位置=格(${v})`;
-        let vv;
-        if (k === 'value' || k === 'factor') vv = _dynVal(v);
-        else if (k === 'dir') vv = _DIR_ZH[String(v).toUpperCase()] || v;
-        else if (Array.isArray(v)) vv = JSON.stringify(v);
-        else vv = v;
+        const vv = (k === 'value' || k === 'factor') ? _dynVal(v) : (Array.isArray(v) ? JSON.stringify(v) : v);
         return `${k}=${vv}`;
       });
     let out = kv.length ? `${label}（${kv.join(', ')}）` : label;
@@ -1929,23 +1921,19 @@
           L.push('- 結束條件（結構化）：' + ec.map(md => `${md.mode} 當 \`${String(md.end_condition).trim()}\` 時結束`).join('；') + '。生存局 / 條件式結束;拼圖層以 END_FEATURE{when} 連動。供數值端遵循。');
         }
       }
-      // v8.28 / 缺口B:解鎖前提說明(有前提才輸出)
+      // v8.29 / W-1(v8.28 缺口B):模式解鎖前提說明(有設定才輸出)
       {
-        const norm = md => Array.isArray(md.unlock_requires) ? md.unlock_requires
-          : String(md.unlock_requires || '').split(',').map(s => s.trim()).filter(Boolean);
-        const ul = cfg.modes.filter(md => norm(md).length);
-        if (ul.length) {
-          L.push('- 解鎖前提：' + ul.map(md => `${md.mode} 需先解鎖 ${norm(md).join(' / ')}`).join('；') + '。與「玩家擇一」正交(擇一=互斥選擇;解鎖前提=進入門檻);漸進解鎖 FS。供數值端遵循。');
+        const ur = cfg.modes.filter(md => Array.isArray(md.unlock_requires) && md.unlock_requires.length);
+        if (ur.length) {
+          L.push('- 解鎖前提：' + ur.map(md => `${md.mode} 需先達成 / 經歷 ${md.unlock_requires.join('、')}`).join('；') + '。與玩家擇一（choice_group）正交；進入門檻宣告，供數值端遵循。');
         }
       }
-      // v8.28 / 缺口C:跨來源倍數複合方式(全域 + 模式覆寫)
+      // v8.29 / W-1(v8.28 缺口C):模式倍數複合覆寫說明(有覆寫才輸出;全域值見「計分與封頂」段)
       {
-        const _COMP = { MUL: '相乘', ADD: '相加', MAX: '取最高' };
-        const gc = String((cfg.global && cfg.global.mult_compose) || 'MUL').toUpperCase();
-        L.push(`- 跨來源倍數複合：全域採 **${_COMP[gc] || gc}**;固定套用順序＝單顆倍數 → 全域倍數 → 特色倍數。多來源倍數(單顆 instance_mult × 全域連鎖 × 特色)依此複合。供數值端遵循。`);
-        const ov = cfg.modes.filter(md => (md.mult_compose_override || '').trim());
-        if (ov.length) {
-          L.push('  - 模式覆寫：' + ov.map(md => `${md.mode} 改用 **${_COMP[String(md.mult_compose_override).toUpperCase()] || md.mult_compose_override}**`).join('；') + '。其餘模式沿用全域。');
+        const MC_ZH = { MUL: '相乘', ADD: '相加', MAX: '取最高' };
+        const mo = cfg.modes.filter(md => (md.mult_compose_override || '').trim());
+        if (mo.length) {
+          L.push('- 倍數複合覆寫：' + mo.map(md => `${md.mode} 改用 **${MC_ZH[String(md.mult_compose_override).toUpperCase()] || md.mult_compose_override}**`).join('；') + '。其餘模式沿用全域複合方式。');
         }
       }
       L.push('');
@@ -2228,6 +2216,15 @@
         }
       }
     }
+    // v8.29 / W-1(v8.28 缺口C):跨來源倍數複合方式(非預設 MUL 才輸出;固定順序 單顆 → 全域 → 特色)。
+    //   純規格描述,供下游遵循;per-mode 覆寫見「模式」段。
+    {
+      const MC_ZH = { ADD: '相加', MAX: '取最高' };
+      const mc = String((cfg.global || {}).mult_compose || 'MUL').trim().toUpperCase();
+      if (mc && mc !== 'MUL' && MC_ZH[mc]) {
+        L.push(`- 跨來源倍數複合：**${MC_ZH[mc]}**（單顆 → 全域 → 特色 固定順序；規格宣告，供數值端遵循）`);
+      }
+    }
     if (!cfg.derived.isWaysLike && Array.isArray(cfg.paylines) && cfg.paylines.length) {
       L.push(`- 中獎線數：${cfg.paylines.length} 條`);
     }
@@ -2382,21 +2379,12 @@
         const trg   = _RULE_TRIGGER_LABEL[r.trigger] || _mdCell(r.trigger || '');
         const cond  = _mdCell(r.condition || '') || '—';
         const acts  = (Array.isArray(r.actions) ? r.actions : []).map(_ruleActionDesc).filter(Boolean);
-        const desc  = _mdCell(r.description || '');
+        const desc  = _mdCell(r.description || r.notes || '');
         L.push(`| ${rid} | ${r.priority != null ? r.priority : 100} | ${scope} | ${trg} | ${cond} | ${_mdCell(acts.join('；')) || '—'} | ${desc} |`);
       });
       L.push('');
       L.push('> 特色規則為結構化描述（觸發 / 條件 / 動作），供數值組 / 模擬工具實作時遵循；本工具不執行、不計算 RTP。');
-      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／放置物件／揭示／分裂／相鄰消除／盤面成長；收集值／直接派彩／值乘算／回補回合／盤面壓實／值/型態轉換）之執行語意由下游模擬工具實作。標記「每回合重跑」（persistent）的規則，其動作於每個 spin／respin 重複套用。');
-      // v8.28 / 缺口A:補充判斷說明(自由文字,給前端/下游;有 notes 才輸出)
-      {
-        const wn = sorted.filter(r => (r.notes || '').trim());
-        if (wn.length) {
-          L.push('');
-          L.push('**補充判斷說明**（給前端 / 下游的「判斷規則」——無法結構化、但實作時須遵循者,以文字補述;本工具不執行）：');
-          wn.forEach(r => L.push(`- \`${_mdCell(r.rule_id || '?')}\`：${_mdCell(r.notes)}`));
-        }
-      }
+      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／揭示／分裂／相鄰消除／盤面成長；收集值／直接派彩／值乘算／回補回合／盤面壓實／值/型態轉換）之執行語意由下游模擬工具實作。標記「每回合重跑」（persistent）的規則，其動作於每個 spin／respin 重複套用。');
       L.push('');
     }
     // 棄牌規則(10_Discard_Rules;有資料才輸出)

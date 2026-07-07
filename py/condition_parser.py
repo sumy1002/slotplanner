@@ -62,6 +62,11 @@ _TOKEN_PATTERNS = [
     (r"-?\d+",                  TokenType.NUMBER),
     (r"\"([^\"]*)\"",           TokenType.STRING),
     (r"'([^']*)'",              TokenType.STRING),
+    # v8.29 / C-2:cell_value 座標識別字(cell_value.3,2)。窄規則:僅放行
+    #   「cell_value.」前綴 + 「數字,數字」座標,不影響 list 逗號([FG1, FG2] 的
+    #   逗號在 LBRACKET 深度內另行 token 化)。必須排在通用 IDENT 之前,
+    #   否則通用 IDENT 會先吃到 cell_value.3 而在逗號處斷開。
+    (r"\bcell_value\.\d+,\d+",  TokenType.IDENT),
     (r"[A-Za-z_][A-Za-z0-9_\.]*", TokenType.IDENT),
 ]
 
@@ -249,12 +254,25 @@ def parse_actions(text: str) -> list:
 
 
 def _split_actions(text: str) -> list[str]:
-    """以分號切割,但忽略括號/大括號內的分號"""
+    """以分號切割,但忽略括號/大括號/引號內的分號
+
+    v8.29 / C-1:補引號感知(對齊前端 helpers.splitTopLevel 的 inStr 語意)。
+    修復前 SPAWN(cell="2,3") 會在引號內的逗號/分號處錯切 → 靜默毀損。
+    """
     chunks = []
     depth = 0
+    in_str = None   # 目前所在的引號字元(" 或 '),None = 不在字串內
     current = []
     for ch in text:
-        if ch in "({[":
+        if in_str:
+            current.append(ch)
+            if ch == in_str:
+                in_str = None
+            continue
+        if ch in "\"'":
+            in_str = ch
+            current.append(ch)
+        elif ch in "({[":
             depth += 1
             current.append(ch)
         elif ch in ")}]":
@@ -286,12 +304,25 @@ def _parse_params(s: str) -> dict:
 
 
 def _split_top_level(s: str, sep: str) -> list[str]:
-    """以 sep 切割,但忽略括號/大括號內的分隔符"""
+    """以 sep 切割,但忽略括號/大括號/引號內的分隔符
+
+    v8.29 / C-1:補引號感知(對齊前端 helpers.splitTopLevel 的 inStr 語意)。
+    修復前 cell="2,3" 會在引號內的逗號處錯切 → params 靜默毀損。
+    """
     chunks = []
     depth = 0
+    in_str = None   # 目前所在的引號字元(" 或 '),None = 不在字串內
     current = []
     for ch in s:
-        if ch in "({[":
+        if in_str:
+            current.append(ch)
+            if ch == in_str:
+                in_str = None
+            continue
+        if ch in "\"'":
+            in_str = ch
+            current.append(ch)
+        elif ch in "({[":
             depth += 1
             current.append(ch)
         elif ch in ")}]":

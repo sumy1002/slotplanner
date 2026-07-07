@@ -592,7 +592,9 @@
         actionsDSL,
         emitsStr,
         r.enabled !== false ? 'TRUE' : 'FALSE',
-        r.description || r.notes || '',  // 兼容舊資料的 notes
+        r.description || '',  // v8.29 / C-4:移除舊 notes fallback — v8.28 起 notes 已獨立
+                              //   第 12 欄,回填會使 notes 汙染 Description 且 round-trip
+                              //   後永久搬家,毀壞「Description=人看/Notes=下游」分離契約。
         r.random_group || '',                                            // v8.4 P5
         (r.random_group ? (Number(r.random_weight) || 100) : ''),        // v8.4 P5(無組不寫權重)
         r.persistent ? 'TRUE' : 'FALSE',                                 // v8.21 G1(規則層修飾子)

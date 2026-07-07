@@ -207,6 +207,10 @@
         // v8.9.1 bug 修復:v8.4 新增七枚盤面/圖示 action 漏收 → 曾被錯分到「通用規則」
         //   子分頁(違反分流守則 #119 語義:盤面操作歸盤面)。
         'EXPAND_REEL', 'NUDGE', 'WALK', 'REVEAL_AS', 'SPLIT', 'DESTROY_ADJACENT', 'GROW_BOARD',
+        // v8.29 / W-2:G1/v8.28 新增盤面幾何 action 漏收修復(同 v8.9.1 病灶)。
+        //   SPAWN=幾何放置、COMPACT=盤面壓實、CONVERT=符號轉換(同 BOARD_TRANSFORM 語系,
+        //   v8.21 起獨立 atype)。COLLECT/PAY/MULTIPLY_VALUE/REVIVE 為值/流程動作,維持通用。
+        'SPAWN', 'COMPACT', 'CONVERT',
       ]);
       function isBoardRule(r) {
         if (!r || !Array.isArray(r.actions)) return false;
@@ -848,6 +852,16 @@
           case 'END_FEATURE':
             base = (p.when || '').trim() ? `當「${p.when}」時結束當前 feature` : '結束當前 feature';
             break;
+          // ── v8.29 / W-3:v8.28 缺口A 兩枚白話補齊(先前落 default 只顯示 label) ──
+          case 'SPAWN':
+            base = `新一局於格(${p.cell || '?'})放置「${p.target || '?'}」(初始位置)`;
+            break;
+          case 'WALK': {
+            const dir = { UP: '向上', DOWN: '向下', LEFT: '向左', RIGHT: '向右', PATH: '依自訂路徑' }[String(p.dir || '').toUpperCase()] || '';
+            const per = { SPIN: '僅本局', CHAIN: '跨連鎖存續', FEATURE: '存續至 feature 結束' }[String(p.persist || '').toUpperCase()] || '';
+            base = `「${p.symbol || '?'}」每次${dir ? dir : ''}走 ${p.steps ?? 1} 步` + (per ? `(${per})` : '');
+            break;
+          }
           default:
             base = fb;
         }
@@ -7817,6 +7831,18 @@
                 respin_stop_cond: asStr(row.getCell(18).value).trim(),
                 // v8.7 / R6 A-2:Pay_Type_Override(19);舊檔無 → ''(繼承全域)
                 pay_type_override: asStr(row.getCell(19).value).trim().toUpperCase(),
+                // v8.29 / C-3:round-trip 補讀尾端欄(舊檔缺欄 → asStr/asBool 得空/false,
+                //   _ensureModeGameplayFields 補預設,安全降級)。
+                // v8.22 / G3:Hold&Win 設定面(20–23)
+                collect_enabled:        asBool(row.getCell(20).value),
+                respin_reset_symbol:    asStr(row.getCell(21).value).trim(),
+                grid_expand_in_collect: asBool(row.getCell(22).value),
+                allow_persistent:       asBool(row.getCell(23).value),
+                // v8.24 / G5:結構化結束謂詞(24)
+                end_condition:          asStr(row.getCell(24).value).trim(),
+                // v8.28 / 缺口B+C:解鎖前提清單(25)/倍數複合覆寫(26)
+                unlock_requires:        asStr(row.getCell(25).value).split(',').map(s => s.trim()).filter(Boolean),
+                mult_compose_override:  asStr(row.getCell(26).value).trim().toUpperCase(),
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -7857,6 +7883,9 @@
                 weight:       asNum(row.getCell(4).value, 0),
                 is_end:       asBool(row.getCell(5).value),
                 link_jackpot: asStr(row.getCell(6).value).trim(),
+                // v8.29 / C-3:round-trip 補讀(舊檔缺欄 → '' 安全降級)
+                item_role:    asStr(row.getCell(7).value).trim().toUpperCase(),   // v8.22 G3
+                link_mode:    asStr(row.getCell(8).value).trim(),                 // v8.27 批8
               });
             });
             for (const m of modes) {
@@ -7998,13 +8027,19 @@
           const ws9 = wb.getWorksheet('09_Puzzle_Rules');
           if (ws9) {
             // 讀首列判斷 schema 版本
+            // v8.29 / C-3:掃描上限 10 → 動態欄數(修 v8.21 Persistent(11)/v8.28 Notes(12) 掃不到)
             const hdr = [];
             const hdrRow = ws9.getRow(1);
-            for (let c = 1; c <= 10; c++) hdr.push(asStr(hdrRow.getCell(c).value).trim());
+            const hdrCount = Math.max(12, ws9.columnCount || 12);
+            for (let c = 1; c <= hdrCount; c++) hdr.push(asStr(hdrRow.getCell(c).value).trim());
             const isNewSchema = hdr.includes('Actions') && hdr.includes('Enabled');
             // v8.4 / R2 P5:隨機組欄位(by-name;舊檔缺欄 → 0 → 走預設)
             const cRG9 = hdr.indexOf('Random_Group') + 1;
             const cRW9 = hdr.indexOf('Random_Weight') + 1;
+            // v8.29 / C-3:Persistent(v8.21 G1)/Notes(v8.28 缺口A)round-trip 補讀
+            //   (by-name;舊檔缺欄 → 0 → false/'' 安全降級)
+            const cPS9 = hdr.indexOf('Persistent') + 1;
+            const cNT9 = hdr.indexOf('Notes') + 1;
 
             const nr = [];
             ws9.eachRow((row, idx) => {
@@ -8036,6 +8071,8 @@
                   description: asStr(row.getCell(8).value),
                   random_group: cRG9 > 0 ? asStr(row.getCell(cRG9).value).trim() : '',          // v8.4 P5
                   random_weight: cRW9 > 0 ? asNum(row.getCell(cRW9).value, 100) : 100,          // v8.4 P5
+                  persistent: cPS9 > 0 ? asBool(row.getCell(cPS9).value) : false,               // v8.29 C-3(v8.21 G1)
+                  notes:      cNT9 > 0 ? asStr(row.getCell(cNT9).value).trim() : '',            // v8.29 C-3(v8.28 缺口A)
                 });
               } else {
                 // 舊 schema:轉換到新 schema 結構
