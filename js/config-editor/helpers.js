@@ -1870,6 +1870,35 @@
       desc: '該符號構成「指定形狀」的 4 鄰連通群數;subkey 格式「SID.SHAPE」(首點切分同 ' +
             'adjacent_count 前例)。形狀名為自由詞彙(如 L / SQUARE / LINE_H),幾何定義寫在' +
             '規則備註、判定由下游實作。「cluster_shape.KEY.L >= 1」= 存在 L 形群(Finn)。' },
+    // ── v8.41 / 批次A:WinEvent 屬性族三枚(GAP-V1/V3/V4;沿 v8.4/v8.37/v8.40
+    //    常數增列前例,parse_condition 任意識別字皆合法、Python 端零改;
+    //    「本筆」= 單次中獎結算事件(ON_WIN_RESOLVED / ON_COMBO_STEP 語境),
+    //    連爆多步各自獨立取值;跨步累計走 UPDATE_GLOBAL(op=add) 慣用式;
+    //    求值語意由下游模擬工具實作) ──
+    { id: 'win_symbols',           label: 'win_symbols',           needsSubkey: false, valueType: 'number',
+      desc: '本筆中獎事件的符號顆數(連爆各步獨立);「UPDATE_GLOBAL(charge, add, win_symbols)」' +
+            '= 充能計量(Gemix/Tome 式 cluster 消除貨幣)' },
+    { id: 'win_contains',          label: 'win_contains',          needsSubkey: true,
+      subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
+      desc: '本筆中獎是否包含該符號(1/0 謂詞,前例 rightmost_reel_in_win);' +
+            '「win_contains.RUNE == 1」= 符文參與中獎(Tome/VR 式)。本批僅收單符號 SID,' +
+            'group:<gid> 家族形留觀察清單等第二樣本。' },
+    { id: 'destroyed_count',       label: 'destroyed_count',       needsSubkey: false, valueType: 'number',
+      desc: '本筆結算銷毀的符號顆數(含波及銷毀,可大於 win_symbols;xBomb 型兩值分歧);' +
+            'Temple Tumble 全清/計量。' },
+    // ── v8.45 / 批次D 組一:條件變數二枚(GAP-V2 + reel_stack_count;沿批次A 前例,
+    //    parse_condition 任意識別字皆合法、Python 端零改;求值語意由下游模擬工具實作) ──
+    { id: 'track_covered',         label: 'track_covered',         needsSubkey: true,
+      subkeyHint: '軌道ID',        valueType: 'number', subkeySource: 'text',
+      desc: '該軌道(02c_Tracks)的格位是否全數被本局中獎覆蓋(1/0 謂詞,前例 win_contains);' +
+            '「track_covered.T001 == 1」= 圖樣達成(Gemix 世界圖樣 / VR 等級圖樣)。' +
+            'subkey 亦可填 CURRENT = 當前圖樣(圖樣輪替時,當前指標由規則以 ' +
+            'global.track_current 維護並於備註宣告輪替序;判定由下游實作)。' },
+    { id: 'reel_stack_count',      label: 'reel_stack_count',      needsSubkey: true,
+      subkeyHint: '符號[.輪號]',   valueType: 'number', subkeySource: 'text',
+      desc: '該符號在「單一輪內」的最大縱向連續疊數;subkey「SID」= 全輪取最大,' +
+            '「SID.r」= 指定輪(1-based;雙段 subkey 同 object_pos/cluster_shape 前例)。' +
+            '「reel_stack_count.APE >= 4」= 猿群疊 4(PotA);配 reel_height 可表「整輪疊滿」(ML)。' },
   ];
   const VAR_CATEGORY_MAP = Object.fromEntries(VAR_CATEGORIES.map(c => [c.id, c]));
 
@@ -2558,12 +2587,20 @@
       desc: '在指定位置/已被消除的格子強制填入符號',
       params: [
         { key: 'symbol_id', label: '符號',        type: 'symbol', required: true, sentinels: ['RANDOM'] },
-        { key: 'positions', label: '位置清單(可選)', type: 'text',
-          placeholder: '[[0,1],[2,3]]', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...]' },
+        // v8.48 / 項目一 Batch A:positions 可填目標參照 SELF/SELF_LANDED/SELF:方向(相對觸發物件的格)
+        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
+          placeholder: '[[0,1],[2,3]] 或 SELF', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...];' +
+            '或目標參照 SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)' },
         // v8.34 / GAP-S1+🟢-1:填入顆數(Finn 2–5 / SF2 3–7 / Holy Diver 1–4 皆範圍式)。
         //   additive 加參數尾;留空=填所有 destroyed 格(現行語意不變)。
         { key: 'count', label: '數量(可選)', type: 'number', dyn: true, placeholder: '3 或 "2-5"',
           desc: '固定數、範圍 "2-5"(含引號)、或公式;留空=填所有 destroyed 格' },
+        // v8.48 / 項目一 Batch A:排除過濾 + 取用順序(描述層三件套「建立(既有選取)＋排除＋排序」的排除/排序半;無 handler)
+        { key: 'except_if', label: '排除條件(可選)', type: 'text', placeholder: 'target == WILD',
+          desc: '對選中目標做本動作,但符合此謂詞者跳過(如 target == WILD / target in [WILD,SCAT]);純謂詞,下游求值' },
+        { key: 'order', label: '取用順序(可選)', type: 'enum',
+          options: ['', 'PAYOUT_DESC', 'PAYOUT_ASC', 'NEAREST', 'FARTHEST', 'FIXED_LIST', 'RANDOM'], default: '',
+          desc: '多目標的挑選順序;非 RANDOM=確定性規則(下游照此排)、RANDOM/留空=下游決定。與排除條件正交:先排除、再依序取' },
       ] },
     { type: 'BOARD_TRANSFORM', label: '盤面轉換', icon: '🔁',
       desc: '把盤面上指定符號轉成另一個符號',
@@ -2574,18 +2611,56 @@
         { key: 'from_symbol', label: '原符號', type: 'symbol', required: true, sentinels: ['RANDOM'], groupable: true,
           desc: '單一符號、RANDOM、或家族:group:<家族ID>(全員)/ group_any:<家族ID>(隨機一種)' },
         { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true, sentinels: ['RANDOM', 'BEST'] },
+        // v8.48 / 項目一 Batch A:目標位置限定(可選;可填參照 SELF/SELF:方向 — 只轉「觸發物件當前/相鄰格」)
+        { key: 'positions', label: '限定位置(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
+          placeholder: 'SELF:LEFT', desc: '省略=全盤符合 from_symbol 者;填目標參照 SELF/SELF_LANDED/SELF:LEFT|RIGHT|UP|DOWN,' +
+            '則只轉該格(如「把物件左邊那格轉成 A」)' },
+        // v8.48 / 項目一 Batch A:排除過濾 + 取用順序(三件套的排除/排序半;無 handler,下游求值)
+        { key: 'except_if', label: '排除條件(可選)', type: 'text', placeholder: 'target == WILD',
+          desc: '對選中目標做轉換,但符合此謂詞者跳過(如 target == WILD =「除非左邊是 WILD」);純謂詞,下游求值' },
+        { key: 'order', label: '取用順序(可選)', type: 'enum',
+          options: ['', 'PAYOUT_DESC', 'PAYOUT_ASC', 'NEAREST', 'FARTHEST', 'FIXED_LIST', 'RANDOM'], default: '',
+          desc: '多目標挑選順序;非 RANDOM=確定性(下游照排)、RANDOM/留空=下游決定。先排除、再依序取' },
       ] },
     { type: 'BOARD_DESTROY', label: '盤面銷毀', icon: '💥',
       desc: '銷毀盤面上指定符號或指定位置',
       params: [
-        { key: 'symbol_id', label: '符號(可選)',    type: 'symbol', sentinels: ['RANDOM'] },
-        { key: 'positions', label: '位置清單(可選)', type: 'text', placeholder: '[[0,1],[2,3]]' },
+        // v8.45 / 批次D GAP-A4:哨兵尾加 NON_WIN(全盤非中獎符;xBoot xBomb 清場式)
+        { key: 'symbol_id', label: '符號(可選)',    type: 'symbol', sentinels: ['RANDOM', 'NON_WIN'],
+          desc: 'NON_WIN = 全盤非中獎符(xBoot xBomb 清場式)' },
+        // v8.48 / 項目一 Batch A:positions 可填目標參照 SELF/SELF:方向(相對觸發物件;如「消除物件腳下那格」=吃)
+        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
+          placeholder: '[[0,1],[2,3]] 或 SELF', desc: '格式 [[reel,row],...];或目標參照 ' +
+            'SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)' },
+        // v8.48 / 項目一 Batch A:排除過濾 + 取用順序(三件套的排除/排序半;無 handler,下游求值)
+        { key: 'except_if', label: '排除條件(可選)', type: 'text', placeholder: 'target == WILD',
+          desc: '對選中目標做銷毀,但符合此謂詞者跳過(如 target == WILD 保留 Wild 不炸);純謂詞,下游求值' },
+        { key: 'order', label: '取用順序(可選)', type: 'enum',
+          options: ['', 'PAYOUT_DESC', 'PAYOUT_ASC', 'NEAREST', 'FARTHEST', 'FIXED_LIST', 'RANDOM'], default: '',
+          desc: '多目標挑選順序;非 RANDOM=確定性(下游照排)、RANDOM/留空=下游決定。先排除、再依序取' },
       ] },
     { type: 'MOVE', label: '移動符號', icon: '➡️',
-      desc: '把某格的符號移到另一格(原格變 destroyed)',
+      desc: '把符號從一處移到另一處。兩種用法:①絕對座標 from→to(既有);' +
+            '②物件式 subject(符號選取器)+ manner 方向/軌道 —— 不必知座標即可「移動盤上的該物件」。' +
+            '「每盤移動一次」由把本動作掛在每盤觸發(ON_SPIN_START/ON_GRID_GENERATED)的規則達成;' +
+            '「移動幾次」為生成→每盤移→消失夾出的湧現值,不需在此設定',
       params: [
-        { key: 'from', label: '從',  type: 'pos', placeholder: '[0,1]', required: true },
-        { key: 'to',   label: '到',  type: 'pos', placeholder: '[2,3]', required: true },
+        // v8.48 / 項目一 Batch A:from/to 由 required 放寬(subject 模式時不需座標;只鬆不緊,舊資料無感)
+        { key: 'from', label: '從(絕對)',  type: 'pos', placeholder: '[0,1]',
+          desc: 'manner=TO(預設)時的來源格;用 subject 物件式時可留空' },
+        { key: 'to',   label: '到(絕對)',  type: 'pos', placeholder: '[2,3]', sentinels: ['SELF', 'SELF_LANDED'],
+          desc: 'manner=TO 時的目的格;可填哨兵 SELF/SELF_LANDED(見目標參照);用 DIR/PATH 時忽略' },
+        // v8.48 / 項目一 Batch A:物件式移動(subject + manner/dir/amount/track;純描述,無 handler,語意交下游)
+        { key: 'subject', label: '移動物件(可選)', type: 'symbol',
+          desc: '要移動的符號/物件(如 BIRD);填了就不必知座標,語意=移動盤上的該物件。與 from 互斥擇一' },
+        { key: 'manner', label: '移動方式', type: 'enum', options: ['TO', 'DIR', 'PATH'], default: 'TO',
+          desc: 'TO=絕對 from→to(既有);DIR=依方向;PATH=沿 02c 軌道' },
+        { key: 'dir', label: '方向', type: 'enum', options: ['', 'LEFT', 'RIGHT', 'UP', 'DOWN'], default: '',
+          desc: 'manner=DIR 時的移動方向' },
+        { key: 'amount', label: '一次幾格', type: 'number', dyn: true, placeholder: '1', default: 1,
+          desc: 'manner=DIR 時單次移動的格數;留空=1' },
+        { key: 'track', label: '軌道(可選)', type: 'text', placeholder: 'T001',
+          desc: 'manner=PATH 時引用的 02c_Tracks 軌道 ID' },
       ] },
     { type: 'SWAP', label: '交換符號', icon: '🔄',
       desc: '交換兩格的符號',
@@ -2598,6 +2673,11 @@
       params: [
         { key: 'positions', label: '位置清單', type: 'text', placeholder: '[[0,1]]',
           desc: '省略則黏所有中獎符號' },
+        // v8.42 / 批次B GAP-A2:符號選取器(additive 參數,描述層,引擎不消費)
+        { key: 'symbol', label: '符號選取(可選)', type: 'symbol',
+          desc: '凡該符皆黏(落定即黏、中獎不移除,不可摧毀);與位置清單互斥擇一,' +
+                '同時填寫時以 symbol 為準。搭配 until=FEATURE 即「黏至 feature 結束」' +
+                '(Gemix 魔法書 / Ecuador Gold 不可摧毀 Wild / Wild Swarm 黏 Wild)' },
         { key: 'duration',  label: '黏著局數', type: 'number', placeholder: '2', required: true },
         // v8.4 / R2 P3:additive 參數(描述層,引擎不消費)
         { key: 'until', label: '黏著期間', type: 'enum', options: ['SPINS', 'FEATURE'], default: 'SPINS',
@@ -2632,7 +2712,9 @@
           desc: '乘數=推移步數的耦合(xNudge);0/留空=無' },
       ] },
     { type: 'WALK', label: '走位符號', icon: '🚶',
-      desc: '符號每次消除/每局依方向走 N 步且持續存在(Jammin\' Jars / Toro)',
+      desc: '符號每次消除/每局依方向走 N 步且持續存在(Jammin\' Jars / Toro)。' +
+            '【v8.48 註:本動作為向後相容保留,不再擴充。新規劃改用泛化 MOVE + 反應式規則—' +
+            'steps→每盤觸發一條 MOVE、trail→物件在格時 BOARD_TRANSFORM 該格、persist→STICKY、track→MOVE manner=PATH】',
       params: [
         { key: 'symbol',  label: '符號',    type: 'symbol', required: true },
         { key: 'steps',   label: '每次步數', type: 'number', placeholder: '1', default: 1 },
@@ -2644,6 +2726,10 @@
           desc: 'dir=PATH 時引用的軌道 ID(02_Layout 頁定義);留空 = 路徑細節寫規則備註' },
         { key: 'persist', label: '存續範圍', type: 'enum', options: ['SPIN', 'CHAIN', 'FEATURE'], default: 'CHAIN',
           desc: 'SPIN=僅本局;CHAIN=跨連鎖;FEATURE=至 feature 結束' },
+        // v8.42 / 批次B:留痕參數(additive 尾端,描述層,引擎不消費)
+        { key: 'trail', label: '留痕符號(可選)', type: 'symbol',
+          desc: '走過的格位留下該符(snail-trail wilds;Ecuador Gold 幽靈 Wild 足跡 / ' +
+                'Gemix 公主蔓延路徑);留空 = 不留痕' },
       ] },
     // v8.28 / 缺口A:物件初始放置(純描述,本工具不執行;新一局 ON_SPIN_START 觸發)
     { type: 'SPAWN', label: '放置物件', icon: '📍',
@@ -2659,8 +2745,11 @@
         { key: 'symbol', label: '佔位符號', type: 'symbol', required: true },
         { key: 'pool',   label: '揭示池',   type: 'text', placeholder: 'H1,H2,WILD 或 RANDOM', required: true,
           desc: '逗號分隔候選(權重由 04 表沿用)或 RANDOM=全符號隨機' },
-        { key: 'scope',  label: '揭示範圍', type: 'enum', options: ['CELL', 'REEL'], default: 'CELL',
-          desc: 'CELL=各格獨立揭示;REEL=同輪佔位統一揭示為同一符號' },
+        // v8.42 / 批次B:scope enum 尾端 additive 加 BOARD(default 不變,舊資料零影響)
+        { key: 'scope',  label: '揭示範圍', type: 'enum', options: ['CELL', 'REEL', 'BOARD'], default: 'CELL',
+          desc: 'CELL=各格獨立揭示;REEL=同輪佔位統一揭示為同一符號;' +
+                'BOARD=全盤所有佔位統一揭示為同一符號(業界 mystery symbol 標準語意;' +
+                'Gorilla Gold 神祕符 / xBoot xWays / Goonies 神祕金幣)' },
       ] },
     { type: 'SPLIT', label: '分裂符號', icon: '🪓',
       desc: '把符號一分為 N(數量翻倍計分;razor split / xSplit)',
@@ -2671,10 +2760,16 @@
     { type: 'DESTROY_ADJACENT', label: '相鄰消除', icon: '🧨',
       desc: '以符號為中心消除相鄰範圍(可炸開封閉列;xBomb)',
       params: [
-        { key: 'symbol',    label: '中心符號', type: 'symbol', required: true },
+        // v8.45 / 批次D GAP-A4:required 放寬(anchor=WIN 時中心非符號;只鬆不緊,舊資料無感)
+        { key: 'symbol',    label: '中心符號', type: 'symbol',
+          desc: 'anchor=SYMBOL(預設)時必填;anchor=WIN 時忽略(中心為本筆中獎格)' },
         { key: 'radius',    label: '半徑',    type: 'number', placeholder: '1', default: 1 },
         { key: 'open_rows', label: '炸開封閉列', type: 'enum', options: ['Y', 'N'], default: 'N',
           desc: '消除範圍觸及封閉列時將其開啟(Fire in the Hole)' },
+        // v8.45 / 批次D GAP-A4:錨定族(一族收編 Gonzo 系 anchor=WIN / xBomb 系 / 炸彈符全類)
+        { key: 'anchor',    label: '錨定',    type: 'enum', options: ['SYMBOL', 'WIN'], default: 'SYMBOL',
+          desc: 'SYMBOL=以中心符號為錨(現行為);WIN=以本筆中獎格為錨,消除其相鄰' +
+                '(Temple Tumble 銷毀中獎相鄰石磚)' },
       ] },
     { type: 'GROW_BOARD', label: '盤面成長', icon: '📐',
       desc: '事件驅動的加列/加輪/開格(White Rabbit / Nitro / Infinity Reels / Money Train)',
@@ -2756,6 +2851,43 @@
       params: [
         { key: 'when', label: '結束條件(謂詞,可選)', type: 'text', placeholder: 'respins_left == 0 / symbol_count.SEVEN >= 1',
           desc: '滿足此謂詞即結束;留空=無條件立即結束。與模式 End_Condition 連動,語意由下游實作' },
+      ] },
+    // ── v8.43 / C-1 GAP-T2:條件式輪帶切換二枚(描述型,無 handler、五核零觸碰;
+    //    schemas.ActionType 尾端 additive;執行語意由下游模擬工具實作) ──
+    { type: 'SYMBOL_SWAP', label: '輪帶符號置換', icon: '🎞️',
+      desc: '把「輪帶層」的某符號置換為另一符號(轉動中即見新符,影響後續抽樣與聽牌;' +
+            '非 BOARD_TRANSFORM 的落盤後變形)。存續期滿自動還原' +
+            '(PotA 人類符逐級轉 Wild / PE2 山羊升級鏈 / Goonies Go Wild)',
+      params: [
+        { key: 'from_symbol', label: '原符號', type: 'symbol', required: true, groupable: true,
+          desc: '單一符號、或家族:group:<家族ID>(全員)/ group_any:<家族ID>(隨機一種);' +
+                '對齊 BOARD_TRANSFORM v8.36 家族參照語法' },
+        { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true },
+        { key: 'reels',       label: '限定輪(可選)', type: 'text', placeholder: '2,3,4',
+          desc: '逗號分隔 1-based 輪號(對齊 04b Reel_ID);留空 = 全輪' },
+        { key: 'persist',     label: '存續範圍', type: 'enum',
+          options: ['SPIN', 'FEATURE', 'SESSION'], default: 'FEATURE',
+          desc: 'SPIN=僅本局;FEATURE=至 feature 結束(PotA/PE2/Goonies 皆此);SESSION=跨局持久' },
+      ] },
+    { type: 'SWITCH_STRIP', label: '輪帶切換', icon: '🎠',
+      desc: '把某輪整條輪帶切換為 04b 定義的「變體帶」(Mode_Scope=「模式#變體名」列);' +
+            '存續期滿還原為原模式帶。White Rabbit 皇后輪式',
+      params: [
+        { key: 'reel',    label: '輪號(1-based)', type: 'number', placeholder: '3', required: true,
+          desc: '對齊 04b Reel_ID(1-based;注意與 LOCK_REEL 0-based 不同,本參數跟隨 04b)' },
+        { key: 'variant', label: '變體帶鍵', type: 'text', placeholder: 'FG1#QUEEN', required: true,
+          desc: '04b 的 Mode_Scope 變體鍵(「模式#變體名」);該鍵該輪需有 Strip_Sequence' },
+        { key: 'persist', label: '存續範圍', type: 'enum', options: ['FEATURE', 'SESSION'], default: 'FEATURE' },
+      ] },
+    // ── v8.44 / C-2 GAP-P5:面板動態啟停(描述型,無 handler;與 02b Active_Modes
+    //    靜態模式域疊加:兩者皆過才作動) ──
+    { type: 'PANEL_SET', label: '面板啟停', icon: '🎛️',
+      desc: '事件驅動地啟用/停用某副盤(Gorilla Gold 金猴解鎖 GRID2~4)。' +
+            '停用 = 該盤不物化不評價;與 02b Active_Modes(靜態模式域)疊加:兩者皆過才作動',
+      params: [
+        { key: 'panel',  label: '面板', type: 'panel', required: true, placeholder: 'GRID2',
+          desc: '02b 的 Panel_ID' },
+        { key: 'active', label: '啟停', type: 'enum', options: ['Y', 'N'], default: 'Y', required: true },
       ] },
   ];
   const ACTION_BY_TYPE = Object.fromEntries(ACTION_CATALOG.map(a => [a.type, a]));

@@ -812,6 +812,30 @@
               <div class="cfg-hint">本面板內容每局沿軌道位移 N 格;空 = 現行隱含「往下滾」語意。軌道 scope 建議設 PANEL:{{ activePanel.panel_id }}。</div>
             </div>
 
+            <!-- v8.44 / C-2 GAP-P3+P5:作動模式 + 評價域 -->
+            <div class="cfg-field">
+              <label class="cfg-label">作動模式(可選) <span class="cfg-key">Active_Modes</span></label>
+              <input class="input input-w-name" type="text" v-model.trim="activePanel.active_modes"
+                     placeholder="例:FS1,FS2(逗號分隔)">
+              <div class="cfg-hint">逗號分隔模式名;空 = 全模式作動(現行為)。事件驅動啟停另以規則動作 PANEL_SET(panel="{{ activePanel.panel_id }}") 疊加。</div>
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label">評價域 <span class="cfg-key">Eval_Domain / Payline_Set</span></label>
+              <select class="input input-w-name" v-model="activePanel.eval_domain">
+                <option value="">（併入主盤 — 沿用「參與主盤連線」設定）</option>
+                <option value="SELF_LINE">SELF_LINE 盤內連線集</option>
+                <option value="SELF_WAYS">SELF_WAYS 盤內 ways</option>
+              </select>
+              <input v-if="activePanel.eval_domain === 'SELF_LINE'"
+                     class="input input-w-name" type="text" v-model.trim="activePanel.payline_set"
+                     placeholder="例:L1,L2,L3 或 ALL" style="margin-top:6px;">
+              <div class="cfg-hint">SELF_* = 本盤自帶評價域,scatter 計數亦盤內計;SELF_LINE 的連線集引用 06 表既有 Line_ID(csv 或 ALL)。</div>
+              <div v-if="activePanel.eval_domain && activePanel.join_payline"
+                   style="margin-top:6px; padding:6px 8px; background:rgba(230,160,30,0.12); border:1px solid rgba(230,160,30,0.4); border-radius:6px; font-size:12px; color:var(--text);">
+                ⚠ 已設評價域(Eval_Domain 優先),「參與主盤連線」將被忽略。
+              </div>
+            </div>
+
             <!-- 觸發型:觸發符號 -->
             <div v-if="(activePanel.panel_type||'SCROLL') === 'TRIGGER'" class="cfg-field">
               <label class="cfg-label">觸發符號 <span class="cfg-key">Trigger_Symbol</span></label>
@@ -6110,6 +6134,17 @@
                 <button v-for="mn in modeNames" :key="mn"
                         class="cfg-chip" :class="{ active: stripActiveMode === mn }"
                         @click="stripActiveMode = mn">{{ mn }}</button>
+                <!-- v8.43 / C-1:輪帶變體 chip(當前 base 模式的 "模式#變體名" 鍵;
+                     SWITCH_STRIP(variant=) 引用;主帶零影響) -->
+                <template v-for="vk in stripVariantsOf(stripActiveMode)" :key="vk">
+                  <button class="cfg-chip cfg-chip-variant" :class="{ active: stripActiveMode === vk }"
+                          :title="'輪帶變體 ' + vk + '(規則以 SWITCH_STRIP(variant=&quot;' + vk + '&quot;) 引用)'"
+                          @click="selectStripKey(vk)">#{{ vk.slice(stripBaseOf(vk).length + 1) }}<span
+                            class="cfg-chip-x" title="刪除此變體"
+                            @click.stop="removeStripVariant(vk)">✕</span></button>
+                </template>
+                <button class="cfg-chip cfg-chip-add-variant" title="為當前模式新增輪帶變體(整帶置換用;White Rabbit 皇后輪式)"
+                        @click="addStripVariant()">＋變體</button>
               </div>
               <div class="cfg-strips-tools">
                 <label class="cfg-strips-tool-label">長度

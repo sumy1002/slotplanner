@@ -274,7 +274,8 @@
     wsPnl.addRow(['Panel_ID', 'Col', 'Row', 'Width', 'Height',
                 'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note',
                 'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel', 'Cells',
-                'Scroll_Track', 'Scroll_Step']);   // v8.39 軌道:尾端 additive('' / 1 = 現行隱含語意)
+                'Scroll_Track', 'Scroll_Step',   // v8.39 軌道:尾端 additive('' / 1 = 現行隱含語意)
+                'Active_Modes', 'Eval_Domain', 'Payline_Set']);   // v8.44 C-2:尾端 additive('' = 現行為)
     for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
       if (!p || !p.panel_id) continue;
       // v6.2:Scroll 由 panel_type 推導(向後相容:無 panel_type 時用舊 scroll)
@@ -287,6 +288,9 @@
         ptype, p.trigger_symbol || '', p.collect_target_jp || '', Number(p.trigger_reel) || 0, cellsStr,
         (p.scroll_track != null ? String(p.scroll_track).trim() : ''),          // v8.39 軌道
         (p.scroll_step != null ? Number(p.scroll_step) || 0 : 1),               // v8.39 軌道
+        (p.active_modes != null ? String(p.active_modes).trim() : ''),          // v8.44 C-2
+        (p.eval_domain  != null ? String(p.eval_domain).trim()  : ''),          // v8.44 C-2
+        (p.payline_set  != null ? String(p.payline_set).trim()  : ''),          // v8.44 C-2
       ]);
     }
     boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12, 22]);

@@ -99,6 +99,12 @@ class ActionType(Enum):
     #   (幾何座標,沿用 cell_value.<r,c> 記法)。移動方向以 params dir(up/down/left/right/path)
     #   承載(WALK/MOVE 共用)。logic_parser 不註冊 handler(放置/移動語意交下游模擬工具)。
     SPAWN              = "SPAWN"              # 物件初始放置(cell="r,c";新一局觸發)
+    # ── v8.43 / C-1 GAP-T2:條件式輪帶切換二枚(描述型;logic_parser 不註冊 handler,
+    #    執行語意由下游模擬工具實作;沿 v8.4 七枚 / v8.28 SPAWN 前例) ──
+    SYMBOL_SWAP        = "SYMBOL_SWAP"        # 輪帶層 from→to 符號置換(persist 期滿還原)
+    SWITCH_STRIP       = "SWITCH_STRIP"       # 整帶切換為 04b 變體帶("模式#變體名" 列)
+    # ── v8.44 / C-2 GAP-P5:面板動態啟停(描述型;與 02b Active_Modes 靜態域疊加) ──
+    PANEL_SET          = "PANEL_SET"          # 副盤啟用/停用(panel=Panel_ID, active=Y|N)
 
 
 class ConditionOp(Enum):
@@ -298,6 +304,13 @@ class PanelDef:
     #   位移狀態(offset 累計)由下游追蹤,本工具只宣告軌道與步幅。缺欄 → 預設。
     scroll_track: str = ""
     scroll_step: float = 1.0
+    # v8.44 / C-2 GAP-P3+P5:面板評價域與模式作動域(尾欄 additive;缺欄 → 預設 = 現行為)。
+    #   active_modes ""=全模式;eval_domain ""/MAIN=併入主盤(沿用 join_payline 現語意),
+    #   SELF_LINE=盤內連線集(payline_set 引用 06 表 Line_ID csv 或 ALL)、SELF_WAYS=盤內 ways;
+    #   非空時 eval_domain 優先、join_payline 忽略。scatter 計數域隨評價域(SELF=盤內計)。
+    active_modes: str = ""
+    eval_domain: str = ""
+    payline_set: str = ""
 
     def active_local_cells(self) -> list[tuple[int, int]]:
         """要物化的局部座標 (c, r)。cells=None → 整塊 width×height 矩形。

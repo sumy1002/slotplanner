@@ -578,6 +578,10 @@
         { key: 'MULTIPLIER', zh: '倍數' },
         { key: 'BOOST',      zh: '增益' },
         { key: 'JACKPOT',    zh: '彩池' },
+        // v8.45 / 批次D GAP-C1:進場前玩家擇一(非隨機,Item_Weight 不適用;
+        //   Item_Value=選項參數、Item_Link_Mode=選後進入的模式。與模式級 choice_group
+        //   正交:選項是完整模式 → choice_group;選項是參數組/揀選面 → 本角色)
+        { key: 'PLAYER_CHOICE', zh: '玩家選項' },
       ];
       const _ITEM_ROLE_ZH = Object.fromEntries(MODE_ITEM_ROLES.map(r => [r.key, r.zh]));
       function itemRoleLabel(v) {
@@ -721,6 +725,13 @@
         reel_count:             { label: '當前輪數' },
         symbol_ways:            { label: '符號 ways 數', needsSubkey: true, subkeyPrefix: '' },
         cluster_shape:          { label: '形狀群數', needsSubkey: true, subkeyPrefix: '' },   // v8.40 🟢-3
+        // v8.41 / 批次A:WinEvent 屬性族(GAP-V1/V3/V4)
+        win_symbols:            { label: '本筆中獎顆數' },
+        win_contains:           { label: '本筆中獎含符', needsSubkey: true, subkeyPrefix: '' },
+        destroyed_count:        { label: '本筆銷毀顆數' },
+        // v8.45 / 批次D 組一
+        track_covered:          { label: '軌道全覆蓋', needsSubkey: true, subkeyPrefix: '' },
+        reel_stack_count:       { label: '單輪疊數', needsSubkey: true, subkeyPrefix: '' },
       };
 
       // 運算子 → 白話
@@ -1697,6 +1708,11 @@
       function confirmAddModeDlg() {
         const name = modeAddDlg.name.trim();
         if (!name || modeAddDlgNameTaken.value) return;   // 防呆:空名 / 撞名不建立
+        // v8.43 / C-1:# 為輪帶變體保留字元,模式名拒收
+        if (name.includes('#')) {
+          emit('status', { type: 'err', msg: `模式名稱不可含「#」(輪帶變體保留字元)` });
+          return;
+        }
         const m = makeMode(name);
         modes.push(m);
         _ensureModeGameplayFields(m);                     // v7.10:補 reset_scope/trigger_pays
@@ -1757,6 +1773,8 @@
           [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
             if (Array.isArray(arr)) arr.forEach(o => { if (_hasTok(o && o.mode_scope)) refs++; });
           });
+          // v8.44 / C-2:面板作動模式 csv(欄名 active_modes)一併盤點
+          panels.forEach(pp => { if (_hasTok(pp && pp.active_modes)) refs++; });
           const _escN = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const _dslRe = new RegExp(
             '\\bmode\\s*==\\s*' + _escN + '\\b|\\bmode\\s+in\\s+\\[[^\\]]*\\b' + _escN + '\\b[^\\]]*\\]');
@@ -1783,6 +1801,12 @@
         // 寫回(input 已 v-model 或在此統一寫;確保 m.mode 為清乾淨的 newName)
         m.mode = newName;
         if (!newName || newName === old) return;            // 空名或沒變:交給既有空名警告處理,不遷移
+        // v8.43 / C-1:# 為輪帶變體保留字元(04b Mode_Scope 變體鍵 "模式#變體名"),模式名拒收
+        if (newName.includes('#')) {
+          emit('status', { type: 'err', msg: `模式名稱不可含「#」(輪帶變體保留字元),改名取消` });
+          m.mode = old;
+          return;
+        }
         if (modes.some((x, i) => i !== idx && (x.mode || '').trim() === newName)) {
           // 撞名:還原,讓既有 duplicateNames 警告生效而非靜默蓋掉別人的資料
           emit('status', { type: 'err', msg: `模式名稱「${newName}」重複,改名取消` });
@@ -1802,6 +1826,21 @@
         _moveKey(comboWeights);
         _moveKey(reelStrips.strips);
         _moveKey(stripStr);
+        // v8.43 / C-1 R-H1:輪帶變體鍵 "<old>#X" 隨模式改名重映為 "<newName>#X"
+        //   (_moveKey 只搬精確鍵;變體鍵屬同一容器,改名必連動。動作參數內的
+        //    variant="OLD#X" 不重寫 — 與 SWITCH_MODE target 既知邊界同級)
+        const _movePrefixed = (obj) => {
+          if (!obj) return;
+          for (const k of Object.keys(obj)) {
+            if (k.startsWith(old + '#')) {
+              const nk = newName + k.slice(old.length);
+              if (!(nk in obj)) obj[nk] = obj[k];
+              delete obj[k];
+            }
+          }
+        };
+        _movePrefixed(reelStrips.strips);
+        _movePrefixed(stripStr);
         _moveKey(multipliers.progress_ladders);
         _moveKey(progressLadderStr);
         // 2) 巢狀於每筆面額的 weight_by_mode
@@ -1832,6 +1871,14 @@
         [rules, discards, constraints, genLimits, cellAttrs, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
           if (Array.isArray(arr)) arr.forEach(_renScope);
         });
+        // 3b-2) v8.44 / C-2 R-H1:面板作動模式 csv(欄名 active_modes,與 _renScope 同式重寫)
+        for (const pp of panels) {
+          if (!pp || !pp.active_modes) continue;
+          const parts = String(pp.active_modes).split(',').map(s => s.trim()).filter(Boolean);
+          let changed = false;
+          const next = parts.map(x => (x === old ? (changed = true, newName) : x));
+          if (changed) pp.active_modes = Array.from(new Set(next)).join(',');
+        }
         // 3c) v8.16:條件 DSL 內的 mode 字面值 — 「mode == OLD」與「mode in [.., OLD, ..]」
         //     只動 mode 比對的字面值,不碰其他變數/符號名。
         const _escOld = old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1872,6 +1919,10 @@
       panels.forEach(p => {
         if (p.scroll_track == null) p.scroll_track = '';
         if (p.scroll_step == null) p.scroll_step = 1;
+        // v8.44 / C-2 GAP-P3+P5(makePanel 凍結 → 此處補預設;'' = 現行為)
+        if (p.active_modes == null) p.active_modes = '';
+        if (p.eval_domain == null) p.eval_domain = '';
+        if (p.payline_set == null) p.payline_set = '';
       });
       const symbolSets = reactive(loadSymbolSets());
       const activePanelIdx = ref(-1);   // -1 = 未選 panel（在編主輪）
@@ -5118,6 +5169,49 @@
         if (arr.length) reelStrips.strips[mode][rid] = arr;
         else delete reelStrips.strips[mode][rid];
       }
+      // ─── v8.43 / C-1 GAP-T2:輪帶變體(Mode_Scope 慣用式 "模式#變體名") ───
+      //   變體存於 reelStrips.strips 既有形(任意字串鍵),LS 形零變、契約零改;
+      //   下游查無此模式名自然惰性;SWITCH_STRIP(variant=) 引用。
+      //   _ensureStripMode / commitStrip / 長度工具對任意鍵原樣可用。
+      function stripBaseOf(key) {
+        const s = String(key || '');
+        const i = s.indexOf('#');
+        return i >= 0 ? s.slice(0, i) : s;
+      }
+      function stripVariantsOf(mode) {
+        const base = stripBaseOf(mode);
+        return Object.keys(reelStrips.strips).filter(k => k.startsWith(base + '#')).sort();
+      }
+      function addStripVariant() {
+        const base = stripBaseOf(stripActiveMode.value);   // 變體上開變體 → 落回其 base(不巢狀)
+        if (!base) return;
+        const name = String(prompt(`為模式「${base}」新增輪帶變體\n變體名(不可含 #):`) || '').trim();
+        if (!name) return;
+        if (name.includes('#')) {
+          emit('status', { type: 'err', msg: '變體名不可含「#」(單層變體,不巢狀)' });
+          return;
+        }
+        const key = `${base}#${name}`;
+        if (reelStrips.strips[key] || stripStr[key]) {
+          emit('status', { type: 'err', msg: `變體「${key}」已存在` });
+          return;
+        }
+        _ensureStripMode(key);
+        stripActiveMode.value = key;
+        emit('status', { type: 'ok', msg: `已新增輪帶變體「${key}」;規則以 SWITCH_STRIP(variant="${key}") 引用` });
+      }
+      function removeStripVariant(key) {
+        if (!String(key || '').includes('#')) return;   // 只刪變體鍵,主模式帶不經此路
+        if (!confirm(`確定刪除輪帶變體「${key}」?\n(引用它的 SWITCH_STRIP 規則需自行調整)`)) return;
+        delete reelStrips.strips[key];
+        delete stripStr[key];
+        if (stripActiveMode.value === key) stripActiveMode.value = stripBaseOf(key);
+        emit('status', { type: 'ok', msg: `已刪除輪帶變體「${key}」` });
+      }
+      function selectStripKey(key) {
+        _ensureStripMode(key);   // 變體鍵自 LS 載回後 stripStr 未必已建,選取時 lazy 確保
+        stripActiveMode.value = key;
+      }
       // strip 隱含的符號分佈 %（驗證 / 預覽用）
       // ─── v8.13/批C:輪帶輔助 —— 建議長度 / 權重對照 / 07b 約束提示 ───
       // 核心定位不變:純編輯輔助與描述層提示,不做 RTP 反推配平(那是下游模擬工具的事)。
@@ -5225,8 +5319,9 @@
         emit('status', { type: 'ok', msg: `全部輪帶已寫回 04 權重（${mode}）` });
       }
       // v6.0-b:模式增減時同步輪帶 active mode 與字串快取
+      //   v8.43 / C-1:以 base 判定 — 變體鍵 "FG1#QUEEN" 在 FG1 仍存在時不被踢回 names[0]
       watch(modeNames, (names) => {
-        if (names.length && !names.includes(stripActiveMode.value)) stripActiveMode.value = names[0];
+        if (names.length && !names.includes(stripBaseOf(stripActiveMode.value))) stripActiveMode.value = names[0];
         for (const m of names) _ensureStripMode(m);
       }, { immediate: true });
 
@@ -7710,14 +7805,15 @@
             return rd;
           }
 
-          // ── 01_Global ── key-value 列
+          // ── 01_Global ── key-value 列(v8.46 Tier B:Key/Value 欄 by-name,免疫欄序)
           const ws1 = wb.getWorksheet('01_Global');
           if (ws1) {
+            const C1 = _rowReader(ws1);
             ws1.eachRow((row, idx) => {
               if (idx === 1) return;
-              const key = asStr(row.getCell(1).value).trim();
+              const key = asStr(C1(row, 'Key')).trim();
               if (!key || !(key in g)) return;
-              const raw = row.getCell(2).value;
+              const raw = C1(row, 'Value');
               const def = g[key];
               if (typeof def === 'number')      g[key] = asNum(raw, def);
               else if (typeof def === 'boolean') g[key] = asBool(raw);
@@ -7787,6 +7883,9 @@
               p.trigger_reel      = asNum(C2b(row, 'Trigger_Reel'), 0);
               p.scroll_track      = asStr(C2b(row, 'Scroll_Track')).trim();       // v8.39 軌道(缺欄→'')
               p.scroll_step       = asNum(C2b(row, 'Scroll_Step'), 1);            // v8.39 軌道(缺欄→1)
+              p.active_modes      = asStr(C2b(row, 'Active_Modes')).trim();       // v8.44 C-2(缺欄→'')
+              p.eval_domain       = asStr(C2b(row, 'Eval_Domain')).trim().toUpperCase();  // v8.44 C-2
+              p.payline_set       = asStr(C2b(row, 'Payline_Set')).trim();        // v8.44 C-2
               // Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
               const cellsRaw = asStr(C2b(row, 'Cells')).trim();
               const cellsArr = cellsRaw ? cellsRaw.split(/[;\s]+/).filter(Boolean) : null;
@@ -7800,11 +7899,12 @@
           // ── 03b_Symbol_Sets ── 符號集 D:{ Set_Name: [Symbol_ID,...] }。有分頁 → 以檔案為準覆蓋。
           const ws3b = wb.getWorksheet('03b_Symbol_Sets');
           if (ws3b) {
+            const C3b = _rowReader(ws3b);   // v8.46 Tier B:by-name
             const ns = {};
             ws3b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const setName = asStr(row.getCell(1).value).trim();
-              const sid     = asStr(row.getCell(2).value).trim();
+              const setName = asStr(C3b(row, 'Set_Name')).trim();
+              const sid     = asStr(C3b(row, 'Symbol_ID')).trim();
               if (!setName || !sid) return;
               (ns[setName] || (ns[setName] = [])).push(sid);
             });
@@ -7815,15 +7915,16 @@
           // ── 04b_Reel_Strips ── { enabled, strips: { mode: { reelId: [..] } } }。Strip_Sequence 逗號分隔。
           const ws4b = wb.getWorksheet('04b_Reel_Strips');
           if (ws4b) {
+            const C4b = _rowReader(ws4b);   // v8.46 Tier B:by-name
             const strips = {};
             let en = false;
             ws4b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const mode = asStr(row.getCell(1).value).trim();
-              const rid  = asNum(row.getCell(2).value, 0);
+              const mode = asStr(C4b(row, 'Mode_Scope')).trim();
+              const rid  = asNum(C4b(row, 'Reel_ID'), 0);
               if (!mode || !rid) return;
-              if (asBool(row.getCell(3).value)) en = true;
-              const seq = asStr(row.getCell(4).value).split(',').map(s => s.trim()).filter(Boolean);
+              if (asBool(C4b(row, 'Enabled'))) en = true;
+              const seq = asStr(C4b(row, 'Strip_Sequence')).split(',').map(s => s.trim()).filter(Boolean);
               if (!seq.length) return;
               (strips[mode] || (strips[mode] = {}))[rid] = seq;
             });
@@ -7907,41 +8008,59 @@
           // ── 14_Bet_Config ── 上半 Key/Value 的 Ante Bet 區 + 下半 Buy Feature 清單(以空白 BF_ID 表頭分段)。
           const ws14 = wb.getWorksheet('14_Bet_Config');
           if (ws14) {
+            const C14 = _rowReader(ws14);   // v8.46 Tier B:KV 段 Key/Value by-name
             const base = defaultBetConfig();
             const bf = [];
-            let inBF = false;
+            let bfIdx = null;   // v8.46 Tier B:BF 子表內嵌表頭局部索引(by-name;null = 尚未進入 BF 區)
             ws14.eachRow((row, idx) => {
               if (idx === 1) return;
-              const c1 = asStr(row.getCell(1).value).trim();
-              if (!c1) return;                        // 空行分隔
-              if (c1 === 'BF_ID') { inBF = true; return; } // Buy Feature 區表頭
+              // BF 區表頭:整列掃描 'BF_ID'(免疫欄序),就地建局部欄名索引
+              if (bfIdx == null) {
+                let isBfHdr = false;
+                row.eachCell({ includeEmpty: false }, (cell) => {
+                  if (asStr(cell.value).trim() === 'BF_ID') isBfHdr = true;
+                });
+                if (isBfHdr) {
+                  bfIdx = {};
+                  row.eachCell({ includeEmpty: false }, (cell, col) => {
+                    const k = asStr(cell.value).trim();
+                    if (k && bfIdx[k] == null) bfIdx[k] = col;
+                  });
+                  return;
+                }
+              }
+              const bfRd = (name) => { const i = bfIdx && bfIdx[name]; return i ? row.getCell(i).value : null; };
+              const kvKey = asStr(C14(row, 'Key')).trim();
               // v8.6:互斥/Feature Drop KV 附加在 sheet 尾端(BF 列之後)——以 key 名攔截,
               //   不論位於 BF 區前後皆正確歸位(與 Python loader 掃描式對齊)。
               const _tailKV = ['Ante_Buy_Exclusive', 'Feature_Drop_Enabled', 'Feature_Drop_Desc'];
-              if (_tailKV.includes(c1)) {
-                const v = row.getCell(2).value;
-                if (c1 === 'Ante_Buy_Exclusive')        base.ante_buy_exclusive   = asBool(v);
-                else if (c1 === 'Feature_Drop_Enabled') base.feature_drop_enabled = asBool(v);
-                else if (c1 === 'Feature_Drop_Desc')    base.feature_drop_desc    = asStr(v);
+              if (_tailKV.includes(kvKey)) {
+                const v = C14(row, 'Value');
+                if (kvKey === 'Ante_Buy_Exclusive')        base.ante_buy_exclusive   = asBool(v);
+                else if (kvKey === 'Feature_Drop_Enabled') base.feature_drop_enabled = asBool(v);
+                else if (kvKey === 'Feature_Drop_Desc')    base.feature_drop_desc    = asStr(v);
                 return;
               }
-              if (!inBF) {
-                // Ante Bet 區:Key / Value
-                const v = row.getCell(2).value;
-                if (c1 === 'Ante_Bet_Enabled')      base.ante_bet_enabled      = asBool(v);
-                else if (c1 === 'Ante_Bet_Mult')         base.ante_bet_mult         = asNum(v, 1.25);
-                else if (c1 === 'Ante_Bet_Trigger_Mult') base.ante_bet_trigger_mult = asNum(v, 2.0);
-                else if (c1 === 'Ante_Bet_Desc')         base.ante_bet_desc         = asStr(v);
+              if (bfIdx == null) {
+                // Ante Bet 區:Key / Value(by-name)
+                if (!kvKey) return;                     // 空行分隔
+                const v = C14(row, 'Value');
+                if (kvKey === 'Ante_Bet_Enabled')      base.ante_bet_enabled      = asBool(v);
+                else if (kvKey === 'Ante_Bet_Mult')         base.ante_bet_mult         = asNum(v, 1.25);
+                else if (kvKey === 'Ante_Bet_Trigger_Mult') base.ante_bet_trigger_mult = asNum(v, 2.0);
+                else if (kvKey === 'Ante_Bet_Desc')         base.ante_bet_desc         = asStr(v);
               } else {
-                // Buy Feature 列
-                const f = makeBuyFeature(asStr(row.getCell(2).value).trim());
-                f.bf_id       = c1;
-                f.target_mode = asStr(row.getCell(2).value).trim();
-                f.cost_mult   = asNum(row.getCell(3).value, 0);
-                f.rtp_target  = asNum(row.getCell(4).value, 0);
-                f.enabled     = asBool(row.getCell(5).value);
-                f.notes       = asStr(row.getCell(6).value);
-                f.kind        = asStr(row.getCell(7).value).trim().toUpperCase() || 'DIRECT';   // v8.6 E-15(舊檔缺 → DIRECT)
+                // Buy Feature 列(局部索引 by-name;含 BF_ID 本身;缺欄 → null 走預設)
+                const bid = asStr(bfRd('BF_ID')).trim();
+                if (!bid) return;                       // 空行分隔
+                const f = makeBuyFeature(asStr(bfRd('Target_Mode')).trim());
+                f.bf_id       = bid;
+                f.target_mode = asStr(bfRd('Target_Mode')).trim();
+                f.cost_mult   = asNum(bfRd('Cost_Mult'), 0);
+                f.rtp_target  = asNum(bfRd('RTP_Target'), 0);
+                f.enabled     = asBool(bfRd('Enabled'));
+                f.notes       = asStr(bfRd('Notes'));
+                f.kind        = asStr(bfRd('Kind')).trim().toUpperCase() || 'DIRECT';   // v8.6 E-15(舊檔缺 → DIRECT)
                 bf.push(f);
               }
             });
@@ -7953,17 +8072,18 @@
           // ── v8.8 / R4 B-6:02d_Cell_Attributes(舊檔無 → 保持;有 sheet 即覆蓋)──
           const ws02d = wb.getWorksheet('02d_Cell_Attributes');
           if (ws02d) {
+            const C02d = _rowReader(ws02d);   // v8.46 Tier B:by-name
             const cas = [];
             ws02d.eachRow((row, idx) => {
               if (idx === 1) return;
-              const aid = asStr(row.getCell(1).value).trim();
+              const aid = asStr(C02d(row, 'Attr_ID')).trim();
               if (!aid) return;
-              cas.push({ attr_id: aid, reel: asNum(row.getCell(2).value, 1),
-                         row: asNum(row.getCell(3).value, 1),
-                         attr: asStr(row.getCell(4).value).trim().toUpperCase() || 'MULT',
-                         value: asStr(row.getCell(5).value).trim(),
-                         mode_scope: asStr(row.getCell(6).value).trim() || 'ALL',
-                         notes: asStr(row.getCell(7).value) });
+              cas.push({ attr_id: aid, reel: asNum(C02d(row, 'Reel'), 1),
+                         row: asNum(C02d(row, 'Row'), 1),
+                         attr: asStr(C02d(row, 'Attr')).trim().toUpperCase() || 'MULT',
+                         value: asStr(C02d(row, 'Value')).trim(),
+                         mode_scope: asStr(C02d(row, 'Mode_Scope')).trim() || 'ALL',
+                         notes: asStr(C02d(row, 'Notes')) });
             });
             cellAttrs.splice(0, cellAttrs.length, ...cas);
           }
@@ -7971,13 +8091,14 @@
           // ── v8.6 / R5 E-18:14b_RTP_Variants(舊檔無 → 清空;有 sheet 即覆蓋)──
           const ws14b = wb.getWorksheet('14b_RTP_Variants');
           if (ws14b) {
+            const C14b = _rowReader(ws14b);   // v8.46 Tier B:by-name
             const rvs = [];
             ws14b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const v = asStr(row.getCell(1).value).trim();
+              const v = asStr(C14b(row, 'Variant')).trim();
               if (!v) return;
-              rvs.push({ variant: v, target_rtp: asNum(row.getCell(2).value, 0),
-                         max_bet: asNum(row.getCell(3).value, 0), notes: asStr(row.getCell(4).value) });
+              rvs.push({ variant: v, target_rtp: asNum(C14b(row, 'Target_RTP'), 0),
+                         max_bet: asNum(C14b(row, 'Max_Bet'), 0), notes: asStr(C14b(row, 'Notes')) });
             });
             betConfig.rtp_variants = rvs;
           }
@@ -7985,11 +8106,12 @@
           // ── v8.6 / R5 E-16:18_Gamble(KV;舊檔無 → 維持現值)──
           const ws18 = wb.getWorksheet('18_Gamble');
           if (ws18) {
+            const C18 = _rowReader(ws18);   // v8.46 Tier B:Key/Value by-name
             const g = _defaultGamble();
             ws18.eachRow((row, idx) => {
               if (idx === 1) return;
-              const k = asStr(row.getCell(1).value).trim();
-              const v = row.getCell(2).value;
+              const k = asStr(C18(row, 'Key')).trim();
+              const v = C18(row, 'Value');
               if (!k) return;
               if (k === 'Gamble_Enabled')        g.enabled = asBool(v);
               else if (k === 'Gamble_Type')      g.gamble_type = asStr(v).trim().toUpperCase() || 'CARD_COLOR';
@@ -8122,15 +8244,16 @@
           // ── 11b_Mode_TriggerPays(v7.10 additive;舊檔無此 sheet → 跳過,trigger_pays 維持空)──
           const ws11b = wb.getWorksheet('11b_Mode_TriggerPays');
           if (ws11b) {
+            const C11b = _rowReader(ws11b);   // v8.46 Tier B:by-name
             const byMode = {};
             ws11b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const mode = asStr(row.getCell(1).value).trim();
+              const mode = asStr(C11b(row, 'Mode')).trim();
               if (!mode) return;
               (byMode[mode] = byMode[mode] || []).push({
-                scatter_count: asNum(row.getCell(2).value, 0),
-                pay:           asNum(row.getCell(3).value, 0),
-                grants_spins:  asNum(row.getCell(4).value, 0),
+                scatter_count: asNum(C11b(row, 'Scatter_Count'), 0),
+                pay:           asNum(C11b(row, 'Pay'), 0),
+                grants_spins:  asNum(C11b(row, 'Grants_Spins'), 0),
               });
             });
             for (const m of modes) {
@@ -8195,14 +8318,15 @@
           // ── 12_Distribution_Bins ──
           const ws12 = wb.getWorksheet('12_Distribution_Bins');
           if (ws12) {
+            const C12 = _rowReader(ws12);   // v8.46 Tier B:by-name
             Object.keys(bins).forEach(k => delete bins[k]);
             ws12.eachRow((row, idx) => {
               if (idx === 1) return;
-              const m = asStr(row.getCell(1).value).trim();
+              const m = asStr(C12(row, 'Mode_Scope')).trim();
               if (!m) return;
               bins[m] = {
-                bin_edges: asStr(row.getCell(2).value),
-                notes: asStr(row.getCell(3).value),
+                bin_edges: asStr(C12(row, 'Bin_Edges')),
+                notes: asStr(C12(row, 'Notes')),
               };
             });
           }
@@ -8251,21 +8375,22 @@
           // ── 07b_Gen_Limits ── 產牌限制(v7.11 additive;舊檔無此 sheet → 跳過,genLimits 維持)
           const ws7b = wb.getWorksheet('07b_Gen_Limits');
           if (ws7b) {
+            const C7b = _rowReader(ws7b);   // v8.46 Tier B:by-name
             const ngl = [];
             ws7b.eachRow((row, idx) => {
               if (idx === 1) return;
-              const lid = asStr(row.getCell(1).value).trim();
+              const lid = asStr(C7b(row, 'Limit_ID')).trim();
               if (!lid) return;
-              const maxRaw = row.getCell(5).value;
+              const maxRaw = C7b(row, 'Max_Count');
               const maxStr = asStr(maxRaw).trim();
               ngl.push({
                 limit_id: lid,
-                symbol_id: asStr(row.getCell(2).value),
-                zone: asStr(row.getCell(3).value) || 'MAIN',
-                min_count: asNum(row.getCell(4).value, 0),
+                symbol_id: asStr(C7b(row, 'Symbol_ID')),
+                zone: asStr(C7b(row, 'Zone')) || 'MAIN',
+                min_count: asNum(C7b(row, 'Min_Count'), 0),
                 max_count: (maxStr === '' ? null : asNum(maxRaw, null)),
-                mode_scope: asStr(row.getCell(6).value) || 'ALL',
-                notes: asStr(row.getCell(7).value),
+                mode_scope: asStr(C7b(row, 'Mode_Scope')) || 'ALL',
+                notes: asStr(C7b(row, 'Notes')),
               });
             });
             // additive:有 sheet 就以匯入內容覆蓋(空 sheet → 清空,語義正確)
@@ -8275,17 +8400,18 @@
           // ── 10_Discard_Rules ──
           const ws10 = wb.getWorksheet('10_Discard_Rules');
           if (ws10) {
+            const C10 = _rowReader(ws10);   // v8.46 Tier B:by-name
             const nd = [];
             ws10.eachRow((row, idx) => {
               if (idx === 1) return;
-              const did = asStr(row.getCell(1).value).trim();
+              const did = asStr(C10(row, 'Discard_ID')).trim();
               if (!did) return;
               nd.push({
                 discard_id: did,
-                discard_kind: asStr(row.getCell(2).value) || 'HARD',
-                mode_scope: asStr(row.getCell(3).value) || 'ALL',
-                condition: asStr(row.getCell(4).value),
-                notes: asStr(row.getCell(5).value),
+                discard_kind: asStr(C10(row, 'Discard_Kind')) || 'HARD',
+                mode_scope: asStr(C10(row, 'Mode_Scope')) || 'ALL',
+                condition: asStr(C10(row, 'Condition')),
+                notes: asStr(C10(row, 'Notes')),
               });
             });
             if (nd.length > 0) discards.splice(0, discards.length, ...nd);
@@ -8365,13 +8491,14 @@
           // ── 04_Reel_Weights ── 扁平 → 巢狀
           const ws4 = wb.getWorksheet('04_Reel_Weights');
           if (ws4) {
+            const C4 = _rowReader(ws4);   // v8.46 Tier B:by-name
             const nrw = {};
             ws4.eachRow((row, idx) => {
               if (idx === 1) return;
-              const m   = asStr(row.getCell(1).value).trim();
-              const rid = asNum(row.getCell(2).value, 0);
-              const sid = asStr(row.getCell(3).value).trim();
-              const w   = asNum(row.getCell(4).value, 0);
+              const m   = asStr(C4(row, 'Mode_Scope')).trim();
+              const rid = asNum(C4(row, 'Reel_ID'), 0);
+              const sid = asStr(C4(row, 'Symbol_ID')).trim();
+              const w   = asNum(C4(row, 'Weight'), 0);
               if (!m || !rid || !sid) return;
               if (!nrw[m]) nrw[m] = { symbol_ids: [], weights: {}, notes: '' };
               if (!nrw[m].symbol_ids.includes(sid)) nrw[m].symbol_ids.push(sid);
@@ -8384,13 +8511,14 @@
           // ── 05_Grid_Size_Weights ── 扁平 → 巢狀
           const ws5 = wb.getWorksheet('05_Grid_Size_Weights');
           if (ws5) {
+            const C5 = _rowReader(ws5);   // v8.46 Tier B:by-name
             const ngw = {};
             ws5.eachRow((row, idx) => {
               if (idx === 1) return;
-              const m   = asStr(row.getCell(1).value).trim();
-              const rid = asNum(row.getCell(2).value, 0);
-              const sz  = asNum(row.getCell(3).value, 0);
-              const w   = asNum(row.getCell(4).value, 0);
+              const m   = asStr(C5(row, 'Mode_Scope')).trim();
+              const rid = asNum(C5(row, 'Reel_ID'), 0);
+              const sz  = asNum(C5(row, 'Grid_Size'), 0);
+              const w   = asNum(C5(row, 'Weight'), 0);
               if (!m || !rid || !sz) return;
               if (!ngw[m]) ngw[m] = { grid_sizes: [], weights: {}, notes: '' };
               if (!ngw[m].grid_sizes.includes(sz)) ngw[m].grid_sizes.push(sz);
@@ -8406,14 +8534,15 @@
           // ── 08_Combo_Weights ── 扁平(mode/step/reel/symbol/weight)→ 巢狀
           const ws8 = wb.getWorksheet('08_Combo_Weights');
           if (ws8) {
+            const C8 = _rowReader(ws8);   // v8.46 Tier B:by-name
             const ncw = {};
             ws8.eachRow((row, idx) => {
               if (idx === 1) return;
-              const m    = asStr(row.getCell(1).value).trim();
-              const step = asNum(row.getCell(2).value, 0);
-              const rid  = asNum(row.getCell(3).value, 0);
-              const sid  = asStr(row.getCell(4).value).trim();
-              const w    = asNum(row.getCell(5).value, 0);
+              const m    = asStr(C8(row, 'Mode_Scope')).trim();
+              const step = asNum(C8(row, 'Combo_Step'), 0);
+              const rid  = asNum(C8(row, 'Reel_ID'), 0);
+              const sid  = asStr(C8(row, 'Symbol_ID')).trim();
+              const w    = asNum(C8(row, 'Weight'), 0);
               if (!m || !step || !rid || !sid) return;
               if (!ncw[m]) ncw[m] = { steps: [], symbol_ids: [], weights: {}, notes: '' };
               if (!ncw[m].steps.includes(step)) ncw[m].steps.push(step);
@@ -9766,6 +9895,278 @@
           }
         } catch (e) { /* 靜默 */ }
 
+        // ═══ v8.49 / 項目二 Batch B:規則衝突/防呆 lint(純靜態;全 warn/info 不阻擋)═══
+        //   合併「活性/可消失性(項目一 v3 §五交接)」+「產量 vs 容量 C1」。
+        //   純描述層:只讀 r.condition 字串與 r.actions[].params 做 regex/數值比對,
+        //   絕不呼叫 logic_parser、絕不物化盤面(守越界)。C2~C4 走投影骨架日後接。
+        try {
+          const _bbSyms = new Set((registry ? registry.symbols() : [])
+            .map(s => (s.symbol_id && s.symbol_id.trim()) || s.name).filter(Boolean));
+          // mode_scope csv → Set(空/ALL = null 代表全模式)
+          const _bbModes = (ms) => {
+            const s = String(ms == null ? '' : ms).trim();
+            if (!s || s.toUpperCase() === 'ALL') return null;
+            return new Set(s.split(',').map(x => x.trim()).filter(Boolean));
+          };
+          // 兩 mode_scope 是否相交(任一為 null=全模式 → 視為相交)
+          const _bbModesOverlap = (a, b) => {
+            if (a === null || b === null) return true;
+            for (const x of a) if (b.has(x)) return true;
+            return false;
+          };
+          // 動作值 → 數字下界(字面數 / 範圍 "a-b" 取 a;動態/公式/空 → null 代表無界)
+          const _bbLowerBound = (v) => {
+            if (v == null || v === '') return null;
+            if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+            const s = String(v).trim();
+            let m = s.match(/^(\d+)$/);           if (m) return parseInt(m[1], 10);
+            m = s.match(/^"?(\d+)\s*-\s*(\d+)"?$/); if (m) return parseInt(m[1], 10);   // 範圍取下界
+            return null;   // 公式/其他 → 無法取界
+          };
+          // 字面位置字串 → coord 陣列(SELF 家族 / 非字面 → null,不誤判)
+          const _bbLiteralPositions = (raw) => {
+            const s = String(raw == null ? '' : raw).trim();
+            if (!s || /^SELF/i.test(s)) return null;   // SELF 動態參照不檢
+            return _parsePositions(s);   // 既有:失敗回 null
+          };
+          // 座標(0-based reel,row 依 pos 慣例)是否落洞/越界 → true=不合法
+          const _bbPosBad = (coord) => {
+            if (!Array.isArray(coord) || coord.length < 2) return false;   // 格式怪 → 不誤判
+            const reel0 = Number(coord[0]), row0 = Number(coord[1]);
+            if (!Number.isInteger(reel0) || !Number.isInteger(row0)) return false;
+            const reel = layout.find(r => r.reel_id === reel0 + 1);
+            if (!reel) return true;   // 該輪不存在 = 越界
+            const yoff = Number(reel.y_offset) || 0;
+            const localRow = row0 - yoff;
+            if (localRow < 0 || localRow >= (Number(reel.max_rows) || 0)) return true;
+            return !_reelActiveRows(reel).includes(localRow);   // 遮罩外 = 洞
+          };
+          // SPAWN cell "r,c"(1-based) → {col,row} 字面;非字面 → null
+          const _bbSpawnCell = (v) => {
+            const m = String(v == null ? '' : v).trim().match(/^(\d+)\s*,\s*(\d+)$/);
+            return m ? { row: parseInt(m[1], 10), col: parseInt(m[2], 10) } : null;
+          };
+
+          // ── 建規則投影(C2~C4 共用骨架)──
+          const _proj = [];
+          for (const r of rules) {
+            if (r && r.enabled === false) continue;
+            const acts = Array.isArray(r.actions) ? r.actions.filter(a => a && a.atype) : [];
+            const cond = String(r.condition || '');
+            const modes = _bbModes(r.mode_scope);
+            const produces = [], removes = [], moves = [], spawns = [], limits = [], stickies = [];
+            // 條件字串擷取:每盤上限 symbol_count.S <= N / < N(結構化,決策 2)
+            let cm; const _limRe = /symbol_count\.([A-Za-z0-9_]+)\s*(<=|<)\s*(\d+)/g;
+            while ((cm = _limRe.exec(cond)) !== null) {
+              const cap = cm[2] === '<' ? (parseInt(cm[3], 10) - 1) : parseInt(cm[3], 10);
+              limits.push({ sym: cm[1], cap });
+            }
+            for (const a of acts) {
+              const p = a.params || {};
+              if (a.atype === 'SPAWN' && p.target) {
+                spawns.push({ sym: String(p.target).trim(), cell: _bbSpawnCell(p.cell) });
+                produces.push({ sym: String(p.target).trim(), lb: 1, src: 'SPAWN', rid: r.rule_id });
+              } else if (a.atype === 'BOARD_FILL' && p.symbol_id && !/^(RANDOM)$/i.test(String(p.symbol_id))) {
+                const lb = _bbLowerBound(p.count);
+                if (lb != null) produces.push({ sym: String(p.symbol_id).trim(), lb, src: 'BOARD_FILL', rid: r.rule_id });
+              } else if (a.atype === 'SPLIT' && p.symbol) {
+                const lb = _bbLowerBound(p.into);
+                if (lb != null && lb > 1) produces.push({ sym: String(p.symbol).trim(), lb: lb - 1, src: 'SPLIT', rid: r.rule_id });
+              } else if (a.atype === 'WALK' && p.trail) {
+                produces.push({ sym: String(p.trail).trim(), lb: 1, src: 'WALK.trail', rid: r.rule_id });
+              }
+              if (a.atype === 'BOARD_DESTROY') {
+                const sid = p.symbol_id ? String(p.symbol_id).trim() : '';
+                removes.push({ sym: sid, positions: p.positions ? String(p.positions).trim() : '', cond, rid: r.rule_id });
+              }
+              if (a.atype === 'MOVE' && p.subject) {
+                moves.push({ sym: String(p.subject).trim(), manner: String(p.manner || 'TO'),
+                             dir: String(p.dir || '').toUpperCase(), amount: _bbLowerBound(p.amount) });
+              }
+              // 有界黏著(CV-1 認離場):STICKY until=FEATURE 或 SPINS 具有限 duration
+              if (a.atype === 'STICKY') {
+                const until = String(p.until || 'SPINS').toUpperCase();
+                const dur = _bbLowerBound(p.duration);
+                const bounded = (until === 'FEATURE') || (until === 'SPINS' && dur != null && dur > 0);
+                if (p.symbol) removes.push({ sym: String(p.symbol).trim(), sticky: true, bounded, rid: r.rule_id });
+                if (p.symbol) stickies.push({ sym: String(p.symbol).trim(), until, rid: r.rule_id });   // v8.50 C3
+              }
+              // CD-2:字面目標位置落洞/越界(MOVE/SPAWN/BOARD_FILL/BOARD_DESTROY)
+              if (a.atype === 'SPAWN' && p.cell) {
+                const c = _bbSpawnCell(p.cell);
+                if (c) { const coord = [c.col - 1, c.row - 1]; if (_bbPosBad(coord)) add('warn', 'rules', `規則「${r.rule_id}」SPAWN 的初始格 (${c.row},${c.col}) 落在洞格或越界`); }
+              }
+              for (const k of ['positions', 'to', 'from']) {
+                const lit = _bbLiteralPositions(p[k]);
+                if (Array.isArray(lit)) for (const coord of lit) {
+                  if (_bbPosBad(coord)) { add('warn', 'rules', `規則「${r.rule_id}」${a.atype} 的位置 [${coord.join(',')}] 落在洞格或越界`); break; }
+                }
+              }
+            }
+            _proj.push({ rid: r.rule_id, modes, trigger: r.trigger, cond, produces, removes, moves, spawns, limits, stickies, desc: String(r.description || '') });
+          }
+
+          // ── CV-1 / CV-2 / CV-3:每個 SPAWN 物件的活性 ──
+          for (const pr of _proj) {
+            for (const sp of pr.spawns) {
+              const X = sp.sym; if (!X) continue;
+              // 收集全規則對 X 的離場/移動/使用
+              let hasBoundedExit = false, hasPositionalExitOnly = false, usedAnywhere = false;
+              const posExitTargets = [];   // {axis:'col'|'row', val:N}
+              const xMoves = [];
+              for (const q of _proj) {
+                // 離場:BOARD_DESTROY 命中 X(symbol_id==X 或 positions=SELF*)
+                for (const rm of q.removes) {
+                  if (rm.sticky) { if (rm.sym === X && rm.bounded) hasBoundedExit = true; continue; }
+                  const hitBySym = rm.sym === X;
+                  const hitBySelf = /^SELF/i.test(rm.positions || '');
+                  if (hitBySym || hitBySelf) {
+                    // 位置謂詞閘門?條件含 object_pos.X.(col|row) == N
+                    const pe = (rm.cond || '').match(new RegExp('object_pos\\.' + X + '\\.(col|row)\\s*==\\s*(\\d+)'));
+                    if (pe) { posExitTargets.push({ axis: pe[1], val: parseInt(pe[2], 10) }); hasPositionalExitOnly = true; }
+                    else hasBoundedExit = true;   // 非位置閘(如 ON_DEAD_SPIN/無條件)→ 視為可達離場
+                  }
+                }
+                // 使用:MOVE subject=X / 條件含 object_pos.X / BOARD_* 針對 X
+                if (q.moves.some(m => m.sym === X)) { usedAnywhere = true; xMoves.push(...q.moves.filter(m => m.sym === X)); }
+                if (new RegExp('object_pos\\.' + X + '\\b').test(q.cond)) usedAnywhere = true;
+                if (q.produces.some(p => p.sym === X) && q.rid !== pr.rid) usedAnywhere = true;
+                if (q.removes.some(rm => rm.sym === X)) usedAnywhere = true;
+              }
+              // CV-1:完全無可達離場
+              if (!hasBoundedExit && !hasPositionalExitOnly) {
+                add('warn', 'rules', `規則「${pr.rid}」SPAWN 的物件「${X}」無任何可達離場(無銷毀規則、無有界黏著)——可能永遠停留盤面;請加銷毀規則或有界 STICKY`);
+              } else if (!hasBoundedExit && hasPositionalExitOnly) {
+                // CV-2:僅靠位置閘離場 → 查移動方向可達性(保守:任何不確定即跳過)
+                const start = sp.cell;
+                const singleMove = xMoves.length === 1 && xMoves[0].manner === 'DIR' ? xMoves[0] : null;
+                if (start && singleMove && singleMove.amount != null && singleMove.amount > 0 && singleMove.dir) {
+                  for (const t of posExitTargets) {
+                    const cur = t.axis === 'col' ? start.col : start.row;
+                    let unreachable = false;
+                    if (t.axis === 'col' && singleMove.dir === 'RIGHT' && t.val < cur) unreachable = true;
+                    if (t.axis === 'col' && singleMove.dir === 'LEFT'  && t.val > cur) unreachable = true;
+                    if (t.axis === 'row' && singleMove.dir === 'DOWN'  && t.val < cur) unreachable = true;
+                    if (t.axis === 'row' && singleMove.dir === 'UP'    && t.val > cur) unreachable = true;
+                    if (unreachable) {
+                      add('warn', 'rules', `規則「${pr.rid}」物件「${X}」的消失條件 object_pos.${X}.${t.axis}==${t.val} 在移動方向 ${singleMove.dir}(起始 ${t.axis}=${cur})下永遠不可達——物件可能永遠不消失`);
+                      break;
+                    }
+                  }
+                }
+              }
+              // CV-3:生成後無作用(info)
+              if (!usedAnywhere) {
+                add('info', 'rules', `規則「${pr.rid}」SPAWN 的物件「${X}」生成後未被任何規則使用(無移動、無位置條件、無針對它的動作)`);
+              }
+            }
+          }
+
+          // ── CD-1:產量 vs 容量(mode_scope 過濾;僅結構化上限)──
+          for (let i = 0; i < _proj.length; i++) {
+            for (const prod of _proj[i].produces) {
+              for (let j = 0; j < _proj.length; j++) {
+                for (const lim of _proj[j].limits) {
+                  if (prod.sym !== lim.sym) continue;
+                  if (!_bbModesOverlap(_proj[i].modes, _proj[j].modes)) continue;   // 決策 4
+                  if (prod.lb > lim.cap) {
+                    add('warn', 'rules', `規則「${prod.rid}」的「${prod.sym}」產量下界 ${prod.lb}(${prod.src})超過規則「${lim.rid}」設定的每盤上限 ${lim.cap}(symbol_count.${lim.sym} <= ${lim.cap});請調整上限或產量,或於備註說明取捨`);
+                  }
+                }
+              }
+            }
+          }
+
+          // ── CD-3:有產量但上限似乎僅在備註(info)──
+          try {
+            const _prodSyms = new Set(); _proj.forEach(p => p.produces.forEach(x => _prodSyms.add(x.sym)));
+            const _limSyms = new Set(); _proj.forEach(p => p.limits.forEach(x => _limSyms.add(x.sym)));
+            const _hintRe = /(上限|最多|最大|只(能|會)出現|唯一|max\b|only\b|at most)/i;
+            for (const pr of _proj) {
+              const noteHit = _hintRe.test(pr.desc);
+              if (!noteHit) continue;
+              for (const prod of pr.produces) {
+                if (!_limSyms.has(prod.sym)) {
+                  add('info', 'rules', `規則「${pr.rid}」備註提到上限但找不到結構化限制;「${prod.sym}」若需自動防呆,請改用條件 symbol_count.${prod.sym} <= N`);
+                  break;
+                }
+              }
+            }
+          } catch (e) { /* 靜默 */ }
+
+          // ═══ v8.50 / 項目二 Batch B2:C2~C4(接同一投影骨架,純靜態、全 warn/info 不擋)═══
+          // 符號參照哨兵/家族豁免(非未定義符):RANDOM/BEST/NON_WIN/SELF*/group:*
+          const _bbSentinel = (v) => {
+            const s = String(v == null ? '' : v).trim();
+            return !s || /^(RANDOM|BEST|NON_WIN)$/i.test(s) || /^SELF/i.test(s)
+                 || /^group(_any)?:/i.test(s) || /^-?\d/.test(s);
+          };
+
+          // ── C2:生成 vs 銷毀同符(同 trigger、mode_scope 相交)──
+          //   僅認「整符銷毀」(symbol_id==S 且無 positions);有位置=定向移除,視為刻意,不報。
+          try {
+            for (let i = 0; i < _proj.length; i++) {
+              for (const prod of _proj[i].produces) {
+                for (let j = 0; j < _proj.length; j++) {
+                  if (i === j) continue;
+                  if (_proj[i].trigger !== _proj[j].trigger) continue;            // 同時機才算抵消
+                  if (!_bbModesOverlap(_proj[i].modes, _proj[j].modes)) continue; // 決策 4
+                  for (const rm of _proj[j].removes) {
+                    if (rm.sticky) continue;
+                    if (rm.sym === prod.sym && !(rm.positions && rm.positions.length)) {
+                      add('warn', 'rules', `規則「${prod.rid}」在 ${_proj[i].trigger} 生成「${prod.sym}」(${prod.src}),而規則「${rm.rid}」在同一時機整符銷毀「${prod.sym}」——兩者可能互相抵消;若刻意請於備註說明或改用定向位置`);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) { /* 靜默 */ }
+
+          // ── C3:同符黏著存續範圍矛盾(SPINS vs FEATURE;mode_scope 相交)──
+          try {
+            const _byStickySym = {};
+            for (const pr of _proj) for (const st of pr.stickies) {
+              (_byStickySym[st.sym] = _byStickySym[st.sym] || []).push({ ...st, modes: pr.modes });
+            }
+            for (const sym of Object.keys(_byStickySym)) {
+              const arr = _byStickySym[sym];
+              for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+                if (arr[i].until === arr[j].until) continue;
+                if (!_bbModesOverlap(arr[i].modes, arr[j].modes)) continue;   // 決策 4
+                add('warn', 'rules', `規則「${arr[i].rid}」與「${arr[j].rid}」對「${sym}」宣告的黏著存續範圍不一致(${arr[i].until} vs ${arr[j].until})——同一符號在相交模式下續存語意衝突;請統一`);
+              }
+            }
+          } catch (e) { /* 靜默 */ }
+
+          // ── C4:目標域空集 — 動作引用未定義的符號(逐 atype 的符號欄)──
+          try {
+            const _symKeys = {
+              BOARD_TRANSFORM: ['from_symbol', 'to_symbol'], SYMBOL_SWAP: ['from_symbol', 'to_symbol'],
+              BOARD_FILL: ['symbol_id'], BOARD_DESTROY: ['symbol_id'],
+              SPAWN: ['target'], MOVE: ['subject'],
+              STICKY: ['symbol'], WALK: ['symbol', 'trail'], NUDGE: ['symbol'],
+              EXPAND_REEL: ['symbol'], SPLIT: ['symbol'], DESTROY_ADJACENT: ['symbol'], REVEAL_AS: ['symbol'],
+            };
+            for (const r of rules) {
+              if (r && r.enabled === false) continue;
+              const acts = Array.isArray(r.actions) ? r.actions.filter(a => a && a.atype) : [];
+              const seen = new Set();
+              for (const a of acts) {
+                const keys = _symKeys[a.atype]; if (!keys) continue;
+                const p = a.params || {};
+                for (const k of keys) {
+                  const v = p[k]; if (_bbSentinel(v)) continue;
+                  const sid = String(v).trim();
+                  if (_bbSyms.size && !_bbSyms.has(sid) && !seen.has(a.atype + ':' + sid)) {
+                    seen.add(a.atype + ':' + sid);
+                    add('warn', 'rules', `規則「${r.rule_id}」的 ${a.atype}.${k} 引用未定義的符號「${sid}」(不在符號清單)——目標恆為空集`);
+                  }
+                }
+              }
+            }
+          } catch (e) { /* 靜默 */ }
+        } catch (e) { /* 靜默 */ }
+
         // ─── v8.8 / R4 B-6:格子屬性檢查 ───
         try {
           const _caIds = {};
@@ -10158,6 +10559,19 @@
               `${rid}:mode_scope = ${r.mode_scope} 不存在`,
               '請改選 ALL 或現存模式;否則匯出時會被合併到 condition 但模式比對永遠 false');
           }
+          // v8.45 / 批次D 決策2:track_covered.<tid> 軌道存在性(CURRENT 哨兵豁免;
+          //   與 panel lint 同級 warn。tracks 容器執行期存取,closure 安全同 renameMode 前例)
+          if (r.condition) {
+            const _tcRe = /\btrack_covered\.([A-Za-z0-9_]+)\b/g;
+            let _tcm;
+            while ((_tcm = _tcRe.exec(String(r.condition))) !== null) {
+              const tid = _tcm[1];
+              if (tid === 'CURRENT') continue;
+              if (!(Array.isArray(tracks) ? tracks : []).some(t => t && String(t.track_id).trim() === tid)) {
+                add('warn', 'rules', `${rid}:條件引用的軌道「${tid}」未在 02c_Tracks 定義`);
+              }
+            }
+          }
           // trigger 不在 enum
           if (!r.trigger || !validTriggerSet.has(r.trigger)) {
             add('error', 'rules',
@@ -10212,6 +10626,14 @@
                 if (!validModeSet.has(act.params[p.key])) {
                   add('warn', 'rules',
                     `${tag}:模式「${act.params[p.key]}」不存在於 11_Mode_Config`);
+                }
+              }
+              // v8.44 / C-2:panel 引用檢查(PANEL_SET panel= 等;與 symbol/mode lint 同級)
+              if (p.type === 'panel' && act.params && act.params[p.key]) {
+                const _pv = String(act.params[p.key]).trim();
+                if (_pv && !panels.some(pp => pp && pp.panel_id === _pv)) {
+                  add('warn', 'rules',
+                    `${tag}:面板「${_pv}」未在 02b_Panels 定義`);
                 }
               }
               // #3 pos 座標檢查(MOVE from/to、SWAP a/b)—— 純描述 lint,不執行
@@ -10954,6 +11376,7 @@
         //   multipliers/coinValues 物件本身內部仍由存檔 watch / 驗證 / 遷移使用,無需導出至模板。
         rtpResult, rtpPct, rtpVsTarget,
         reelStrips, stripActiveMode, stripStr, stripLen, commitStrip, stripDist,
+        stripBaseOf, stripVariantsOf, addStripVariant, removeStripVariant, selectStripKey,   // v8.43 C-1:輪帶變體
         stripGenLen, stripGenStacked, suggestedStripLen, stripCompare, stripLimitConflicts,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
         addTriggerPay, removeTriggerPay, RESET_SCOPE_OPTIONS, STACK_MODE_OPTIONS,

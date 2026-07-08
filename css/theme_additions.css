@@ -11767,3 +11767,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* ── v8.35 / GAP-H1:符號卡 Mega 尺寸分佈輸入列 ── */
 #app .sym-mega-sizes-row { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 #app .sym-mega-sizes-row .input { max-width: 340px; }
+
+/* ── v8.43 / C-1 GAP-T2:輪帶變體 chip(04b;虛線框區隔主帶,✕ 內嵌刪除) ── */
+#app .cfg-chip-variant { border-style: dashed; }
+#app .cfg-chip-variant .cfg-chip-x { margin-left: 6px; opacity: .55; cursor: pointer; }
+#app .cfg-chip-variant .cfg-chip-x:hover { opacity: 1; color: var(--danger, #c0392b); }
+#app .cfg-chip-add-variant { opacity: .7; border-style: dotted; }
+#app .cfg-chip-add-variant:hover { opacity: 1; }

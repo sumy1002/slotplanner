@@ -313,6 +313,10 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
                 # v8.39 / 軌道:缺欄安全降級(守則 #81)
                 scroll_track=_to_str(r.get("Scroll_Track")).strip(),
                 scroll_step=_num_or(r.get("Scroll_Step"), 1.0),
+                # v8.44 / C-2 GAP-P3+P5:缺欄安全降級(守則 #81);語意見 PanelDef 註釋
+                active_modes=_to_str(r.get("Active_Modes")).strip(),
+                eval_domain=_to_str(r.get("Eval_Domain")).strip().upper(),
+                payline_set=_to_str(r.get("Payline_Set")).strip(),
             )
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Panel {pid} 解析失敗: {e}", row=idx + 2)

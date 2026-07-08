@@ -131,6 +131,10 @@
     END_FEATURE: '結束 feature',
     // v8.29 / W-1:v8.28 缺口A 物件初始放置(漏補;參數經通用 kv 呈現)
     SPAWN: '放置物件',
+    // v8.43 / C-1 GAP-T2:條件式輪帶切換二枚(描述型,參數經通用 kv 呈現)
+    SYMBOL_SWAP: '輪帶符號置換', SWITCH_STRIP: '輪帶切換',
+    // v8.44 / C-2 GAP-P5:面板動態啟停
+    PANEL_SET: '面板啟停',
   };
   // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
   function _mdCell(v) {
@@ -173,6 +177,12 @@
     // v8.40 / 🟢-3
     m = s.match(/^cluster_shape\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$/);
     if (m) return `「${m[1]}」的「${m[2]}」形群數`;
+    // v8.41 / 批次A:WinEvent 屬性族(win_contains 為 1/0 謂詞非數值來源,不入)
+    if (s === 'win_symbols') return '本筆中獎符號顆數';
+    if (s === 'destroyed_count') return '本筆銷毀顆數';
+    // v8.45 / 批次D(track_covered 為 1/0 謂詞不入;雙形:SID 全輪最大 / SID.r 指定輪)
+    m = s.match(/^reel_stack_count\.([A-Za-z0-9_]+)(?:\.([0-9]+))?$/);
+    if (m) return m[2] ? `「${m[1]}」第 ${m[2]} 輪疊數` : `「${m[1]}」的單輪最大疊數`;
     return s;
   }
   // v8.34 / GAP-S1:動態式白話化 — _dynVal 的泛化。
@@ -224,22 +234,54 @@
   // 單一 action → 「標籤(k=v, k=v)」;params 物件淺列印,未知型別安全
   // v8.4 勘誤:前端規則的 action 型別欄位為 atype(helpers.makeAction);
   //   v8.2 誤讀 a.type 導致實際資料一律印 '?' 回退。atype 優先、type 兼容。
+  // ── v8.48 / 項目一 Batch A:新參數白話化(目標參照 SELF、order、manner、dir、參數鍵中文;
+  //    皆「命中才譯、否則原樣」)。★關鍵:只對本批「實際改動的四動作」套用,其餘動作
+  //    (WALK/GROW_BOARD/NUDGE… 亦持有 dir/track/amount 鍵)輸出逐字不變 → 舊資料零 diff。 ──
+  const _V848_ACTS = new Set(['MOVE', 'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY']);
+  const _ACT_PARAM_ZH = {
+    subject: '物件', manner: '方式', dir: '方向', amount: '格數', track: '軌道',
+    except_if: '排除', order: '順序',
+    // 註:positions/from/to 等既有鍵故意不收錄 —— 保持既有 docgen 輸出零 diff(守則:舊資料零 diff)
+  };
+  const _MANNER_ZH = { TO: '絕對座標', DIR: '依方向', PATH: '沿軌道' };
+  const _DIR_ZH = { LEFT: '左', RIGHT: '右', UP: '上', DOWN: '下' };
+  const _ORDER_ZH = {
+    PAYOUT_DESC: '賠率高→低', PAYOUT_ASC: '賠率低→高', NEAREST: '最近優先',
+    FARTHEST: '最遠優先', FIXED_LIST: '固定清單序', RANDOM: '隨機(下游)',
+  };
+  // 目標參照 token 白話:SELF / SELF_LANDED / SELF:方向(相鄰偏移);非此形式原樣
+  function _selfRefZh(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (s === 'SELF') return '物件當前格';
+    if (s === 'SELF_LANDED') return '物件降落格';
+    const m = s.match(/^SELF:(LEFT|RIGHT|UP|DOWN)$/);
+    if (m) return `物件${_DIR_ZH[m[1]]}鄰格`;
+    return s;
+  }
   function _ruleActionDesc(a) {
     if (!a || typeof a !== 'object') return '';
     const atype = a.atype || a.type || '';
     const label = _RULE_ACTION_LABEL[atype] || atype || '?';
     const p = (a.params && typeof a.params === 'object') ? a.params : {};
+    const isV848 = _V848_ACTS.has(atype);   // v8.48:白話化僅作用於本批四動作,其餘零 diff
     // v8.20 / G5:scope 抽離單獨後綴;value 若為 symbol_count.<SID> 動態值則譯白話。
     const scopeStr = _scopeDesc(p.scope);
     const kv = Object.entries(p)
       .filter(([k, v]) => v !== '' && v != null && k !== 'scope')
       .map(([k, v]) => {
+        // v8.48 / 項目一 Batch A:僅本批四動作走專屬白話;命中則用,否則落回泛用 _dynExpr。
+        let vv;
+        if (isV848 && typeof v === 'string' && k === 'manner')      vv = _MANNER_ZH[v] || v;
+        else if (isV848 && typeof v === 'string' && k === 'dir')    vv = _DIR_ZH[v] || v;
+        else if (isV848 && typeof v === 'string' && k === 'order')  vv = _ORDER_ZH[v] || v;
+        else if (isV848 && typeof v === 'string' && (k === 'positions' || k === 'to') && /^SELF/.test(v.trim()))
+                                                                    vv = _selfRefZh(v);
         // v8.21 / G1:value / factor 皆可能為動態值(symbol_count / symbol_value / feature_value_total …)
-        // v8.34 / GAP-S1:泛化 — 任何字串值皆過 _dynExpr(範圍/公式白話化;
-        //   非動態字串如符號 id 原樣返回,既有文件輸出零 diff)。
-        const vv = (typeof v === 'string') ? _dynExpr(v)
-                 : (Array.isArray(v) ? JSON.stringify(v) : v);
-        return `${k}=${vv}`;
+        // v8.34 / GAP-S1:泛化 — 任何字串值皆過 _dynExpr(範圍/公式白話化;非動態字串原樣)。
+        else vv = (typeof v === 'string') ? _dynExpr(v)
+                : (Array.isArray(v) ? JSON.stringify(v) : v);
+        const kZh = isV848 ? (_ACT_PARAM_ZH[k] || k) : k;   // v8.48:鍵中文僅本批四動作(其餘原樣)
+        return `${kZh}=${vv}`;
       });
     let out = kv.length ? `${label}（${kv.join(', ')}）` : label;
     if (scopeStr) out += `〔範圍：${scopeStr}〕`;
@@ -439,7 +481,8 @@
     return _MODE_KIND_LABEL[k] ? (_MODE_KIND_LABEL[k] + '（' + k + '）') : k;
   }
   // v8.22 / G3:獎項角色 Item_Role 白話(docgen 獨立 IIFE 唯讀 map;未知/空 → '—')
-  const _ITEM_ROLE_LABEL = { COIN: '金幣值', COLLECTOR: '收集器', MULTIPLIER: '倍數', BOOST: '增益', JACKPOT: '彩池' };
+  const _ITEM_ROLE_LABEL = { COIN: '金幣值', COLLECTOR: '收集器', MULTIPLIER: '倍數', BOOST: '增益', JACKPOT: '彩池',
+    PLAYER_CHOICE: '玩家選項' };   // v8.45 / 批次D GAP-C1
   function _itemRoleDesc(v) {
     const s = String(v == null ? '' : v).trim().toUpperCase();
     if (!s) return '—';
@@ -2399,6 +2442,10 @@
                 + (k === 'PICK' ? '（多層抽選:抽到該項後進入連結模式）' : k === 'WHEEL' ? '（分段跳轉:轉到該段後進入連結模式）' : ''));
             }
           }
+          // v8.45 / 批次D GAP-C1:含玩家選項才輸出(零 diff 天然)
+          if (items.some(it => String(it.item_role || '').trim().toUpperCase() === 'PLAYER_CHOICE')) {
+            L.push('- 玩家選項：角色為「玩家選項」的項目 = 進場前由玩家擇一(非隨機抽取,權重欄不適用);值欄為選項參數、連結模式為選後進入的模式。與模式級擇一組(choice_group)正交。');
+          }
           L.push('');
         });
       }
@@ -2783,6 +2830,29 @@
         });
         L.push('');
         L.push('> 軌道 = 純幾何的有序格子序列;補盤沿軌道推進(取代重力方向)、走位沿軌道行進、捲軸沿軌道位移(位移狀態跨局累計由下游追蹤)。本工具不執行。');
+        L.push('');
+      }
+    }
+
+    // v8.44 / C-2 GAP-P3+P5:副盤評價與作動(有資料才輸出;規格描述,零 diff 天然 — reelLinks 前例)
+    {
+      const pnls = (Array.isArray(cfg.panels) ? cfg.panels : [])
+        .filter(p => p && p.panel_id && (String(p.active_modes || '').trim() || String(p.eval_domain || '').trim()));
+      if (pnls.length) {
+        const _EVAL_ZH = { MAIN: '併入主盤', SELF_LINE: '盤內連線集', SELF_WAYS: '盤內 ways' };
+        L.push('## 副盤評價與作動');
+        L.push('');
+        L.push('| 面板 | 作動模式 | 評價域 | 連線集 |');
+        L.push('| --- | --- | --- | --- |');
+        pnls.forEach(p => {
+          const am = String(p.active_modes || '').trim() || '全模式';
+          const ed = String(p.eval_domain || '').trim().toUpperCase();
+          const edZh = ed ? (_EVAL_ZH[ed] || ed) : '併入主盤（沿用 Join_Payline）';
+          const ps = (ed === 'SELF_LINE') ? (_mdCell(p.payline_set) || 'ALL') : '—';
+          L.push(`| ${_mdCell(p.panel_id)} | ${_mdCell(am)} | ${edZh} | ${ps} |`);
+        });
+        L.push('');
+        L.push('> SELF_* = 該盤自帶評價域,scatter 計數亦盤內計;非空評價域優先於「參與主盤連線」旗標。事件驅動啟停見特色規則 PANEL_SET;與作動模式(靜態域)疊加:兩者皆過才作動。本工具不執行、不計算 RTP。');
         L.push('');
       }
     }
