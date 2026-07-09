@@ -1215,202 +1215,618 @@
   //    對「每輪 × 每符號」完整覆蓋,不會漏格。
   // ──────────────────────────────────────────────────────────
   const BUILTIN_SLUG_PREFIX = 'builtin-';
-  const BUILTIN_DEMO_SLUG = 'builtin-demo-jade';
-  const BUILTIN_DEMO_STAMP = '2026-06-12T00:00:00.000Z';
 
-  function _buildBuiltinDemoData() {
-    const REELS = 5;
-
-    // ── 03_Symbols(SymbolRegistry toJSON 格式;name = symbol_id,
-    //    確保 04/07/09 以名稱引用符號時與 03 完全對齊、零孤兒警告)──
-    const SYM_DEFS = [
-      { sid: 'WILD', type: 'WILD',    p: [20, 60, 200],  wild: true,
-        reels: [false, true, true, true, false], sw: ['#7a3c20', '#ffffff'] },
-      { sid: 'SCAT', type: 'SCATTER', p: [2, 10, 50],    scatter: true, sw: ['#b87c10', '#ffffff'] },
-      { sid: 'MEGA', type: 'SPECIAL', p: [30, 100, 300], mw: 2, mh: 2,  sw: ['#27ae60', '#ffffff'] },
-      { sid: 'H1',   type: 'HIGH',    p: [10, 30, 100],  sw: ['#c0392b', '#ffffff'] },
-      { sid: 'H2',   type: 'HIGH',    p: [8, 24, 80],    sw: ['#c95810', '#ffffff'] },
-      { sid: 'H3',   type: 'HIGH',    p: [6, 18, 60],    sw: ['#4a93ee', '#ffffff'] },
-      { sid: 'H4',   type: 'HIGH',    p: [5, 14, 45],    sw: ['#7a5a3a', '#ffffff'] },
-      { sid: 'L1',   type: 'LOW',     p: [3, 8, 20],     sw: ['#EDD9C0', '#7a5a3a'] },
-      { sid: 'L2',   type: 'LOW',     p: [2.5, 7, 18],   sw: ['#e7e3da', '#5a5650'] },
-      { sid: 'L3',   type: 'LOW',     p: [2, 6, 15],     sw: ['#d9e8df', '#2f6e4f'] },
-      { sid: 'L4',   type: 'LOW',     p: [1.5, 5, 12],   sw: ['#dfe6ee', '#3a5a7a'] },
-    ];
-    const registry = {
+  // ── shared helpers ─────────────────────────────────────────────────
+  function _mkRegistry(reels, defs) {
+    return {
       version: 2,
-      reel_count: REELS,
-      symbols: SYM_DEFS.map((d, i) => ({
+      reel_count: reels,
+      symbols: defs.map((d, i) => ({
         id: i + 1,
         name: d.sid,
         number: String(i + 1),
         weight: 100,
         max_count: 0,
         use_max: false,
-        reel_limit: d.reels ? [...d.reels] : new Array(REELS).fill(true),
+        reel_limit: d.reels ? [...d.reels] : new Array(reels).fill(true),
         enabled: true,
         symbol_id: d.sid,
         type: d.type,
-        pay_3x: d.p[0], pay_4x: d.p[1], pay_5x: d.p[2], pay_6x: 0,
+        pay_3x: d.p ? d.p[0] : 0, pay_4x: d.p ? d.p[1] : 0, pay_5x: d.p ? d.p[2] : 0, pay_6x: d.p6 || 0,
         mega_w: d.mw || 1, mega_h: d.mh || 1,
         is_wild: !!d.wild, is_scatter: !!d.scatter,
-        swatch: [...d.sw],
+        instance_mult: !!d.instMult,     // per-instance multiplier (orbs / mult-wilds)
+        min_match: d.minMatch || 3,
+        swatch: d.sw ? [...d.sw] : ['#7a3c20', '#ffffff'],
       })),
     };
+  }
+  // per-mode reel weights: weightMap {MODE:{SID:w}}, restrict {SID:[allowedReels 1-based]}
+  function _mkReelWeights(reels, sidList, weightMap, restrict) {
+    const out = {};
+    for (const [mode, wmap] of Object.entries(weightMap)) {
+      const w = {};
+      for (let r = 1; r <= reels; r++) {
+        for (const sid of sidList) {
+          let v = (wmap[sid] != null) ? wmap[sid] : 100;
+          const allow = restrict && restrict[sid];
+          if (allow && !allow.includes(r)) v = 0;
+          w[`${r}-${sid}`] = v;
+        }
+      }
+      out[mode] = { symbol_ids: [...sidList], weights: w, notes: '', sub_weights: {}, panel_weights: {} };
+    }
+    return out;
+  }
+  // grid size weights: uniform rows per reel (rowsArr length = reels)
+  function _mkGrid(reels, rowsArr, modeList) {
+    const out = {};
+    const sizes = Array.from(new Set(rowsArr));
+    for (const mode of modeList) {
+      const w = {};
+      for (let r = 1; r <= reels; r++) w[`${r}-${rowsArr[r - 1]}`] = 100;
+      out[mode] = { grid_sizes: sizes.slice().sort((a, b) => a - b), weights: w, notes: '' };
+    }
+    return out;
+  }
+  // distinct smooth LINE paths (consecutive reels differ by <=1 row), first `count`
+  function _mkLines(reels, rows, count) {
+    const paths = [];
+    const MAXSTEP = 2;   // general lines (consecutive reels differ by <=2 rows)
+    (function dfs(i, prev, acc) {
+      if (i === reels) { paths.push(acc.slice()); return; }
+      const hi = rows;
+      const lo = i === 0 ? 1 : Math.max(1, prev - MAXSTEP);
+      const up = i === 0 ? hi : Math.min(hi, prev + MAXSTEP);
+      for (let r = lo; r <= up; r++) { acc.push(r); dfs(i + 1, r, acc); acc.pop(); }
+    })(0, 0, []);
+    // niceness: prefer low total step + symmetry; horizontals first
+    const score = (p) => {
+      let step = 0; for (let i = 1; i < p.length; i++) step += Math.abs(p[i] - p[i - 1]);
+      const flat = p.every(x => x === p[0]) ? -100 : 0;
+      return step + flat;
+    };
+    paths.sort((a, b) => score(a) - score(b));
+    const seen = new Set(); const out = [];
+    for (const p of paths) {
+      const pref3 = p.slice(0, 3).join(',');           // lineMode: distinct first-3
+      if (seen.has(pref3)) continue; seen.add(pref3);
+      out.push(p);
+      if (out.length >= count) break;
+    }
+    // if not enough distinct-prefix lines, top up allowing dup prefixes
+    if (out.length < count) {
+      const keys = new Set(out.map(p => p.join('-')));
+      for (const p of paths) { const k = p.join('-'); if (keys.has(k)) continue; keys.add(k); out.push(p); if (out.length >= count) break; }
+    }
+    return out.slice(0, count).map((p, idx) => ({
+      line_id: idx + 1,
+      path: p.map((row, ri) => `(${ri + 1},${row})`).join('-'),
+      direction: 'LTR',
+      notes: '',
+    }));
+  }
+  function _rule(id, scope, trigger, cond, actions, emits, prio, desc) {
+    return { rule_id: id, mode_scope: scope, trigger, condition: cond || '',
+             actions, emits: emits || [], enabled: true, priority: prio == null ? 100 : prio,
+             description: desc || '' };
+  }
 
-    // ── 01_Global + 11_Mode_Config ──
+  // ════════════════════════════════════════════════════════════════════
+  // 1) Rich Little Piggies (Light & Wonder) — 5×3 LINE 25 lines
+  //    mystery-reveal symbols · three coloured-coin meters → distinct FG modes
+  // ════════════════════════════════════════════════════════════════════
+  function _buildRLPData() {
+    const REELS = 5;
+    const SY = [
+      { sid: 'WILD', type: 'WILD',    p: [12, 40, 150], wild: true,
+        reels: [false, true, true, true, true], sw: ['#c0392b', '#ffffff'] },
+      { sid: 'MYST', type: 'SPECIAL', sw: ['#4a4a4a', '#ffffff'] },              // ? mystery box (fills reels)
+      { sid: 'CB',   type: 'SPECIAL', sw: ['#2f6ec0', '#ffffff'] },              // blue coin
+      { sid: 'CY',   type: 'SPECIAL', sw: ['#c9a20f', '#ffffff'] },              // yellow coin
+      { sid: 'CR',   type: 'SPECIAL', sw: ['#b3402a', '#ffffff'] },              // red coin
+      { sid: 'H1',   type: 'HIGH',    p: [10, 30, 100], sw: ['#e46aa0', '#ffffff'] }, // hog
+      { sid: 'H2',   type: 'HIGH',    p: [6, 18, 60],   sw: ['#8e6fd0', '#ffffff'] }, // watch
+      { sid: 'H3',   type: 'HIGH',    p: [5, 14, 45],   sw: ['#3f9e6d', '#ffffff'] }, // gold bar
+      { sid: 'H4',   type: 'HIGH',    p: [4, 12, 35],   sw: ['#c98a2a', '#ffffff'] }, // ring
+      { sid: 'L1',   type: 'LOW',     p: [2.5, 7, 18],  sw: ['#EDD9C0', '#7a5a3a'] }, // A
+      { sid: 'L2',   type: 'LOW',     p: [2, 6, 15],    sw: ['#e7e3da', '#5a5650'] }, // K
+      { sid: 'L3',   type: 'LOW',     p: [1.5, 5, 12],  sw: ['#d9e8df', '#2f6e4f'] }, // Q
+      { sid: 'L4',   type: 'LOW',     p: [1, 4, 10],    sw: ['#dfe6ee', '#3a5a7a'] }, // J
+    ];
+    const sid = SY.map(s => s.sid);
+    const registry = _mkRegistry(REELS, SY);
+
     const global = {
       simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
       pay_type: 'LINE', ways_direction: 'LTR', payline_direction: 'LTR',
       megaways: false, cluster_min_size: 5, starting_mode: 'NG',
       max_chain_depth: 100, max_chain_per_rule: 50,
-      big_win_thresholds: '100,500', dead_spin_buckets: '2,3,4,5',
+      big_win_thresholds: '250,1000', dead_spin_buckets: '2,3,4,5',
+      mult_compose: 'MUL',
     };
     const modes = [
-      { mode: 'NG',  trigger_condition: '', spin_count: 0,
-        inherit_globals: false, on_enter_reset_vars: '', notes: '基本遊戲(起始模式)' },
-      { mode: 'FG1', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 10,
-        inherit_globals: false, on_enter_reset_vars: 'fg_combo_count', notes: '10 局免費遊戲' },
+      { mode: 'NG',    trigger_condition: '', spin_count: 0, inherit_globals: false, on_enter_reset_vars: '', notes: '一般遊戲 5×3(25 線);神祕符號整輪揭示' },
+      { mode: 'FG_B',  trigger_condition: 'symbol_count.CB >= 3', spin_count: 9,  inherit_globals: false, on_enter_reset_vars: '', notes: '藍豬免費遊戲:局數由藍表決定(起始 9,最多 100)' },
+      { mode: 'FG_Y',  trigger_condition: 'symbol_count.CY >= 3', spin_count: 7,  inherit_globals: true,  on_enter_reset_vars: 'jp_collect', notes: '黃豬 JACKPOT 免費遊戲:神祕符揭示彩金符,集滿給彩池' },
+      { mode: 'FG_R',  trigger_condition: 'symbol_count.CR >= 3', spin_count: 7,  inherit_globals: true,  on_enter_reset_vars: '', notes: '紅豬免費遊戲:額外 Wild 加入輪帶(Hog Wild 式)' },
     ];
+    const modeList = modes.map(m => m.mode);
 
-    // ── 02_Layout:5×3;R3 帶一個 STACK 副輪(沿用母輪權重 → 零警告)──
     const layout = [];
-    for (let r = 1; r <= REELS; r++) {
-      layout.push({
-        reel_id: r, y_offset: 0, max_rows: 3,
-        has_subreel: r === 3,
-        subreel_position: r === 3 ? 'BOTTOM' : '',
-        subreel_rows: r === 3 ? 1 : 0,
-        subreel_inherit_weight: r === 3,
-        subreel_kind: 'STACK',
-      });
-    }
-    // ── 02b_Panels + 03b_Symbol_Sets:頂部 3×1 收集盤,獨立符號集
-    //    (symbol_set 非空 → 有權重來源,零警告;join_payline=false → 零警告)──
-    const panels = [{
-      panel_id: 'HW1', col: 1, row: -2, width: 3, height: 1,
-      scroll: false, symbol_set: 'HWSET',
-      inherit_weight: false, join_payline: false,
-      note: '頂部收集盤(獨立符號集示範)',
-    }];
-    const symbolsets = { HWSET: ['SCAT', 'H1', 'L1'] };
+    for (let r = 1; r <= REELS; r++) layout.push({ reel_id: r, y_offset: 0, max_rows: 3, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' });
 
-    // ── 04_Reel_Weights:NG / FG1 兩套完整權重
-    //    WILD 在 R1/R5 權重 0,與 C001(REEL_RESTRICT WILD 2,3,4)語義一致 ──
-    const BASE_W = { WILD: 16, SCAT: 10, MEGA: 4, H1: 22, H2: 26, H3: 30, H4: 34, L1: 58, L2: 62, L3: 66, L4: 70 };
-    const FG_W   = { WILD: 30, SCAT: 8,  MEGA: 6, H1: 26, H2: 30, H3: 34, H4: 38, L1: 50, L2: 54, L3: 58, L4: 62 };
-    const sidList = SYM_DEFS.map(d => d.sid);
-    function _mkWeights(map) {
-      const w = {};
-      for (let r = 1; r <= REELS; r++) {
-        for (const sid of sidList) {
-          let v = (map[sid] != null) ? map[sid] : 100;
-          if (sid === 'WILD' && (r === 1 || r === REELS)) v = 0;
-          w[`${r}-${sid}`] = v;
-        }
-      }
-      return w;
-    }
-    const reelweights = {
-      NG:  { symbol_ids: [...sidList], weights: _mkWeights(BASE_W),
-             notes: 'NG 基礎權重(WILD 僅 2–4 輪)', sub_weights: {}, panel_weights: {} },
-      FG1: { symbol_ids: [...sidList], weights: _mkWeights(FG_W),
-             notes: 'FG 提高 WILD / MEGA 出現率', sub_weights: {}, panel_weights: {} },
-    };
+    const panels = [];
+    const symbolsets = {};
 
-    // ── 05_Grid_Size_Weights:固定 3 列(非 Megaways,示範表結構)──
-    function _mkGrid() {
-      const w = {};
-      for (let r = 1; r <= REELS; r++) w[`${r}-3`] = 100;
-      return { grid_sizes: [3], weights: w, notes: '固定 3 列(非 Megaways)' };
-    }
-    const gridweights = { NG: _mkGrid(), FG1: _mkGrid() };
+    const BASE = { WILD: 0, MYST: 8, CB: 6, CY: 6, CR: 6, H1: 20, H2: 24, H3: 28, H4: 30, L1: 54, L2: 58, L3: 62, L4: 66 };
+    const FGB  = { ...BASE, WILD: 0, MYST: 12, CB: 3, CY: 3, CR: 3 };
+    const FGY  = { ...BASE, MYST: 14, CB: 3, CY: 3, CR: 3 };
+    const FGR  = { ...BASE, WILD: 26, MYST: 10, CB: 3, CY: 3, CR: 3 };
+    // WILD only on reels 2..5 (matches C001); coins allowed all reels
+    const restrict = { WILD: [2, 3, 4, 5] };
+    const reelweights = _mkReelWeights(REELS, sid, { NG: BASE, FG_B: FGB, FG_Y: FGY, FG_R: FGR }, restrict);
+    // WILD weight in FG_B/FG_Y stays 0 on all reels (only FG_R & NG-restricted use it); make explicit for FG_R via restrict
+    const gridweights = _mkGrid(REELS, [3, 3, 3, 3, 3], modeList);
+    const paylines = _mkLines(REELS, 3, 25);
 
-    // ── 06_Paylines:10 線(全部落在 1..3 列、1..5 輪 → 驗證全過)──
-    const paylines = [
-      { line_id: 1,  path: '(1,1)-(2,1)-(3,1)-(4,1)-(5,1)', direction: 'LTR', notes: '頂列' },
-      { line_id: 2,  path: '(1,2)-(2,2)-(3,2)-(4,2)-(5,2)', direction: 'LTR', notes: '中列' },
-      { line_id: 3,  path: '(1,3)-(2,3)-(3,3)-(4,3)-(5,3)', direction: 'LTR', notes: '底列' },
-      { line_id: 4,  path: '(1,1)-(2,2)-(3,3)-(4,2)-(5,1)', direction: 'LTR', notes: 'V 型' },
-      { line_id: 5,  path: '(1,3)-(2,2)-(3,1)-(4,2)-(5,3)', direction: 'LTR', notes: '倒 V 型' },
-      { line_id: 6,  path: '(1,1)-(2,2)-(3,1)-(4,2)-(5,1)', direction: 'LTR', notes: '上鋸齒' },
-      { line_id: 7,  path: '(1,3)-(2,2)-(3,3)-(4,2)-(5,3)', direction: 'LTR', notes: '下鋸齒' },
-      { line_id: 8,  path: '(1,2)-(2,1)-(3,2)-(4,1)-(5,2)', direction: 'LTR', notes: '中上鋸齒' },
-      { line_id: 9,  path: '(1,2)-(2,3)-(3,2)-(4,3)-(5,2)', direction: 'LTR', notes: '中下鋸齒' },
-      { line_id: 10, path: '(1,1)-(2,1)-(3,2)-(4,3)-(5,3)', direction: 'LTR', notes: '左上→右下階梯' },
-    ];
-
-    // ── 07_Constraints ──
     const constraints = [
-      { constraint_id: 'C001', ctype: 'REEL_RESTRICT', symbol_id: 'WILD',
-        reels_allowed: '2,3,4', threshold: 0, mode_scope: 'ALL', notes: 'Wild 只出現在中間 3 輪' },
-      { constraint_id: 'C002', ctype: 'GLOBAL_MAX', symbol_id: 'SCAT',
-        reels_allowed: '', threshold: 3, mode_scope: 'NG', notes: 'NG 全盤最多 3 個 Scatter' },
-      { constraint_id: 'C003', ctype: 'GLOBAL_MAX', symbol_id: 'MEGA',
-        reels_allowed: '', threshold: 1, mode_scope: 'ALL', notes: 'MEGA(2×2)全盤最多 1 個' },
+      { constraint_id: 'C001', ctype: 'REEL_RESTRICT', symbol_id: 'WILD', reels_allowed: '2,3,4,5', threshold: 0, mode_scope: 'ALL', notes: 'Wild 不出現在第 1 輪(堆疊 Wild)' },
+      { constraint_id: 'C002', ctype: 'GLOBAL_MAX',    symbol_id: 'MYST', reels_allowed: '',        threshold: 5, mode_scope: 'ALL', notes: '神祕符整輪填充,全盤上限 5(每輪一格代表整輪)' },
+      { constraint_id: 'C003', ctype: 'GLOBAL_MAX',    symbol_id: 'CB',   reels_allowed: '',        threshold: 5, mode_scope: 'NG',  notes: 'NG 藍幣全盤上限 5' },
     ];
 
-    // ── 09_Puzzle_Rules(trigger / atype / 必填參數均對齊 catalog → 零錯誤)──
     const rules = [
-      { rule_id: 'P001', mode_scope: 'ALL', trigger: 'ON_GRID_GENERATED',
-        condition: 'symbol_count.SCAT >= 3',
-        actions: [
-          { atype: 'EMIT_EVENT',  params: { name: 'fg_trigger' } },
-          { atype: 'SWITCH_MODE', params: { target: 'FG1', inherit_globals: false } },
-        ],
-        emits: ['fg_trigger'], enabled: true, priority: 100,
-        description: 'Scatter ≥ 3 觸發免費遊戲並切到 FG1' },
-      { rule_id: 'P002', mode_scope: 'FG1', trigger: 'ON_COMBO_END',
-        condition: 'mode == FG1 AND combo_step >= 2',
-        actions: [{ atype: 'AWARD_FREE_SPIN', params: { count: 5, mode: 'FG1' } }],
-        emits: [], enabled: true, priority: 80,
-        description: 'FG 內連 2 爆以上追加 5 局' },
-      { rule_id: 'P003', mode_scope: 'NG', trigger: 'ON_DEAD_SPIN',
-        condition: 'mode == NG',
-        actions: [{ atype: 'UPDATE_GLOBAL', params: { var: 'dead_count', op: 'add', value: 1 } }],
-        emits: [], enabled: true, priority: 50,
-        description: '死局累計到 global.dead_count(救濟用)' },
-      { rule_id: 'P004', mode_scope: 'ALL', trigger: 'ON_COMBO_END',
-        condition: 'total_multiplier >= 100',
-        actions: [{ atype: 'EMIT_EVENT', params: { name: 'big_win' } }],
-        emits: ['big_win'], enabled: true, priority: 90,
-        description: '累計 100 倍以上廣播 big_win 事件' },
+      _rule('P001', 'ALL', 'ON_GRID_GENERATED', '',
+        [{ atype: 'REVEAL_AS', params: { symbol: 'MYST', pool: 'WILD,H1,H2,H3,H4,L1,L2,L3,L4,CB,CY,CR', scope: 'REEL' } }],
+        [], 120, '神祕符號(?)整輪落定後統一揭示為一般符/Wild/彩色幣(Mystery Stack)'),
+      _rule('P002', 'NG', 'ON_GRID_GENERATED', 'symbol_count.CB >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'blue_bonus' } }, { atype: 'SWITCH_MODE', params: { target: 'FG_B', inherit_globals: false } }],
+        ['blue_bonus'], 112, '藍幣 ≥ 3 觸發藍豬免費遊戲'),
+      _rule('P003', 'NG', 'ON_GRID_GENERATED', 'symbol_count.CY >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'yellow_bonus' } }, { atype: 'SWITCH_MODE', params: { target: 'FG_Y', inherit_globals: true } }],
+        ['yellow_bonus'], 111, '黃幣 ≥ 3 觸發黃豬 JACKPOT 免費遊戲'),
+      _rule('P004', 'NG', 'ON_GRID_GENERATED', 'symbol_count.CR >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'red_bonus' } }, { atype: 'SWITCH_MODE', params: { target: 'FG_R', inherit_globals: true } }],
+        ['red_bonus'], 110, '紅幣 ≥ 3 觸發紅豬免費遊戲'),
+      _rule('P005', 'FG_R', 'ON_MODE_ENTER', '',
+        [{ atype: 'SYMBOL_SWAP', params: { from_symbol: 'L4', to_symbol: 'WILD', reels: '1,2,3,4,5', persist: 'FEATURE' } }],
+        [], 100, '紅豬免費遊戲:把最低符替換為 Wild 加入輪帶(額外 Wild)'),
+      _rule('P006', 'FG_Y', 'ON_WIN_RESOLVED', 'win_contains.CY == 1',
+        [{ atype: 'COLLECT', params: { target: 'jp_collect', source: 'symbol_value', scope: 'all_visible' } }],
+        [], 100, '黃豬免費遊戲:收集彩金符進度(集滿給對應彩池)'),
+      _rule('P007', 'ALL', 'ON_GRID_GENERATED', 'mode in [FG_B, FG_Y, FG_R] AND (symbol_count.CB >= 2 OR symbol_count.CY >= 2 OR symbol_count.CR >= 2)',
+        [{ atype: 'AWARD_FREE_SPIN', params: { count: 3 } }],
+        [], 80, '免費遊戲中再落彩色幣 → 追加 3 局(retrigger)'),
+      _rule('P008', 'ALL', 'ON_COMBO_END', 'total_multiplier >= 250',
+        [{ atype: 'EMIT_EVENT', params: { name: 'big_win' } }],
+        ['big_win'], 90, '累計 250 倍以上廣播 big_win'),
     ];
 
-    // ── 10_Discard_Rules ──
     const discards = [
-      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL',
-        condition: 'symbol_count.SCAT >= 5', notes: '全盤 Scatter 過多,視為異常局(風控)' },
-      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',
-        condition: 'total_multiplier > 0 AND total_multiplier < 0.5', notes: '極小中獎,體感差' },
-      { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'FG1',
-        condition: 'spin_locals.fg_combo_count == 0', notes: 'FG 完全沒中,體感極差' },
+      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL', condition: 'symbol_count.MYST >= 5 AND symbol_count.WILD >= 12', notes: '神祕符與 Wild 同時爆量,異常局(風控)' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',  condition: 'total_multiplier > 0 AND total_multiplier < 0.4', notes: '極小中獎,體感差' },
+      { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'FG_B', condition: 'spin.fg_win == 0', notes: '藍豬免費遊戲整局無中獎,體感差' },
     ];
 
-    // ── 12_Distribution_Bins ──
     const bins = {
-      NG:  { bin_edges: '0, 0.001, 2, 10, 50',        notes: 'NG 倍數分佈區間' },
-      FG1: { bin_edges: '0, 0.001, 20, 60, 120, 600', notes: 'FG 倍數分佈區間' },
+      NG:   { bin_edges: '0, 0.001, 2, 10, 50, 250',  notes: 'NG 倍數分佈' },
+      FG_B: { bin_edges: '0, 0.001, 10, 40, 120, 600', notes: '藍豬 FG 分佈' },
+      FG_Y: { bin_edges: '0, 0.001, 20, 80, 300, 2500', notes: '黃豬 JACKPOT FG 分佈' },
+      FG_R: { bin_edges: '0, 0.001, 15, 60, 200, 900', notes: '紅豬 FG 分佈' },
     };
 
-    // 鍵名對齊 _snapshotAllLS / _restoreAllLS 的 snapshot key
-    // (comboweights 刻意不含 → 還原時清空,與 v4.0 #14 移除一致)
-    return { global, modes, layout, panels, symbolsets, bins, paylines,
-             constraints, reelweights, gridweights, discards, rules, registry };
+    return { global, modes, layout, panels, symbolsets, bins, paylines, constraints, reelweights, gridweights, discards, rules, registry };
   }
 
-  const BUILTIN_TEMPLATES = [{
-    slug: BUILTIN_DEMO_SLUG,
-    builtin: true,
-    name: '📦 示範:翡翠之路 5×3',
-    description: '內建完整示範:5×3 LINE、NG+FG1 雙模式、11 符號(含 MEGA 2×2)、'
-      + 'R3 副輪 + 自由副盤 HW1、10 線、3 約束、4 規則、3 棄牌、雙模式分佈區間。'
-      + '零驗證錯誤,可直接匯出 A.xlsx。',
-    created: BUILTIN_DEMO_STAMP,
-    modified: BUILTIN_DEMO_STAMP,
-    counts: { modes: 2, rules: 4, discards: 3, symbols: 11,
-              layout: 5, paylines: 10, constraints: 3 },
-  }];
+  // ════════════════════════════════════════════════════════════════════
+  // 2) Mahjong Ways 2 (PG Soft) — 4-5-5-5-4 WAYS(2000)
+  //    tumble cascade · progressive multiplier ladder · gold→wild transform
+  // ════════════════════════════════════════════════════════════════════
+  function _buildMW2Data() {
+    const REELS = 5;
+    const SY = [
+      { sid: 'WILD', type: 'WILD',    p: [10, 30, 100], wild: true, instMult: true, sw: ['#c9a20f', '#3a2a10'] }, // gold ingot, carries mult
+      { sid: 'SCAT', type: 'SCATTER', p: [0, 0, 0],     scatter: true, sw: ['#b3402a', '#ffffff'] },
+      { sid: 'GOLD', type: 'SPECIAL', sw: ['#e6c24a', '#3a2a10'], reels: [false, true, true, true, false] },        // gold-plated (reels 2-4)
+      { sid: 'H1',   type: 'HIGH',    p: [4, 12, 40], sw: ['#c0392b', '#ffffff'] }, // red dragon
+      { sid: 'H2',   type: 'HIGH',    p: [3.5, 10, 30], sw: ['#3f9e6d', '#ffffff'] }, // green
+      { sid: 'H3',   type: 'HIGH',    p: [3, 8, 24], sw: ['#2f6ec0', '#ffffff'] },  // white
+      { sid: 'H4',   type: 'HIGH',    p: [2.5, 7, 20], sw: ['#8e6fd0', '#ffffff'] },
+      { sid: 'L1',   type: 'LOW',     p: [1.2, 4, 12], sw: ['#EDD9C0', '#7a5a3a'] },
+      { sid: 'L2',   type: 'LOW',     p: [1, 3.5, 10], sw: ['#e7e3da', '#5a5650'] },
+      { sid: 'L3',   type: 'LOW',     p: [0.8, 3, 8], sw: ['#d9e8df', '#2f6e4f'] },
+      { sid: 'L4',   type: 'LOW',     p: [0.6, 2.5, 7], sw: ['#dfe6ee', '#3a5a7a'] },
+      { sid: 'L5',   type: 'LOW',     p: [0.5, 2, 6], sw: ['#f0dede', '#7a3a3a'] },
+    ];
+    const sid = SY.map(s => s.sid);
+    const registry = _mkRegistry(REELS, SY);
+
+    const global = {
+      simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
+      pay_type: 'WAYS', ways_direction: 'LTR', payline_direction: 'LTR', ways_both_dedup: true,
+      megaways: false, cluster_min_size: 5, starting_mode: 'NG',
+      max_chain_depth: 100, max_chain_per_rule: 50,
+      big_win_thresholds: '200,1000', dead_spin_buckets: '2,3,4,5',
+      mult_compose: 'MUL',   // Mahjong Ways 2 multiplier wilds multiply together
+    };
+    const modes = [
+      { mode: 'NG', trigger_condition: '', spin_count: 0, inherit_globals: false, on_enter_reset_vars: '', notes: '一般遊戲 4-5-5-5-4(2000 ways);連消,倍數階梯 1→2→3→5',
+        progress_ladder: [1, 2, 3, 5], progress_reset: true },
+      { mode: 'FS', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 10, inherit_globals: false, on_enter_reset_vars: '', notes: '免費遊戲:倍數階梯翻倍 2→4→6→10;中央輪滿金符',
+        progress_ladder: [2, 4, 6, 10], progress_reset: true },
+    ];
+    const modeList = modes.map(m => m.mode);
+
+    const layout = [
+      { reel_id: 1, y_offset: 0, max_rows: 4, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' },
+      { reel_id: 2, y_offset: 0, max_rows: 5, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' },
+      { reel_id: 3, y_offset: 0, max_rows: 5, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' },
+      { reel_id: 4, y_offset: 0, max_rows: 5, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' },
+      { reel_id: 5, y_offset: 0, max_rows: 4, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' },
+    ];
+    const panels = [];
+    const symbolsets = {};
+
+    const BASE = { WILD: 0, SCAT: 5, GOLD: 6, H1: 18, H2: 22, H3: 26, H4: 30, L1: 50, L2: 54, L3: 58, L4: 62, L5: 66 };
+    const FSW  = { ...BASE, WILD: 0, SCAT: 4, GOLD: 12 };
+    // WILD comes only from GOLD transform (weight 0 on strips); GOLD only on reels 2-4
+    const restrict = { GOLD: [2, 3, 4], WILD: [] };
+    // WILD restrict [] would zero all reels via _mkReelWeights (allow.includes(r) false for all).
+    const reelweights = _mkReelWeights(REELS, sid, { NG: BASE, FS: FSW }, restrict);
+    const gridweights = _mkGrid(REELS, [4, 5, 5, 5, 4], modeList);
+    const paylines = [];   // WAYS — no paylines
+
+    const constraints = [
+      { constraint_id: 'C001', ctype: 'REEL_RESTRICT', symbol_id: 'GOLD', reels_allowed: '2,3,4', threshold: 0, mode_scope: 'ALL', notes: '金符只落在中央三輪(2,3,4)' },
+      { constraint_id: 'C002', ctype: 'GLOBAL_MAX',    symbol_id: 'SCAT', reels_allowed: '',      threshold: 5, mode_scope: 'ALL', notes: 'Scatter 全盤上限 5' },
+    ];
+
+    const rules = [
+      _rule('P001', 'NG', 'ON_SPIN_START', '',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'set', value: 1 } }],
+        [], 130, 'NG 每局開始倍數重置為 1'),
+      _rule('P002', 'NG', 'ON_COMBO_STEP', '',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'add', value: 1 } }],
+        [], 120, 'NG 每次連消倍數 +1(階梯 1→2→3→5;連消中斷即重置)'),
+      _rule('P003', 'FS', 'ON_SPIN_START', '',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'set', value: 2 } }],
+        [], 128, 'FS 每局開始倍數 2'),
+      _rule('P004', 'FS', 'ON_COMBO_STEP', '',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'add', value: 2 } }],
+        [], 118, 'FS 每次連消倍數 +2(階梯 2→4→6→10)'),
+      _rule('P005', 'ALL', 'ON_COMBO_STEP', 'symbol_count.GOLD >= 1',
+        [{ atype: 'BOARD_TRANSFORM', params: { from_symbol: 'GOLD', to_symbol: 'WILD' } }],
+        [], 110, '參與中獎的金符於連消後轉為 Wild(gold-plated → wild)'),
+      _rule('P006', 'NG', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'fs_trigger' } }, { atype: 'SWITCH_MODE', params: { target: 'FS', inherit_globals: false } }, { atype: 'AWARD_FREE_SPIN', params: { count: 10, mode: 'FS' } }],
+        ['fs_trigger'], 100, 'Scatter ≥ 3 觸發 10 局免費遊戲'),
+      _rule('P007', 'FS', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 1',
+        [{ atype: 'AWARD_FREE_SPIN', params: { count: 2, mode: 'FS' } }],
+        [], 90, 'FS 中每落 1 個 Scatter 追加 2 局(retrigger)'),
+      _rule('P008', 'FS', 'ON_MODE_ENTER', '',
+        [{ atype: 'SYMBOL_SWAP', params: { from_symbol: 'GOLD', to_symbol: 'GOLD', reels: '3', persist: 'FEATURE' } }],
+        [], 85, 'FS:中央輪(3)整輪呈現金符(可再轉 Wild)'),
+    ];
+
+    const discards = [
+      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL', condition: 'symbol_count.SCAT >= 5', notes: 'Scatter 過多異常局(風控)' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',  condition: 'combo_step == 0 AND total_multiplier < 0.5', notes: '無連消且極小中獎,體感差' },
+    ];
+
+    const bins = {
+      NG: { bin_edges: '0, 0.001, 2, 12, 60, 300',   notes: 'NG 分佈' },
+      FS: { bin_edges: '0, 0.001, 20, 80, 300, 2000', notes: 'FS 分佈' },
+    };
+
+    return { global, modes, layout, panels, symbolsets, bins, paylines, constraints, reelweights, gridweights, discards, rules, registry };
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // 3) Gates of Olympus (Pragmatic Play) — 6×5 SCATTER(pay-anywhere 8+)
+  //    tumble · additive multiplier orbs 2x-500x · persistent total mult in FS
+  // ════════════════════════════════════════════════════════════════════
+  function _buildGatesData() {
+    const REELS = 6;
+    const SY = [
+      { sid: 'SCAT', type: 'SCATTER', p: [0, 0, 0], scatter: true, sw: ['#c9a20f', '#3a2a10'] }, // Zeus scatter
+      { sid: 'ORB',  type: 'SPECIAL', instMult: true, sw: ['#8e3fd0', '#ffffff'] },              // multiplier orb 2x-500x
+      { sid: 'H1',   type: 'HIGH', p: [10, 25, 50], sw: ['#c9a20f', '#3a2a10'] },  // crown
+      { sid: 'H2',   type: 'HIGH', p: [8, 20, 40],  sw: ['#c0392b', '#ffffff'] },  // hourglass
+      { sid: 'H3',   type: 'HIGH', p: [6, 15, 30],  sw: ['#2f6ec0', '#ffffff'] },  // ring
+      { sid: 'H4',   type: 'HIGH', p: [5, 12, 25],  sw: ['#3f9e6d', '#ffffff'] },  // chalice
+      { sid: 'L1',   type: 'LOW',  p: [2, 5, 12],  sw: ['#c0392b', '#ffffff'] },   // red gem
+      { sid: 'L2',   type: 'LOW',  p: [1.5, 4, 10], sw: ['#8e6fd0', '#ffffff'] },  // purple
+      { sid: 'L3',   type: 'LOW',  p: [1.2, 3, 8],  sw: ['#c9a20f', '#3a2a10'] },  // yellow
+      { sid: 'L4',   type: 'LOW',  p: [1, 2.5, 6],  sw: ['#3f9e6d', '#ffffff'] },  // green
+      { sid: 'L5',   type: 'LOW',  p: [0.8, 2, 5],  sw: ['#2f6ec0', '#ffffff'] },  // blue
+    ];
+    const sid = SY.map(s => s.sid);
+    const registry = _mkRegistry(REELS, SY);
+
+    const global = {
+      simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
+      pay_type: 'SCATTER', ways_direction: 'LTR', payline_direction: 'LTR',
+      megaways: false, cluster_min_size: 8, starting_mode: 'NG',   // 8+ anywhere
+      max_chain_depth: 100, max_chain_per_rule: 50,
+      big_win_thresholds: '250,1000', dead_spin_buckets: '0,1,2,3',
+      mult_compose: 'ADD',   // multiplier orbs add together
+    };
+    const modes = [
+      { mode: 'NG', trigger_condition: '', spin_count: 0, inherit_globals: false, on_enter_reset_vars: '', notes: '一般遊戲 6×5,scatter-pays(任意 8+ 同符);連消;倍數球 2x-500x 相加。加押 +25% 提高 Scatter 機率' },
+      { mode: 'FS', trigger_condition: 'symbol_count.SCAT >= 4', spin_count: 15, inherit_globals: false, on_enter_reset_vars: 'fs_total_mult', notes: '免費遊戲 15 局:倍數球加入「總倍數」且整輪不重置,套用到每次中獎' },
+    ];
+    const modeList = modes.map(m => m.mode);
+
+    const layout = [];
+    for (let r = 1; r <= REELS; r++) layout.push({ reel_id: r, y_offset: 0, max_rows: 5, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' });
+    const panels = [];
+    const symbolsets = {};
+
+    const BASE = { SCAT: 6, ORB: 5, H1: 16, H2: 20, H3: 24, H4: 28, L1: 46, L2: 50, L3: 54, L4: 58, L5: 62 };
+    const FSW  = { ...BASE, SCAT: 5, ORB: 9 };
+    const reelweights = _mkReelWeights(REELS, sid, { NG: BASE, FS: FSW }, null);
+    const gridweights = _mkGrid(REELS, [5, 5, 5, 5, 5, 5], modeList);
+    const paylines = [];   // SCATTER pay-anywhere — no paylines
+
+    const constraints = [
+      { constraint_id: 'C001', ctype: 'GLOBAL_MAX', symbol_id: 'ORB',  reels_allowed: '', threshold: 6, mode_scope: 'ALL', notes: '倍數球全盤上限 6' },
+      { constraint_id: 'C002', ctype: 'GLOBAL_MAX', symbol_id: 'SCAT', reels_allowed: '', threshold: 6, mode_scope: 'ALL', notes: 'Scatter 全盤上限 6(6 個 = 頂級觸發)' },
+    ];
+
+    const rules = [
+      _rule('P001', 'NG', 'ON_COMBO_END', 'symbol_count.ORB >= 1',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'add', value: 'symbol_value.ORB' } }],
+        [], 120, 'NG:連消結束時,所有倍數球值相加後套用到本次總贏分(2x-500x)'),
+      _rule('P002', 'NG', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 4',
+        [{ atype: 'EMIT_EVENT', params: { name: 'fs_trigger' } }, { atype: 'SWITCH_MODE', params: { target: 'FS', inherit_globals: false } }, { atype: 'AWARD_FREE_SPIN', params: { count: 15, mode: 'FS' } }],
+        ['fs_trigger'], 110, 'Zeus Scatter ≥ 4 觸發 15 局免費遊戲'),
+      _rule('P003', 'FS', 'ON_COMBO_END', 'symbol_count.ORB >= 1',
+        [{ atype: 'UPDATE_GLOBAL', params: { var: 'fs_total_mult', op: 'add', value: 'symbol_value.ORB', lifecycle: 'FEATURE' } }],
+        [], 110, 'FS:倍數球值累加進「總倍數」(整輪不重置)'),
+      _rule('P004', 'FS', 'ON_WIN_RESOLVED', 'global.fs_total_mult > 0',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'set', value: 'global.fs_total_mult' } }],
+        [], 100, 'FS:每次中獎套用累積總倍數'),
+      _rule('P005', 'FS', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 3',
+        [{ atype: 'AWARD_FREE_SPIN', params: { count: 5, mode: 'FS' } }],
+        [], 90, 'FS 中 Scatter ≥ 3 追加 5 局(retrigger)'),
+      _rule('P006', 'ALL', 'ON_COMBO_END', 'total_multiplier >= 250',
+        [{ atype: 'EMIT_EVENT', params: { name: 'big_win' } }],
+        ['big_win'], 80, '累計 250 倍以上廣播 big_win'),
+    ];
+
+    const discards = [
+      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL', condition: 'symbol_count.ORB >= 6 AND board_symbol_total == 0', notes: '倍數球爆量且清盤,異常局(風控)' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',  condition: 'total_multiplier > 0 AND total_multiplier < 0.5', notes: '極小中獎,體感差' },
+      { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'FS',  condition: 'global.fs_total_mult == 0 AND spin.fs_win == 0', notes: 'FS 無倍數且無中獎,體感差' },
+    ];
+
+    const bins = {
+      NG: { bin_edges: '0, 0.001, 2, 10, 50, 250',    notes: 'NG 分佈' },
+      FS: { bin_edges: '0, 0.001, 25, 100, 500, 5000', notes: 'FS 分佈(高波動)' },
+    };
+
+    return { global, modes, layout, panels, symbolsets, bins, paylines, constraints, reelweights, gridweights, discards, rules, registry };
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // 4) Release the Bison (Pragmatic Play) — 5×4 LINE 20 lines
+  //    roaming/sticky wild · wild-respin mode · guaranteed win · FS wheel + collect
+  // ════════════════════════════════════════════════════════════════════
+  function _buildBisonData() {
+    const REELS = 5;
+    const SY = [
+      { sid: 'WILD', type: 'WILD',    p: [2.5, 5, 12.5], wild: true, sw: ['#7a4a20', '#ffffff'] }, // bison (top pay)
+      { sid: 'SCAT', type: 'SCATTER', p: [0, 0, 0], scatter: true, sw: ['#3f9ec0', '#ffffff'] },   // diamond gem
+      { sid: 'H1',   type: 'HIGH', p: [0.5, 2, 10], sw: ['#8a6a4a', '#ffffff'] },  // wolf
+      { sid: 'H2',   type: 'HIGH', p: [0.5, 2, 4],  sw: ['#b0763a', '#ffffff'] },  // eagle
+      { sid: 'H3',   type: 'HIGH', p: [1, 1.5, 3],  sw: ['#9a7a5a', '#ffffff'] },  // hyena
+      { sid: 'H4',   type: 'HIGH', p: [0.5, 0.75, 2], sw: ['#7a8a5a', '#ffffff'] }, // antelope
+      { sid: 'L1',   type: 'LOW',  p: [0.4, 0.6, 1.5], sw: ['#EDD9C0', '#7a5a3a'] }, // A
+      { sid: 'L2',   type: 'LOW',  p: [0.3, 0.5, 1],   sw: ['#e7e3da', '#5a5650'] }, // K
+      { sid: 'L3',   type: 'LOW',  p: [0.25, 0.4, 0.7], sw: ['#d9e8df', '#2f6e4f'] }, // Q
+      { sid: 'L4',   type: 'LOW',  p: [0.2, 0.3, 0.6],  sw: ['#dfe6ee', '#3a5a7a'] }, // J
+      { sid: 'L5',   type: 'LOW',  p: [0.15, 0.25, 0.5], sw: ['#f0dede', '#7a3a3a'] }, // 10
+    ];
+    const sid = SY.map(s => s.sid);
+    const registry = _mkRegistry(REELS, SY);
+
+    const global = {
+      simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
+      pay_type: 'LINE', ways_direction: 'LTR', payline_direction: 'LTR',
+      megaways: false, cluster_min_size: 5, starting_mode: 'NG',
+      max_chain_depth: 100, max_chain_per_rule: 50,
+      big_win_thresholds: '150,750', dead_spin_buckets: '2,3,4,5',
+      mult_compose: 'MUL',
+    };
+    const modes = [
+      { mode: 'NG',     trigger_condition: '', spin_count: 0, inherit_globals: false, on_enter_reset_vars: '', notes: '一般遊戲 5×4(20 線);死局可隨機保底 10x-40x' },
+      { mode: 'RESPIN', trigger_condition: 'symbol_count.WILD >= 4', spin_count: 0, inherit_globals: true, on_enter_reset_vars: 'wild_mult', notes: 'Wild 重旋:全部 Wild 漫遊,每落新 Wild +1 重旋且倍數 +1',
+        respin_base: 3, respin_reset_on: 'NEW_SYMBOL', respin_stop_cond: '無新 Wild 落地即結束' },
+      { mode: 'FSWHEEL', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 0, inherit_globals: true, on_enter_reset_vars: '', notes: '免費遊戲前的雙面轉盤:依 Scatter 數決定局數(8-18)與起始倍數(x1-x5)',
+        mode_kind: 'WHEEL', items: [
+          { label: '8 局 · x2', value: 8, weight: 30, item_role: 'BOOST' },
+          { label: '10 局 · x2', value: 10, weight: 26, item_role: 'BOOST' },
+          { label: '12 局 · x3', value: 12, weight: 20, item_role: 'BOOST' },
+          { label: '15 局 · x4', value: 15, weight: 14, item_role: 'BOOST' },
+          { label: '18 局 · x5', value: 18, weight: 10, item_role: 'BOOST' },
+        ] },
+      { mode: 'FS', trigger_condition: '', spin_count: 10, inherit_globals: true, on_enter_reset_vars: 'wild_count', notes: '免費遊戲:每個 Wild 變黏著漫遊 Wild;收集第 5 個起每新 Wild +1 局 +1 倍(上限 10)' },
+    ];
+    const modeList = ['NG', 'RESPIN', 'FS'];   // reel-spinning modes (FSWHEEL is a picker, no reels)
+
+    const layout = [];
+    for (let r = 1; r <= REELS; r++) layout.push({ reel_id: r, y_offset: 0, max_rows: 4, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' });
+    const panels = [];
+    const symbolsets = {};
+
+    const BASE = { WILD: 10, SCAT: 6, H1: 20, H2: 24, H3: 28, H4: 32, L1: 52, L2: 56, L3: 60, L4: 64, L5: 68 };
+    const RSW  = { ...BASE, WILD: 16, SCAT: 4 };
+    const FSW  = { ...BASE, WILD: 22, SCAT: 5 };
+    const reelweights = _mkReelWeights(REELS, sid, { NG: BASE, RESPIN: RSW, FS: FSW }, null);
+    const gridweights = _mkGrid(REELS, [4, 4, 4, 4, 4], modeList);
+    const paylines = _mkLines(REELS, 4, 20);
+
+    const constraints = [
+      { constraint_id: 'C001', ctype: 'GLOBAL_MAX', symbol_id: 'WILD', reels_allowed: '', threshold: 10, mode_scope: 'FS', notes: 'FS 收集 Wild 上限 10' },
+      { constraint_id: 'C002', ctype: 'GLOBAL_MAX', symbol_id: 'SCAT', reels_allowed: '', threshold: 5, mode_scope: 'ALL', notes: 'Scatter 全盤上限 5' },
+    ];
+
+    const rules = [
+      _rule('P001', 'NG', 'ON_GRID_GENERATED', 'symbol_count.WILD >= 4',
+        [{ atype: 'EMIT_EVENT', params: { name: 'wild_respin' } }, { atype: 'SWITCH_MODE', params: { target: 'RESPIN', inherit_globals: true } }],
+        ['wild_respin'], 120, 'Wild ≥ 4 觸發 Wild 重旋'),
+      _rule('P002', 'RESPIN', 'ON_GRID_GENERATED', '',
+        [{ atype: 'MOVE', params: { subject: 'WILD', manner: 'DIR', dir: '', amount: 1 } }],
+        [], 110, 'Wild 重旋:每旋所有 Wild 漫遊到新的隨機位置'),
+      _rule('P003', 'RESPIN', 'ON_SYMBOL_LANDED', 'win_contains.WILD == 1',
+        [{ atype: 'REVIVE', params: { respins: 1, trigger: 'NEW_SYMBOL' } }, { atype: 'ADJUST_MULTIPLIER', params: { op: 'add', value: 1 } }],
+        [], 105, 'Wild 重旋:每落新 Wild → 重旋 +1 且倍數 +1'),
+      _rule('P004', 'NG', 'ON_DEAD_SPIN', '',
+        [{ atype: 'PAY', params: { value: '10-40' } }],
+        [], 100, 'NG 死局隨機保底:給付 10x-40x(Guaranteed Win)'),
+      _rule('P005', 'NG', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'fs_trigger' } }, { atype: 'SWITCH_MODE', params: { target: 'FSWHEEL', inherit_globals: true } }],
+        ['fs_trigger'], 108, 'Scatter ≥ 3 → 進入轉盤(決定 FS 局數與起始倍數)'),
+      _rule('P006', 'FSWHEEL', 'ON_MODE_ENTER', '',
+        [{ atype: 'SWITCH_MODE', params: { target: 'FS', inherit_globals: true } }, { atype: 'AWARD_FREE_SPIN', params: { count: 10, mode: 'FS' } }],
+        [], 100, '轉盤結算後進入免費遊戲(局數/起始倍數由轉盤獎項決定)'),
+      _rule('P007', 'FS', 'ON_GRID_GENERATED', '',
+        [{ atype: 'MOVE', params: { subject: 'WILD', manner: 'DIR', dir: '', amount: 1 } }, { atype: 'STICKY', params: { symbol: 'WILD', duration: 1, until: 'FEATURE' } }],
+        [], 95, 'FS:Wild 變黏著漫遊 Wild(整輪停留,每旋換位)'),
+      _rule('P008', 'FS', 'ON_SYMBOL_LANDED', 'win_contains.WILD == 1',
+        [{ atype: 'UPDATE_GLOBAL', params: { var: 'wild_count', op: 'add', value: 1, cap: 10 } }],
+        [], 90, 'FS:收集落地的 Wild 到計量表(上限 10)'),
+      _rule('P009', 'FS', 'ON_GRID_GENERATED', 'global.wild_count >= 5',
+        [{ atype: 'AWARD_FREE_SPIN', params: { count: 1, mode: 'FS' } }, { atype: 'ADJUST_MULTIPLIER', params: { op: 'add', value: 1 } }],
+        [], 85, 'FS:收集達 5 個後,每新 Wild +1 局且倍數 +1'),
+    ];
+
+    const discards = [
+      { discard_id: 'D001', discard_kind: 'HARD', mode_scope: 'ALL', condition: 'symbol_count.SCAT >= 5 AND total_multiplier == 0', notes: 'Scatter 爆量但無倍數,異常局(風控)' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'NG',  condition: 'total_multiplier > 0 AND total_multiplier < 0.3', notes: '極小中獎,體感差' },
+      { discard_id: 'D003', discard_kind: 'SOFT', mode_scope: 'RESPIN', condition: 'symbol_count.WILD == 4 AND total_multiplier < 1', notes: '重旋剛好觸發卻幾乎沒中,體感差' },
+    ];
+
+    const bins = {
+      NG:     { bin_edges: '0, 0.001, 2, 10, 40, 150',   notes: 'NG 分佈' },
+      RESPIN: { bin_edges: '0, 0.001, 5, 20, 80, 400',   notes: 'Wild 重旋分佈' },
+      FS:     { bin_edges: '0, 0.001, 15, 60, 250, 3000', notes: 'FS 分佈' },
+    };
+
+    return { global, modes, layout, panels, symbolsets, bins, paylines, constraints, reelweights, gridweights, discards, rules, registry };
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // 5) Sugar Rush (Pragmatic Play) — 7×7 CLUSTER(相鄰≥5)
+  //    tumble · doubling multiplier spots (additive) · sticky spots in FS
+  // ════════════════════════════════════════════════════════════════════
+  function _buildSugarData() {
+    const REELS = 7;
+    const SY = [
+      { sid: 'SCAT', type: 'SCATTER', p: [0, 0, 0], scatter: true, sw: ['#e05aa0', '#ffffff'] }, // gumball rocket
+      { sid: 'H1',   type: 'HIGH', p: [1, 5, 30], sw: ['#e05aa0', '#ffffff'] },  // pink ball (top)
+      { sid: 'H2',   type: 'HIGH', p: [0.8, 4, 20], sw: ['#e6892a', '#ffffff'] }, // orange heart
+      { sid: 'H3',   type: 'HIGH', p: [0.6, 3, 15], sw: ['#8e6fd0', '#ffffff'] }, // purple star
+      { sid: 'H4',   type: 'HIGH', p: [0.5, 2.5, 12], sw: ['#3f9e6d', '#ffffff'] }, // green heart
+      { sid: 'L1',   type: 'LOW', p: [0.3, 1.5, 8], sw: ['#c0392b', '#ffffff'] },  // red gummy
+      { sid: 'L2',   type: 'LOW', p: [0.25, 1.2, 6], sw: ['#8e3fd0', '#ffffff'] }, // purple gummy
+      { sid: 'L3',   type: 'LOW', p: [0.2, 1, 5], sw: ['#e6a82a', '#ffffff'] },    // orange gummy
+    ];
+    const sid = SY.map(s => s.sid);
+    const registry = _mkRegistry(REELS, SY);
+
+    const global = {
+      simulation_count: 1000000, random_seed: 42, output_prefix: 'B_結果',
+      pay_type: 'CLUSTER', ways_direction: 'LTR', payline_direction: 'LTR',
+      megaways: false, cluster_min_size: 5, starting_mode: 'NG',   // 5+ adjacent
+      max_chain_depth: 100, max_chain_per_rule: 50,
+      big_win_thresholds: '250,1000', dead_spin_buckets: '0,1,2,3',
+      mult_compose: 'ADD',   // multiple multiplier spots add
+    };
+    const modes = [
+      { mode: 'NG', trigger_condition: '', spin_count: 0, inherit_globals: false, on_enter_reset_vars: '', notes: '一般遊戲 7×7 cluster(相鄰≥5);連消;中獎格化為倍數格,重複中獎翻倍 2→128(每局重置)' },
+      { mode: 'FS', trigger_condition: 'symbol_count.SCAT >= 3', spin_count: 10, inherit_globals: false, on_enter_reset_vars: '', notes: '免費遊戲:倍數格與其倍數整輪黏著不重置,越滾越強' },
+    ];
+    const modeList = modes.map(m => m.mode);
+
+    const layout = [];
+    for (let r = 1; r <= REELS; r++) layout.push({ reel_id: r, y_offset: 0, max_rows: 7, has_subreel: false, subreel_position: '', subreel_rows: 0, subreel_inherit_weight: false, subreel_kind: 'STACK' });
+    const panels = [];
+    const symbolsets = {};
+
+    const BASE = { SCAT: 5, H1: 20, H2: 24, H3: 28, H4: 32, L1: 56, L2: 60, L3: 64 };
+    const FSW  = { ...BASE, SCAT: 4 };
+    const reelweights = _mkReelWeights(REELS, sid, { NG: BASE, FS: FSW }, null);
+    const gridweights = _mkGrid(REELS, [7, 7, 7, 7, 7, 7, 7], modeList);
+    const paylines = [];   // CLUSTER — no paylines
+
+    const constraints = [
+      { constraint_id: 'C001', ctype: 'GLOBAL_MAX', symbol_id: 'SCAT', reels_allowed: '', threshold: 7, mode_scope: 'ALL', notes: 'Scatter 全盤上限 7(7 個 = 30 局)' },
+    ];
+
+    const rules = [
+      _rule('P001', 'ALL', 'ON_WIN_RESOLVED', 'win_symbols >= 5',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'mul', value: 2 } }],
+        [], 120, '中獎格化為倍數格;同格重複中獎倍數翻倍(2→4→…→128);多格倍數相加'),
+      _rule('P002', 'NG', 'ON_SPIN_START', '',
+        [{ atype: 'ADJUST_MULTIPLIER', params: { op: 'set', value: 1 } }],
+        [], 115, 'NG:倍數格每局重置'),
+      _rule('P003', 'NG', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 3',
+        [{ atype: 'EMIT_EVENT', params: { name: 'fs_trigger' } }, { atype: 'SWITCH_MODE', params: { target: 'FS', inherit_globals: false } }, { atype: 'AWARD_FREE_SPIN', params: { count: 10, mode: 'FS' } }],
+        ['fs_trigger'], 110, 'Scatter ≥ 3 觸發免費遊戲(3/4/5/6/7 → 10/12/15/20/30 局)'),
+      _rule('P004', 'FS', 'ON_MODE_ENTER', '',
+        [{ atype: 'UPDATE_GLOBAL', params: { var: 'spots_sticky', op: 'set', value: 1, lifecycle: 'FEATURE' } }],
+        [], 100, 'FS:倍數格改為整輪黏著(不隨每局重置)'),
+      _rule('P005', 'FS', 'ON_GRID_GENERATED', 'symbol_count.SCAT >= 3',
+        [{ atype: 'AWARD_FREE_SPIN', params: { count: 5, mode: 'FS' } }],
+        [], 90, 'FS 中 Scatter ≥ 3 追加 5 局(retrigger)'),
+      _rule('P006', 'ALL', 'ON_COMBO_END', 'total_multiplier >= 250',
+        [{ atype: 'EMIT_EVENT', params: { name: 'big_win' } }],
+        ['big_win'], 80, '累計 250 倍以上廣播 big_win'),
+    ];
+
+    const discards = [
+      { discard_id: 'D001', discard_kind: 'SOFT', mode_scope: 'NG', condition: 'total_multiplier > 0 AND total_multiplier < 0.5', notes: '極小中獎,體感差' },
+      { discard_id: 'D002', discard_kind: 'SOFT', mode_scope: 'FS', condition: 'spin.fs_win == 0', notes: 'FS 整局無 cluster,體感差' },
+    ];
+
+    const bins = {
+      NG: { bin_edges: '0, 0.001, 2, 10, 50, 250',    notes: 'NG 分佈' },
+      FS: { bin_edges: '0, 0.001, 25, 100, 500, 5000', notes: 'FS 分佈(高波動)' },
+    };
+
+    return { global, modes, layout, panels, symbolsets, bins, paylines, constraints, reelweights, gridweights, discards, rules, registry };
+  }
+
+  // ── registry of builders + metadata ────────────────────────────────
+  const STAMP = '2026-07-09T00:00:00.000Z';
+  const BUILDERS = {
+    'builtin-rich-little-piggies': _buildRLPData,
+    'builtin-mahjong-ways-2':      _buildMW2Data,
+    'builtin-gates-of-olympus':    _buildGatesData,
+    'builtin-release-the-bison':   _buildBisonData,
+    'builtin-sugar-rush':          _buildSugarData,
+  };
+  const META = [
+    { slug: 'builtin-rich-little-piggies', name: '🐷 Rich Little Piggies 5×3', builtin: true, created: STAMP, modified: STAMP,
+      description: 'Light & Wonder｜5×3 LINE 25 線｜神祕符號整輪揭示(Mystery Stack)、三色收集幣(藍/黃/紅)各觸發不同免費遊戲、堆疊 Wild。13 符號、4 模式、8 規則。',
+      counts: { modes: 4, rules: 8, discards: 3, symbols: 13, layout: 5, paylines: 25, constraints: 3 } },
+    { slug: 'builtin-mahjong-ways-2', name: '🀄 Mahjong Ways 2 (4-5-5-5-4)', builtin: true, created: STAMP, modified: STAMP,
+      description: 'PG Soft｜4-5-5-5-4 不規則盤 · WAYS(2000)｜連消 cascade、遞增倍數階梯(1→2→3→5,FS 翻倍 2→4→6→10)、金符變 Wild;mult_compose=MUL。12 符號、2 模式、8 規則。',
+      counts: { modes: 2, rules: 8, discards: 2, symbols: 12, layout: 5, paylines: 0, constraints: 2 } },
+    { slug: 'builtin-gates-of-olympus', name: '⚡ Gates of Olympus 6×5', builtin: true, created: STAMP, modified: STAMP,
+      description: 'Pragmatic Play｜6×5 · SCATTER(任意 8+)｜連消、倍數球 2x-500x 相加、FS 累積總倍數不重置;mult_compose=ADD。11 符號、2 模式、6 規則。',
+      counts: { modes: 2, rules: 6, discards: 3, symbols: 11, layout: 6, paylines: 0, constraints: 2 } },
+    { slug: 'builtin-release-the-bison', name: '🦬 Release the Bison 5×4', builtin: true, created: STAMP, modified: STAMP,
+      description: 'Pragmatic Play｜5×4 LINE 20 線｜漫遊/黏著 Wild、Wild 重旋模式、死局保底 10x-40x、免費遊戲轉盤(WHEEL)+ 收集 Wild 計量。11 符號、4 模式(含 WHEEL)、9 規則。',
+      counts: { modes: 4, rules: 9, discards: 3, symbols: 11, layout: 5, paylines: 20, constraints: 2 } },
+    { slug: 'builtin-sugar-rush', name: '🍬 Sugar Rush 7×7', builtin: true, created: STAMP, modified: STAMP,
+      description: 'Pragmatic Play｜7×7 · CLUSTER(相鄰≥5)｜連消、倍數格翻倍 2→128 相加、FS 倍數格整輪黏著;mult_compose=ADD。8 符號、2 模式、6 規則。',
+      counts: { modes: 2, rules: 6, discards: 2, symbols: 8, layout: 7, paylines: 0, constraints: 1 } },
+  ];
+
+  const BUILTIN_TEMPLATES = META;
 
   function _isBuiltinSlug(slug) {
     return typeof slug === 'string' && slug.startsWith(BUILTIN_SLUG_PREFIX);
@@ -1419,8 +1835,9 @@
     return BUILTIN_TEMPLATES.find(t => t.slug === slug) || null;
   }
   function _builtinPayload(slug) {
-    if (slug !== BUILTIN_DEMO_SLUG) return null;
-    return { version: 1, savedAt: BUILTIN_DEMO_STAMP, data: _buildBuiltinDemoData() };
+    const b = BUILDERS[slug];
+    if (!b) return null;
+    return { version: 1, savedAt: STAMP, data: b() };
   }
   // 公開:完整清單 = 內建(置頂)+ LS 使用者範本
   function listAllTemplates() {
