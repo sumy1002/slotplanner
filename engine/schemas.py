@@ -29,6 +29,7 @@ class WaysDirection(Enum):
 class SymbolType(Enum):
     HIGH = "HIGH"
     LOW = "LOW"
+    NORMAL = "NORMAL"   # 圖示頁「一般得分」中性型別（additive）；既有 HIGH/LOW 不改寫，下游皆視為一般得分
     WILD = "WILD"
     SCATTER = "SCATTER"
     BONUS = "BONUS"
@@ -230,6 +231,12 @@ class ReelLayout:
     #   洞格語義＝結構性永遠空（不是暫時空位）；MOVE / BOARD_FILL 必須跳過洞格。
     #   與 Panel 的 cells 採同一套表示法與收斂規則（full/empty → None），單一真相。
     cells: Optional[list[str]] = None
+    # #3:逐輪進場 / 滾動方式（02_Layout 選用欄 Entry_Mode / Scroll_Dir；契約加法，舊檔缺欄 → 預設）。
+    #   entry_mode: SCROLL 輪滾動 / DROP 掉落 / SPAWN 原地生成。
+    #   scroll_dir: DOWN 由上往下（或自上落下）/ UP 由下往上（或自下升起）/ NONE 無方向（SPAWN）。
+    #   純描述性 metadata，供 docgen 與下游模擬工具；本工具不執行、引擎不消費（安全降級）。
+    entry_mode: str = "SCROLL"
+    scroll_dir: str = "DOWN"
 
     @property
     def effective_kind(self) -> str:
@@ -635,6 +642,27 @@ class GridSizeWeight:
 
 
 @dataclass
+class ModeGridRange:
+    """逐模式逐輪的可變列數範圍（Megaways「每輪列 min–max，逐模式」）。
+
+    對應可選表 05b_Mode_Grid_Range;缺表時由 05_Grid_Size_Weights + 02.Max_Rows 推導
+    （安全降級,行為與舊檔一致）。逐模式 Megaways-ness 由 is_variable 推導,不再靠全域布林。
+    純描述 metadata:本工具不執行 gameplay,可變高度由引擎既有 max_rows/active_rows/
+    grid_size_weights 機制處理,本欄不改變引擎行為;供下游數據模擬工具 / 文件輸出消費。
+    """
+    mode: str
+    reel_id: int
+    min_rows: int
+    max_rows: int
+    notes: str = ""
+
+    @property
+    def is_variable(self) -> bool:
+        """該模式該輪是否為可變高度（min≠max）。"""
+        return self.max_rows > self.min_rows
+
+
+@dataclass
 class ComboWeightOverride:
     """連爆權重切換:覆蓋 04_Reel_Weights 的特定條目"""
     mode: str
@@ -687,6 +715,26 @@ class GenLimit:
     min_count: int = 0                       # 0 = 無下限
     max_count: Optional[int] = None          # None = 無上限
     mode_scope: str = "ALL"
+    notes: str = ""
+# ============================================================
+# 關聯型產牌條件 (對應 07c_Gen_Constraints, §4.8/§4.9)
+#   多符號合計(sum)/ 符號位置關係(pos)/ 整體盤面狀態(board)+ 巢狀「除了」例外。
+#   except_ 為結構化 dict(連接子 any/all + 項目清單,項目為 leaf 或 group,一層巢狀)或 None。
+#   (except 為 Python 保留字,故欄名用 except_。)
+#   本工具不執行;僅描述 + 帶給下游模擬工具消費。
+# ============================================================
+@dataclass
+class GenConstraint:
+    constraint_id: str
+    enabled: bool = True
+    ctype: str = "sum"                       # sum / pos / board
+    symbols: list[str] = field(default_factory=list)
+    op: str = "le"                           # le / lt / eq / ge
+    value: Optional[float] = None
+    value_type: str = "fixed"                # fixed / dynamic
+    relation: str = ""                       # pos: 相鄰 / 同列 / 同行 / 不可同盤
+    board_state: str = ""                    # board: 已填滿 / 含指定符號 / 有空位 / 全同色
+    except_: Optional[dict] = None           # 巢狀例外(見上)或 None
     notes: str = ""
 # ============================================================
 @dataclass
@@ -771,6 +819,7 @@ class DiscardRule:
     condition: Optional[Condition]
     reason_label: str
     notes: str = ""
+    enabled: bool = True          # §4.10b:棄牌開關(additive;預設啟用,舊檔無欄→True)
 
     # 統計埋點
     trigger_count: int = 0
@@ -899,6 +948,10 @@ class AConfig:
     #   本工具僅描述 + 帶資料 + 文件輸出,不在本引擎執行;供下游數據模擬工具消費。
     gen_limits: list["GenLimit"] = field(default_factory=list)
 
+    # §4.8/§4.9:關聯型產牌條件（選用;對應 07c_Gen_Constraints）
+    #   多符號合計 / 位置關係 / 盤面狀態 + 巢狀例外。本工具僅描述 + 帶資料,不在本引擎執行。
+    gen_constraints: list["GenConstraint"] = field(default_factory=list)
+
     # v8.8 / R4 B-6:位置型格子屬性（選用;對應 02d_Cell_Attributes）
     #   固定格乘數(Cygnus)/enhancer cell/Fire Frame/金框格。純描述,引擎不消費。
     cell_attrs: list["CellAttr"] = field(default_factory=list)
@@ -910,6 +963,10 @@ class AConfig:
     reel_links: list["ReelLink"] = field(default_factory=list)
     # v8.39 / GAP-F1+軌道:軌道(02c_Tracks;缺 sheet → [] = 無軌道)
     tracks: list["Track"] = field(default_factory=list)
+
+    # Megaways 逐模式:逐模式逐輪可變列範圍(05b_Mode_Grid_Range;缺 sheet →
+    #   由 05_Grid_Size_Weights + 02.Max_Rows 推導,行為與舊檔一致)。純描述,引擎不消費。
+    mode_grid_ranges: list["ModeGridRange"] = field(default_factory=list)
 
     # v8.25 / G4:獎池級距（選用;對應 19_Jackpot_Tiers）+ 整體觸發方式。
     #   與 13_Jackpots(個別彩池定義)正交:此為 Grand/Major/Minor/Mini 式級距階梯 + 觸發描述。

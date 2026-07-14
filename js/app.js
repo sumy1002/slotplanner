@@ -66,6 +66,7 @@
         // v4.9-b:模擬引擎下架後,「比較前後調整數據」由此工具接手
         //        (上傳兩份外部模擬器產出的 B 結果檔並排比較)
         { id: 'bcompare', name: 'A/B 結果比較',  icon: '📊', ready: true  },
+        { id: 'cfgcompare', name: '設定檔比對',  icon: '🔍', ready: true  },
         { id: 'more',     name: '更多功能',      icon: '➕', ready: false },
       ];
       const dataTab = ref('txt2xlsx');
@@ -99,6 +100,8 @@
           else status.value = { ...pageDefaultStatus[0] };
         } else if (dataTab.value === 'bcompare') {
           setStatus('wait', '上傳 A、B 兩份外部模擬結果檔(B_結果_*.xlsx)以比較');
+        } else if (dataTab.value === 'cfgcompare') {
+          setStatus('wait', '上傳 A.xlsx 設定檔,自選任兩版比對(含目前設定)');
         } else {
           setStatus('wait', '功能開發中');
         }
@@ -128,6 +131,7 @@
       // v6.2 規則#11:供其他頁(如符號頁)帶意圖切到設定檔編輯器
       //   config-page 是 v-if(page===3,:key=3)會重掛,setup 於 onMounted 讀取並消費此意圖
       SP.goConfig = (intent) => { SP.pendingConfigIntent = intent || null; goPage(3); };
+      SP.goSymbols = () => { goPage(1); };   // §5:押注彩池反查「前往圖示頁」
 
       function onChildStatus(s) { status.value = { ...s }; }
 
@@ -517,6 +521,7 @@
   app.component('config-page', SP.ConfigPage);
   // v4.9-b:sim-page 已移除;A/B 結果比較接手(數據文件相關子分頁)
   app.component('b-compare-page', SP.BComparePage);
+  app.component('config-compare-page', SP.ConfigComparePage);
   app.component('doc-gen-page', SP.DocGenPage);
   app.mount('#app');
 })();

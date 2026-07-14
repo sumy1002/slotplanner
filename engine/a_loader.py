@@ -22,6 +22,7 @@ A.xlsx 解析器與全分頁交叉驗證
 """
 from __future__ import annotations
 import re
+import json
 import warnings
 import pandas as pd
 from pathlib import Path
@@ -41,13 +42,14 @@ from core.schemas import (
     DiscardRule, DiscardType,
     ModeConfig, DistributionBin,
     ResetScope, TriggerPay, MultStackMode,
-    GenLimit,
+    GenLimit, GenConstraint,
     PayType, WaysDirection,
     ConfigValidationError,
     RTPVariant, GambleConfig, CellAttr,
     JackpotTier,
     ReelLink,
     Track,
+    ModeGridRange,
 )
 from core.condition_parser import parse_condition, parse_actions
 
@@ -153,6 +155,8 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # v7.11:07b_Gen_Limits（產牌限制 / 生成期約束;選用,舊檔無 sheet → 空）
     cfg.gen_limits = _parse_gen_limits(sheets.get('07b_Gen_Limits'), symbols, layout)
+    # §4.8/§4.9:07c_Gen_Constraints（關聯型產牌條件;選用,舊檔無 sheet → 空）
+    cfg.gen_constraints = _parse_gen_constraints(sheets.get('07c_Gen_Constraints'), symbols)
 
     # v8.8 / R4 B-6:02d_Cell_Attributes(位置型格子屬性)。選用,舊檔安全降級。
     cfg.cell_attrs = _parse_cell_attrs(sheets.get('02d_Cell_Attributes'), layout)
@@ -163,6 +167,10 @@ def load_a_config(path: str | Path) -> AConfig:
     cfg.reel_links = _parse_reel_links(sheets.get('04c_Reel_Links'))
     # v8.39 / GAP-F1+軌道:02c_Tracks(純幾何軌道)。選用,舊檔 → []。
     cfg.tracks = _parse_tracks(sheets.get('02c_Tracks'))
+    # Megaways 逐模式:05b_Mode_Grid_Range(逐模式逐輪可變列 min–max)。選用,舊檔 →
+    #   由 05_Grid_Size_Weights + 02.Max_Rows 推導(安全降級,行為不變)。純描述,引擎不消費。
+    cfg.mode_grid_ranges = _parse_mode_grid_range(
+        sheets.get('05b_Mode_Grid_Range'), layout, modes, grid_size_weights)
     # P0-3(進階):03e_Symbol_Group_Pays(家族 per-mode 費率覆寫)。選用,舊檔 → 沿用 base。
     _gp_mode = _parse_symbol_group_pays(sheets.get('03e_Symbol_Group_Pays'))
     if _gp_mode:
@@ -258,6 +266,9 @@ def _parse_layout(df: pd.DataFrame) -> LayoutConfig:
                 subreel_symbol_set=_to_str(r.get("SubReel_Symbol_Set")),    # v5.1:選用欄,缺→空
                 # v7.5-Layer C:主輪活格遮罩,選用欄,以欄名 .get 讀取（守則 #81）。缺欄/空 → None。
                 cells=_parse_reel_cells(r.get("Cells"), int(r["Max_Rows"])),
+                # #3:逐輪進場/滾動方式(選用欄,以欄名 .get 讀取;缺欄/空 → 預設)。純描述,引擎不消費。
+                entry_mode=(_to_str(r.get("Entry_Mode")) or "SCROLL"),
+                scroll_dir=(_to_str(r.get("Scroll_Dir")) or ("NONE" if (_to_str(r.get("Entry_Mode")) or "SCROLL") == "SPAWN" else "DOWN")),
             ))
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
@@ -896,7 +907,7 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
             sym = SymbolDef(
                 symbol_id=sid,
                 display_name=str(r.get("Display_Name") or sid),
-                sym_type=SymbolType(str(r["Type"]).strip().upper()),
+                sym_type=_coerce_sym_type(r.get("Type")),
                 pay_table=pay_table,
                 mega_width=int(_col(r, "Mega_Width", "Mega_W", default=1) or 1),
                 mega_height=int(_col(r, "Mega_Height", "Mega_H", default=1) or 1),
@@ -1195,6 +1206,105 @@ def _parse_grid_size_weights(
     return out
 
 
+def _parse_mode_grid_range(
+    df: "pd.DataFrame | None",
+    layout: LayoutConfig,
+    modes: dict,
+    grid_size_weights: list[GridSizeWeight],
+) -> list[ModeGridRange]:
+    """05b_Mode_Grid_Range(可選)→ 逐模式逐輪可變列 min–max。
+
+    - sheet 存在:by-name 讀 [Mode/Mode_Scope, Reel_ID, Min_Rows, Max_Rows, Notes];
+      註解 / 灰色範例列(Mode 以 # 開頭 / 空)略過;Min/Max 缺 → 由推導值補;
+      Max 夾在 [1, reel.max_rows]、Min 夾在 [1, Max]。表存在但某 mode×reel 未列 → 補推導,
+      保證每 mode×reel 皆有一筆供下游穩定消費。
+    - sheet 缺(舊檔安全降級):全部由 05_Grid_Size_Weights + 02.Max_Rows 推導——
+      某 mode×reel:min/max = 該 mode+reel 有權重的 Grid_Size 之最小/最大;
+      無 05 條目 → min=max=reel.max_rows(固定高度)。行為與舊檔一致。
+      (05 的 Mode 若為 scope 字串而非確切模式名,推導以確切名比對;不中則視為固定高度——
+       安全預設;前端寫入顯式 05b 後為權威。)
+
+    純描述 metadata,引擎不消費(可變高度由既有 max_rows/active_rows/grid_size_weights 驅動)。
+    """
+    reels = list(layout.reels)
+    reel_max = {r.reel_id: max(1, int(r.max_rows)) for r in reels}
+
+    # 05 推導索引:{(mode, reel_id): [grid_size, ...]}(僅權重 > 0)
+    gsw: dict = defaultdict(list)
+    for w in grid_size_weights:
+        if w.weight and w.weight > 0:
+            gsw[(w.mode, w.reel_id)].append(int(w.grid_size))
+
+    def _derive(mode: str, reel_id: int) -> tuple[int, int]:
+        cap = reel_max.get(reel_id, 1)
+        sizes = gsw.get((mode, reel_id))
+        if sizes:
+            lo = max(1, min(sizes))
+            hi = min(cap, max(sizes))
+            if hi < lo:
+                hi = lo
+            return lo, hi
+        return cap, cap   # 無 05 條目 → 固定高度
+
+    # 模式清單:優先 11_Mode_Config;否則退用 05 內出現過的 mode 字串
+    mode_names = list(modes.keys()) if modes else sorted({w.mode for w in grid_size_weights})
+
+    def _int_or(v, fallback: int) -> int:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return fallback
+        if pd.isna(f):
+            return fallback
+        return int(round(f))
+
+    out: list[ModeGridRange] = []
+
+    if df is not None:
+        sheet = "05b_Mode_Grid_Range"
+        valid_reels = {r.reel_id for r in reels}
+        seen = set()
+        for idx, r in df.iterrows():
+            mode_val = _col(r, "Mode", "Mode_Scope")
+            if mode_val is None or pd.isna(r.get("Reel_ID")):
+                continue
+            mode = str(mode_val).strip()
+            if not mode or mode.startswith("#"):
+                continue   # 註解 / 範例列
+            try:
+                reel_id = int(r["Reel_ID"])
+            except (ValueError, KeyError, TypeError):
+                continue
+            if reel_id not in valid_reels:
+                raise ConfigValidationError(sheet, f"Reel_ID {reel_id} 不存在", row=idx + 2)
+            cap = reel_max.get(reel_id, 1)
+            d_lo, d_hi = _derive(mode, reel_id)
+            mx = max(1, min(cap, _int_or(r.get("Max_Rows"), d_hi)))
+            mn = max(1, min(mx, _int_or(r.get("Min_Rows"), d_lo)))
+            out.append(ModeGridRange(
+                mode=mode, reel_id=reel_id,
+                min_rows=mn, max_rows=mx, notes=_to_str(r.get("Notes")),
+            ))
+            seen.add((mode, reel_id))
+        # 補齊未列的 mode×reel(推導)
+        for mode in mode_names:
+            for rr in reels:
+                if (mode, rr.reel_id) in seen:
+                    continue
+                lo, hi = _derive(mode, rr.reel_id)
+                out.append(ModeGridRange(mode=mode, reel_id=rr.reel_id,
+                                         min_rows=lo, max_rows=hi, notes=""))
+        return out
+
+    # sheet 缺 → 全推導
+    for mode in mode_names:
+        for rr in reels:
+            lo, hi = _derive(mode, rr.reel_id)
+            out.append(ModeGridRange(mode=mode, reel_id=rr.reel_id,
+                                     min_rows=lo, max_rows=hi, notes=""))
+    return out
+
+
 def _parse_paylines(df: pd.DataFrame, layout: LayoutConfig) -> list[Payline]:
     sheet = "06_Paylines"
     out = []
@@ -1387,6 +1497,63 @@ def _parse_gen_limits(
     return out
 
 
+def _parse_gen_constraints(df, symbols: dict) -> list:
+    """§4.8/§4.9:07c_Gen_Constraints（關聯型產牌條件）。
+
+    additive 契約:sheet 不存在(df is None)→ 回空 list(舊檔安全降級)。by-name 讀。
+    Ctype:sum 多符號合計 / pos 位置關係 / board 盤面狀態。
+    Except 欄為巢狀例外 JSON(連接子 + leaf/group,一層巢狀)或空。
+    注意:本工具不執行此條件;僅載入供下游模擬工具消費(故僅寬鬆驗證)。
+    """
+    sheet = "07c_Gen_Constraints"
+    if df is None:
+        return []
+    out = []
+    for idx, r in df.iterrows():
+        if pd.isna(r.get("Constraint_ID")):
+            continue
+        try:
+            cid = _to_str(r.get("Constraint_ID"))
+            if not cid:
+                continue
+            sym_raw = _to_str(r.get("Symbols"))
+            syms = [s.strip() for s in sym_raw.split(",") if s.strip()] if sym_raw else []
+            for sid in syms:
+                if sid and sid not in symbols:
+                    raise ConfigValidationError(
+                        sheet, f"Symbols 內 {sid} 不存在", row=idx + 2)
+            ex_raw = _to_str(r.get("Except"))
+            except_obj = None
+            if ex_raw:
+                try:
+                    except_obj = json.loads(ex_raw)
+                except Exception:
+                    except_obj = None
+            en_raw = _to_str(r.get("Enabled"), "TRUE")
+            val_raw = r.get("Value")
+            value = (float(val_raw)
+                     if pd.notna(val_raw) and str(val_raw).strip() != ""
+                     else None)
+            out.append(GenConstraint(
+                constraint_id=cid,
+                enabled=(str(en_raw).upper() != "FALSE"),
+                ctype=_to_str(r.get("Ctype"), "sum") or "sum",
+                symbols=syms,
+                op=_to_str(r.get("Op"), "le") or "le",
+                value=value,
+                value_type=_to_str(r.get("Value_Type"), "fixed") or "fixed",
+                relation=_to_str(r.get("Relation")),
+                board_state=_to_str(r.get("Board_State")),
+                except_=except_obj,
+                notes=_to_str(r.get("Notes")),
+            ))
+        except ConfigValidationError:
+            raise
+        except (ValueError, KeyError, TypeError) as e:
+            raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+    return out
+
+
 _VALID_CELL_ATTRS = ("MULT", "ENHANCER", "FRAME", "GOLD", "CUSTOM")   # v8.8 B-6
 
 
@@ -1544,6 +1711,10 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
             dtype_val = _col(r, "Type", "Discard_Kind")
             if dtype_val is None:
                 raise KeyError("Type / Discard_Kind")
+            en_val = r.get("Enabled")
+            enabled = True if (en_val is None or (isinstance(en_val, float) and pd.isna(en_val))
+                               or str(en_val).strip() == "") \
+                else str(en_val).strip().upper() in ("TRUE", "1", "YES", "Y")
             out.append(DiscardRule(
                 rule_id=str(rid_val).strip(),
                 dtype=DiscardType(str(dtype_val).strip().upper()),
@@ -1551,6 +1722,7 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
                 condition=cond,
                 reason_label=_to_str(r.get("Reason_Label")),
                 notes=_to_str(r.get("Notes")),
+                enabled=enabled,
             ))
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"解析失敗 ({e})", row=idx + 2)
@@ -1953,6 +2125,21 @@ def _to_str(v: Any, default: str = "") -> str:
     if s.lower() == "nan":
         return default
     return s
+
+
+def _coerce_sym_type(v: Any) -> SymbolType:
+    """符號型別安全解析（圖示頁 type=NORMAL 契約）。
+
+    - 既有合法值（HIGH/LOW/NORMAL/WILD/SCATTER/BONUS/SPECIAL）原樣保留、不改寫（零 diff）。
+    - 未知值 / 空 / 缺欄 / NaN → 安全降級 SymbolType.NORMAL（不再丟 ValueError 硬炸）。
+      涵蓋前端目前直接寫入的顯示類別（如「一般得分」/FREE/COIN/Other）——下游一律當一般得分。
+    引擎五核不分支型別（行為由 is_wild/is_scatter/pay_table 驅動），故新增 NORMAL 對引擎無影響。
+    """
+    s = _to_str(v).strip().upper()
+    try:
+        return SymbolType(s)
+    except ValueError:
+        return SymbolType.NORMAL
 
 
 def _parse_max_win_cap(v: Any) -> float:

@@ -166,6 +166,11 @@
           <b-compare-page @status="onChildStatus"></b-compare-page>
         </div><!-- /data-tab-panel: bcompare -->
 
+        <!-- ── 子分頁:設定檔比對(A.xlsx 設定檔逐 sheet 分區差異)── -->
+        <div v-else-if="dataTab==='cfgcompare'" class="data-tab-panel">
+          <config-compare-page @status="onChildStatus"></config-compare-page>
+        </div><!-- /data-tab-panel: cfgcompare -->
+
         <!-- ── 子分頁:其他數據工具（開發中）── -->
         <div v-else class="data-tab-panel">
           <div class="placeholder">
@@ -255,6 +260,8 @@
 <script defer src="js/docgen.js"></script>
 <!-- bcompare 必須在 app.js 之前(app.js 要註冊 b-compare-page)-->
 <script defer src="js/bcompare.js"></script>
+<!-- config-compare 必須在 app.js 之前(app.js 要註冊 config-compare-page)-->
+<script defer src="js/config-compare.js"></script>
 <script defer src="js/app.js"></script>
 
 </body>

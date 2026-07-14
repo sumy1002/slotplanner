@@ -1115,4 +1115,58 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   #app .sym-right .topbar .title { font-size: 13px; flex: 1 1 100%; }
   #app .sym-edit { overflow: visible; height: auto; padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 16px); }
   #app .sym-statusbar { position: sticky; bottom: 0; }
+
+  /* ============================================================
+     v7.8 批1 — symbols 編輯面 賠付表(C) + 倍數/彩金(D,原 15b) ≤767 排版
+     多元素 inline flex 一行擠爆 → 換行堆疊;prize 的 JP select 防溢出。
+     全部 #app 前綴(壓過 theme_additions 同名 class,與 @import 順序無關)。
+     ============================================================ */
+
+  /* C. 賠付表:每列 stepper/連線/賠付輸入/倍/刪除 五元素 → 允許換行 */
+  #app .sym-pay-drow { flex-wrap: wrap; }
+  #app .sym-pay-drow .sym-pay-input { flex: 1 1 100%; min-width: 0; }
+  #app .sym-pay-drow .btn-pill.del { margin-left: auto; }
+
+  /* D. 倍數 ×N 列:× / 倍數 / 權重label / 權重 / 刪除 → 換行 */
+  #app .sym-mult-row { flex-wrap: wrap; }
+  #app .sym-mult-row .sym-mult-num { flex: 1 1 40%; min-width: 0; width: auto; }
+  #app .sym-mult-row .sym-mult-weight { flex: 1 1 40%; min-width: 0; }
+  #app .sym-mult-row .sym-mult-del { margin-left: auto; }
+
+  /* D. 彩金倍數 / 面額:JP <select> 是溢出元凶 → 獨佔整行、限寬 */
+  #app .sym-prize-head { flex-wrap: wrap; }
+  #app .sym-prize-head .sym-prize-value { flex: 1 1 auto; width: auto; min-width: 0; }
+  #app .sym-prize-head .sym-prize-jp { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+  #app .sym-prize-head .sym-mult-del { margin-left: auto; }
+
+  /* D. 觸控目標:倍數/彩金/賠付列的輸入與下拉 ≥ touch-min */
+  #app .sym-mult-row .input,
+  #app .sym-prize-row .input,
+  #app .sym-prize-row select.input,
+  #app .sym-pay-drow .sym-pay-input { min-height: var(--touch-min); }
+
+  /* ============================================================
+     v7.8 批2 — symbols 編輯面 外觀/識別(B) + 出現限制(F) ≤767 雙欄→單欄
+     ============================================================ */
+
+  /* B. 外觀/識別:編號/名稱/Symbol_ID 三欄(桌面 820 已降兩欄)→ 手機單欄堆疊 */
+  #app .sym-id-grid { grid-template-columns: 1fr; gap: 10px; }
+  #app .sym-id-grid .input { min-height: var(--touch-min); }
+  /* swatch-preview(60px) + swatch-strip 並排:窄屏縮間距、strip 不被壓爆 */
+  #app .sym-appearance-row { gap: 10px; }
+  #app .swatch-strip { min-width: 0; }
+
+  /* F. 出現限制:輪/副輪 checkbox 群 與 出現上限 兩欄 → 單欄堆疊 */
+  #app .sym-limit-grid { grid-template-columns: 1fr; gap: 14px; }
+
+  /* ============================================================
+     v7.8 批3 — symbols 收尾:Mega 預覽不溢出(G) + 清單排序箭頭觸控(A)
+     ============================================================ */
+
+  /* G. Mega SVG 用 inline width/height px,大 mega 會超窄屏寬 → 限寬、可橫捲 */
+  #app .sym-mega-preview { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #app .sym-mega-svg { max-width: 100%; height: auto !important; }
+
+  /* A. 清單列上/下移箭頭(inline font-size:9px/padding:1px 4px)太小 → 放大命中區 */
+  #app .sym-reorder button { padding: 4px 8px !important; font-size: 12px !important; min-height: 28px; }
 }

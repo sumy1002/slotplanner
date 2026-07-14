@@ -39,8 +39,10 @@ localStorage.setItem('slotplanner.aconfig.comboweights.v1', JSON.stringify({
   NG: { steps: [1], symbol_ids: ['BIRD'], weights: { '1-2-BIRD': 55 } } }));
 localStorage.setItem('slotplanner.aconfig.genLimits.v1', JSON.stringify([
   { limit_id: 'GL1', symbol_id: 'SCAT', zone: 'MAIN', min_count: 1, max_count: 4, mode_scope: 'NG', notes: 'gl' }]));
+localStorage.setItem('slotplanner.aconfig.genConstraints.v1', JSON.stringify([
+  { constraint_id: 'GC1', enabled: true, ctype: 'sum', symbols: ['WILD','SCAT'], op: 'le', value: 3, value_type: 'fixed', relation: '', board_state: '', except: { connector: 'any', items: [{ kind: 'leaf', type: 'mode', target: '免費遊戲' }] }, notes: 'gc' }]));
 localStorage.setItem('slotplanner.aconfig.discards.v1', JSON.stringify([
-  { discard_id: 'D1', discard_kind: 'SOFT', mode_scope: 'FG1', condition: 'win == 0', notes: 'dd' }]));
+  { discard_id: 'D1', discard_kind: 'SOFT', mode_scope: 'FG1', condition: 'win == 0', notes: 'dd', enabled: false }]));
 localStorage.setItem('slotplanner.aconfig.bins.v1', JSON.stringify({
   NG: { bin_edges: '0,1,5,20', notes: 'bins!' } }));
 localStorage.setItem('slotplanner.aconfig.cellattrs.v1', JSON.stringify([
@@ -56,7 +58,8 @@ localStorage.setItem('slotplanner.aconfig.gamble.v1', JSON.stringify({
   stake_type: 'FEATURE', reward_type: 'ITEM', gamble_trigger: 'ANY_WIN', notes: 'gn' }));
 localStorage.setItem('slotplanner.aconfig.modes.v1', JSON.stringify([
   { mode: 'NG', trigger_condition: '', spin_count: 0, inherit_globals: true, on_enter_reset_vars: '', notes: '',
-    trigger_pays: [] },
+    trigger_pays: [], grid_explicit: true, rows_variable: true, row_min: 1, row_max: 3,
+    reel_ranges: [{ reel_id: 1, min_rows: 2, max_rows: 3 }, { reel_id: 2, min_rows: 1, max_rows: 3 }, { reel_id: 3, min_rows: 1, max_rows: 2 }] },
   { mode: 'FG1', trigger_condition: '', spin_count: 8, inherit_globals: true, on_enter_reset_vars: '', notes: '',
     trigger_pays: [{ scatter_count: 3, pay: 2, grants_spins: 8 }] }]));
 
@@ -105,7 +108,8 @@ async function shuffleColumns(inPath, outPath, sheetNames) {
 
 const TIER_B = ['01_Global','03b_Symbol_Sets','04b_Reel_Strips','14_Bet_Config','02d_Cell_Attributes',
   '14b_RTP_Variants','18_Gamble','11b_Mode_TriggerPays','12_Distribution_Bins','07b_Gen_Limits',
-  '10_Discard_Rules','04_Reel_Weights','05_Grid_Size_Weights','08_Combo_Weights'];
+  '10_Discard_Rules','04_Reel_Weights','05_Grid_Size_Weights','08_Combo_Weights','07c_Gen_Constraints',
+  '05b_Mode_Grid_Range'];
 
 async function runImport(path, label) {
   const wb = new (require('exceljs')).Workbook();
@@ -116,7 +120,7 @@ async function runImport(path, label) {
   const symbolSets = {}, reelStrips = { enabled: false, strips: {} };
   const betConfig = {}, gamble = {}, cellAttrs = [], bins = {};
   const reelWeights = {}, gridWeights = {}, comboWeights = {};
-  const genLimits = [], discards = [];
+  const genLimits = [], discards = [], genConstraints = [];
   const modes = [{ mode: 'NG', trigger_pays: [] }, { mode: 'FG1', trigger_pays: [] }];
   const _ensureBetConfigFields = (bc) => bc;           // 測試版直通(欄位齊備由 seed 保證)
   const comboActiveStep = {};   // 08 塊尾清 UI 狀態容器(測試 stub)
@@ -137,6 +141,7 @@ async function runImport(path, label) {
   eval(slice("const ws4 = wb.getWorksheet('04_Reel_Weights')", "// ── 05_Grid_Size_Weights ──"));
   eval(slice("const ws5 = wb.getWorksheet('05_Grid_Size_Weights')", "// ── 08_Combo_Weights ──"));
   eval(slice("const ws8 = wb.getWorksheet('"+"08_Combo_Weights"+"')", "// 03_Symbols ── 保守合併"));
+  eval(slice("const ws5b = wb.getWorksheet('"+"05b_Mode_Grid_Range"+"')", "// ── v8.0:把暫存的舊 17_Bonus_Games"));
 
   console.log(`── ${label} ──`);
   assert('01 KV', g.simulation_count === 777 && g.pay_type === 'WAYS' && g.mult_compose === 'MAX');
@@ -161,11 +166,22 @@ async function runImport(path, label) {
   assert('12 分佈', bins.NG.bin_edges === '0,1,5,20' && bins.NG.notes === 'bins!');
   assert('07b 產牌限制', genLimits[0].limit_id === 'GL1' && genLimits[0].min_count === 1
       && genLimits[0].max_count === 4 && genLimits[0].mode_scope === 'NG');
+  assert('07c 關聯條件', genConstraints[0] && genConstraints[0].constraint_id === 'GC1'
+      && genConstraints[0].ctype === 'sum' && genConstraints[0].value === 3
+      && genConstraints[0].symbols.join(',') === 'WILD,SCAT'
+      && genConstraints[0].except && genConstraints[0].except.connector === 'any'
+      && genConstraints[0].except.items[0].target === '免費遊戲');
   assert('10 棄牌', discards[0].discard_kind === 'SOFT' && discards[0].condition === 'win == 0'
-      && discards[0].mode_scope === 'FG1');
+      && discards[0].mode_scope === 'FG1' && discards[0].enabled === false);
   assert('04 權重', reelWeights.NG.weights['2-BIRD'] === 11 && reelWeights.NG.weights['3-SCAT'] === 3);
   assert('05 格數權重', gridWeights.NG.weights['1-3'] === 70 && gridWeights.NG.weights['1-4'] === 30);
   assert('08 連爆權重', comboWeights.NG.weights['1-2-BIRD'] === 55);
+  const ngGR = modes.find(m => m.mode === 'NG') || {};
+  const rr1 = (ngGR.reel_ranges || []).find(x => x.reel_id === 1) || {};
+  const rr3 = (ngGR.reel_ranges || []).find(x => x.reel_id === 3) || {};
+  assert('05b 逐模式逐輪可變列', ngGR.grid_explicit === true && ngGR.rows_variable === true
+      && (ngGR.reel_ranges || []).length === 3
+      && rr1.min_rows === 2 && rr1.max_rows === 3 && rr3.min_rows === 1 && rr3.max_rows === 2);
 }
 
 (async () => {

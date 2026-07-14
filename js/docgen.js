@@ -1856,10 +1856,10 @@
         name: '表格1', ref: 'B2', headerRow: true,
         style: { theme: 'TableStyleMedium7', showRowStripes: true },
         columns: [
-          { name: '時間\n(下拉式選單)', filterButton: true },
+          { name: '時間_x000A_(下拉式選單)', filterButton: true },
           { name: '修訂人', filterButton: true },
-          { name: '修訂類型\n(下拉式選單)', filterButton: true },
-          { name: '分頁\n(下拉式選單)', filterButton: true },
+          { name: '修訂類型_x000A_(下拉式選單)', filterButton: true },
+          { name: '分頁_x000A_(下拉式選單)', filterButton: true },
           { name: '說明', filterButton: true },
           { name: '備註', filterButton: true },
         ],
@@ -2319,6 +2319,34 @@
     L.push(`- 得分公式：${m.score_formula}`);
     if (m.competitor_url) L.push(`- 競品參考：${m.competitor_url}`);
     L.push('');
+
+    // #3（Board v2 §7.2/§8）:逐輪進場 / 滾動方式 — 有非預設才輸出（守衛;基準全預設 SCROLL/DOWN → 零輸出 → 零 diff）。
+    {
+      const _reels = Array.isArray(cfg.layout) ? cfg.layout : [];
+      const _emLab = { SCROLL: '輪滾動', DROP: '掉落', SPAWN: '原地生成' };
+      const _dirLab = {
+        SCROLL: { DOWN: '由上往下', UP: '由下往上' },
+        DROP: { DOWN: '自上落下', UP: '自下升起' },
+        SPAWN: { NONE: '無方向' },
+      };
+      const _nonDefault = _reels.some(r => (r.entry_mode && r.entry_mode !== 'SCROLL') || (r.scroll_dir && r.scroll_dir !== 'DOWN'));
+      if (_nonDefault && _reels.length) {
+        L.push('## 進場 / 滾動方式（逐輪）');
+        L.push('');
+        L.push('> 各主輪的進場 / 滾動方式與方向;純描述性設定，供實作端遵循，本工具不執行滾動。');
+        L.push('');
+        L.push('| 輪 | 進場方式 | 方向 |');
+        L.push('| --- | --- | --- |');
+        for (const r of _reels) {
+          const em = r.entry_mode || 'SCROLL';
+          const sd = em === 'SPAWN' ? 'NONE' : (r.scroll_dir || 'DOWN');
+          const emZh = _emLab[em] || em;
+          const sdZh = (_dirLab[em] && _dirLab[em][sd]) || (em === 'SPAWN' ? '無方向' : sd);
+          L.push(`| R${r.reel_id} | ${emZh} | ${sdZh} |`);
+        }
+        L.push('');
+      }
+    }
 
     // 模式與觸發
     L.push('## 模式與觸發');
@@ -3187,6 +3215,54 @@
   // ════════════════════════════════════════════════════════════════════
   //  Vue component：DocGenPage（子分頁 UI）
   // ════════════════════════════════════════════════════════════════════
+
+  // #6 企劃書預覽:安全 markdown → HTML(先 escape 使用者內容,再套白名單標籤;
+  //   純顯示用,不影響 buildMechMarkdown 輸出。用於 DocGenPage 的就地預覽紙張)。
+  function _mdEscape(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function renderMd(md) {
+    const lines = String(md == null ? '' : md).replace(/\r/g, '').split('\n');
+    const out = [];
+    let i = 0;
+    const inline = (t) => _mdEscape(t)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+    const isSpecial = (s) => /^\s*(#{1,6}\s|>|[-*]\s|\|)/.test(s) || /^\s*---+\s*$/.test(s);
+    while (i < lines.length) {
+      const ln = lines[i];
+      // 表格區塊
+      if (/^\s*\|.*\|\s*$/.test(ln)) {
+        const tbl = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { tbl.push(lines[i]); i++; }
+        const parseRow = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        const head = parseRow(tbl[0]);
+        const bodyStart = (tbl[1] && /^[\s|:\-]+$/.test(tbl[1])) ? 2 : 1;
+        let h = '<table class="docgen-md-tbl"><thead><tr>' + head.map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>';
+        for (let r = bodyStart; r < tbl.length; r++) {
+          h += '<tr>' + parseRow(tbl[r]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
+        }
+        out.push(h + '</tbody></table>');
+        continue;
+      }
+      let m;
+      if ((m = ln.match(/^(#{1,6})\s+(.*)$/))) { const lv = Math.min(m[1].length, 4); out.push(`<h${lv}>${inline(m[2])}</h${lv}>`); i++; continue; }
+      if (/^\s*---+\s*$/.test(ln)) { out.push('<hr>'); i++; continue; }
+      if ((m = ln.match(/^\s*>\s?(.*)$/))) { out.push(`<blockquote>${inline(m[1])}</blockquote>`); i++; continue; }
+      if (/^\s*[-*]\s+/.test(ln)) {
+        const items = [];
+        while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
+        out.push('<ul>' + items.map(it => `<li>${inline(it)}</li>`).join('') + '</ul>');
+        continue;
+      }
+      if (ln.trim() === '') { i++; continue; }
+      const para = [];
+      while (i < lines.length && lines[i].trim() !== '' && !isSpecial(lines[i])) { para.push(lines[i]); i++; }
+      out.push('<p>' + para.map(inline).join('<br>') + '</p>');
+    }
+    return out.join('\n');
+  }
+
   const TEMPLATE = `
   <div class="docgen">
     <!-- 頂部 sticky 動作列：機制 MD 為主要動作 -->
@@ -3196,8 +3272,18 @@
         <button class="btn" @click="exportXlsx" :disabled="busy">📊 企劃文件 (Excel)</button>
         <button class="btn" @click="exportCompanyXlsx" :disabled="busy">📗 企劃書（公司格式）</button>
         <button class="btn" @click="save" :disabled="busy">💾 儲存敘述</button>
+        <button class="btn" :class="{ active: previewOpen }" @click="togglePreview" :disabled="busy">👁 {{ previewOpen ? '收起預覽' : '預覽企劃書' }}</button>
       </div>
       <div class="docgen-hint" v-if="hint">{{ hint }}</div>
+    </div>
+
+    <!-- #6 企劃書預覽紙張:就地渲染機制文件(非差異比對;段落隨資料顯隱)-->
+    <div v-if="previewOpen" class="docgen-preview">
+      <div class="docgen-preview-head">
+        <span class="docgen-preview-title">企劃書預覽</span>
+        <span class="docgen-preview-sub">就地渲染機制文件（非差異比對）· 段落隨資料顯隱</span>
+      </div>
+      <div class="docgen-preview-paper" v-html="previewHtml"></div>
     </div>
 
     <!-- 設定檔自動帶入摘要 + #0 連動開關 -->
@@ -3544,8 +3630,18 @@
         } finally { busy.value = false; }
       }
 
+      // #6 企劃書預覽:就地渲染機制文件(computed 僅在開啟時計算 → live 隨 meta 更新;完全不影響 builder 輸出)
+      const previewOpen = ref(false);
+      const previewHtml = computed(() => {
+        if (!previewOpen.value) return '';
+        try { return renderMd(SP.DocGen.buildMechMarkdown(JSON.parse(JSON.stringify(meta)))); }
+        catch (e) { return '<p style="color:var(--text-danger,#c00)">預覽產生失敗：' + _mdEscape(e.message || String(e)) + '</p>'; }
+      });
+      function togglePreview() { if (!previewOpen.value) { try { save(); } catch (e) {} } previewOpen.value = !previewOpen.value; }
+
       return { cfg, meta, busy, hint, symId, role, save, addJp, removeJp, syncJpFromConfig, fillBehavior, exportXlsx, exportMd, exportCompanyXlsx, refreshConfig,
         addTriggerPay, removeTriggerPay,
+        previewOpen, previewHtml, togglePreview,
         PAYLINE_METHODS, REFILL_METHODS, SCROLL_METHODS, SCORE_FORMULAS, CP_SCROLL_OPTS, CP_REFILL_OPTS };
     },
   };

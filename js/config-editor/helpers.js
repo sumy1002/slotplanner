@@ -50,21 +50,21 @@
     { id: 'layout',            sheet: '02_Layout',             name: '盤面結構',     icon: '🎰', done: true, group: 'base' },
     { id: 'symbols',           sheet: '03_Symbols',            name: '符號清單',     icon: '🎨', done: true, group: 'base',
       kind: 'fullpane' },
-    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '加押/購買',    icon: '💴', done: true, group: 'base' },
+    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '押注',        icon: '🎰', done: true, group: 'base' },
     // v7.10:global 併入規則頁(模式子分頁的賠付橫幅 + 起始模式),從導覽列隱藏(markup/路由/匯出皆保留)
     { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'base', hidden: true },
     // v8.0:bonus_games 分頁移除(bonus 併入 mode 玩法種類 mode_kind)
     // ── 賠付 ──
-    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule' },
+    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule', hidden: true },   // 甲:改由規則頁 peer 分段進入
     { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
-    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule' },   // v6.2 #0:JP 獨立分頁
-    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule' },
+    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule', hidden: true },   // v6.2 #0→甲:併入押注頁,分頁隱藏
+    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule', hidden: true },   // W1:改由權重頁「分佈」peer 進入
     // v8.6 / R5 E-16:比倍(Gamble)分頁(D5 拍板:賠付群組尾;TABS scope 豁免比照 v7.10)
-    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule' },
+    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule', hidden: true },   // 甲:併入押注頁,分頁隱藏
     // ── 權重表 ──
-    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: 'Reel 權重',    icon: '🎲', done: true, group: 'weight' },
-    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight' },
-    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight' },
+    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: '權重',         icon: '🎲', done: true, group: 'weight' },   // W1:權重頁 parent(輪帶/分佈 peer host)
+    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight', hidden: true },   // W1:改由權重頁「輪帶」peer 進入
+    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight', hidden: true },   // W1:改由權重頁「分佈」peer 進入
     // v4.0 / #14:連爆權重(08)已移除 UI 分頁(資料也清掉);A.xlsx 仍會輸出空的 08 sheet 以維持 13 分頁結構
     { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
     { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏

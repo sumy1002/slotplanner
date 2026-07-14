@@ -102,7 +102,7 @@ function assert(name, cond) {
   const warnings = [];
   // 共用狀態容器
   const layout = [], panels = [], paylines = [], constraints = [], jackpots = [];
-  const modes = [], rules = [], bins = {}, genLimits = [], discards = [];
+  const modes = [], rules = [], bins = {}, genLimits = [], discards = [], genConstraints = [];
   const builderRowsMap = {}, ruleEditMode = {}, ruleParseError = {}, actionEditMode = {}, actionsParseError = {};
   const _ensureModeGameplayFields = (m) => m;
   const _legacy17 = [];

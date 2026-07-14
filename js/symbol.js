@@ -25,10 +25,10 @@
 
   <!-- ============ 左側清單 ============ -->
   <aside class="sym-left">
-    <div class="sym-toolbar">
-      <button class="btn-pill add" @click="addSymbol" title="新增 symbol">+ 新增</button>
-      <button class="btn-pill del" @click="deleteSelected" :disabled="!selectedId" title="刪除選取">✕ 刪除</button>
-      <div class="spacer"></div>
+    <div class="sym-roster-head">
+      <div class="sym-roster-title">圖示清單</div>
+      <input class="sym-search" type="text" v-model="rosterQuery"
+             placeholder="搜尋圖示 / 類別…" aria-label="搜尋圖示或類別" />
     </div>
 
     <!-- UI 批 E-3c:空清單導引晶片(唯一亮點牽手第一步;有符號即隱藏)-->
@@ -37,6 +37,7 @@
 
     <div class="sym-list">
       <div v-for="(s, idx) in symbols" :key="s.id"
+           v-show="rosterMatch(s)"
            class="sym-item"
            :class="{
              selected: s.id === selectedId,
@@ -45,12 +46,13 @@
              'sym-item-dropbefore': dragOverIdx === idx && dragIdx !== idx && dragIdx > idx,
              'sym-item-dropafter': dragOverIdx === idx && dragIdx !== idx && dragIdx < idx
            }"
-           draggable="true"
+           :draggable="!rosterQuery"
            @dragstart="onDragStart(idx, $event)"
            @dragover="onDragOver(idx, $event)"
            @drop="onDrop(idx)"
            @dragend="onDragEnd"
-           @click="select(s.id)">
+           @click="select(s.id)"
+           @contextmenu.prevent="openRosterCtx(s, $event)">
         <div class="sym-drag-handle"
              @mousedown="dragHandleArmed = true"
              @mouseup="dragHandleArmed = false"
@@ -61,14 +63,12 @@
           <span v-if="!s.image">{{ initialOf(s) }}</span>
         </div>
         <div class="sym-item-info">
-          <div class="sym-item-row1">
-            <span class="sym-item-name">{{ s.name || '(未命名)' }}<span v-if="s.enabled === false" class="sym-item-off-tag">已停用</span></span>
-            <span class="sym-item-pct">{{ pctOf(s) }}%</span>
-          </div>
-          <div class="sym-item-meta">
-            <span>{{ s.enabled === false ? '—' : ('#' + s.number) }}</span>
-            <span>權重 {{ s.weight }}</span>
-          </div>
+          <span class="sym-item-name">{{ s.name || '(未命名)' }}<span v-if="s.enabled === false" class="sym-item-off-tag">已停用</span></span>
+          <span class="sym-item-chip" :class="{ hi: catChip(s).hi }">{{ catChip(s).label }}</span>
+        </div>
+        <div class="sym-item-rowicons">
+          <button class="sym-rowicon" @click.stop="copySymbol(s.id)" title="複製此圖示">⧉</button>
+          <button class="sym-rowicon danger" @click.stop="deleteSymbol(s.id)" title="刪除此圖示（可透過復原取回）">✕</button>
         </div>
         <button class="sym-item-toggle"
                 :class="{ on: s.enabled !== false }"
@@ -77,14 +77,27 @@
           <span class="sym-item-toggle-knob"></span>
         </button>
       </div>
+      <div v-if="symbols.length && !symbols.some(rosterMatch)" class="sym-empty-filter">
+        找不到符合「{{ rosterQuery }}」的圖示
+      </div>
       <div v-if="!symbols.length" style="text-align:center; padding:30px 10px; color:var(--text-light); font-size:12px;">
-        （目前沒有 symbol）<br>點擊上方「+ 新增」開始
+        （目前沒有 symbol）<br>點擊下方「＋ 新增圖示」開始
       </div>
     </div>
 
+    <button v-if="symbols.length" class="sym-tail-add" @click="addSymbol"
+            title="新增圖示（權重預設 100、編號接續）">＋ 新增圖示</button>
+
     <div class="sym-statusbar">
-      <span>{{ symbols.length }} 個 symbol</span>
-      <span class="weight-total">總權重 {{ totalWeight }}</span>
+      <span>{{ rosterStats.countText }}</span>
+      <span class="sym-stats-cats">{{ rosterStats.catText }}</span>
+    </div>
+
+    <!-- §2.2 G8:roster 列右鍵快捷選單（fixed 於游標;複用 cfg-cv-ctx 樣式）-->
+    <div class="cfg-cv-ctx sym-ctx" v-if="rosterCtx.open" :style="{ left: rosterCtx.x + 'px', top: rosterCtx.y + 'px' }">
+      <div class="cfg-cv-ctx-head">圖示快捷</div>
+      <button class="cfg-cv-ctx-item" @click="rosterCtxSize()">尺寸設定…</button>
+      <button class="cfg-cv-ctx-item" @click="rosterCtxCarry()">攜帶值設定…</button>
     </div>
   </aside>
 
@@ -196,37 +209,49 @@
         <!-- ═══ 類型 / 權重(v7.9.3:合併權重;可收合,收合顯示類型)═══ -->
         <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.type }">
           <div class="sym-card-head" @click="toggleCard('type')">
-            <span class="sym-card-title">類型 / 權重</span>
+            <span class="sym-card-title">基本設定</span>
             <span v-if="!cardOpen.type" class="sym-card-summary">
               <span class="sym-card-summary-chip">{{ form.type }}</span>
+              <span class="sym-card-summary-muted">·{{ (selected && selected.enabled === false) ? '—' : (form.number || '00') }}</span>
             </span>
             <span class="sym-card-collapse" :class="{ open: cardOpen.type }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.type">
-            <div class="sym-type-chips sym-type-chips-lg">
-              <button v-for="t in SYMBOL_TYPES" :key="t"
-                      class="sym-type-chip"
-                      :class="{ active: form.type === t }"
-                      @click="setType(t)">{{ t }}</button>
-            </div>
-            <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
-            <!-- P0-3:所屬符號家族(下拉;家族為動態使用者定義,清單來自「符號家族」面板) -->
-            <div class="sym-weight-block" style="margin-top:10px;">
-              <div class="field-label-sm">所屬家族 <span class="cfg-key">group_id</span></div>
-              <select class="input input-sm" v-model="form.group_id" @change="onFieldEdit" style="width:100%; max-width:260px;">
-                <option value="">（無 — 不屬任何家族）</option>
-                <option v-for="gp in symbolGroups" :key="gp.group_id" :value="gp.group_id">
-                  {{ gp.display_name || gp.group_id }}（{{ gp.group_id }}）
-                </option>
-              </select>
-              <div v-if="form.group_id && !symbolGroups.some(g => g.group_id === form.group_id)"
-                   class="sym-hint-inline" style="color:var(--accent); margin-top:4px;">
-                此家族「{{ form.group_id }}」尚未定義（可於下方「符號家族」面板新增，或改選其他）
+            <div class="sym-cat-tier">
+              <div class="sym-cat-row sym-type-chips-lg">
+                <button class="sym-type-chip"
+                        :class="{ active: form.type === '一般得分' }"
+                        @click="pickTier('normal')">一般得分</button>
+                <button class="sym-type-chip"
+                        :class="{ active: isSpecialType(form.type) }"
+                        @click="pickTier('special')">特殊</button>
+              </div>
+              <div class="sym-subcats" v-show="specialExpanded || isSpecialType(form.type)">
+                <button v-for="t in SPECIAL_TYPES" :key="t"
+                        class="sym-type-chip sym-subcat-chip"
+                        :class="{ active: form.type === t }"
+                        @click="setType(t)">{{ t }}</button>
               </div>
             </div>
-            <!-- 權重(併入此卡)-->
-            <div class="sym-weight-block">
-              <div class="field-label-sm">權重</div>
+            <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
+            <!-- 名稱 + 編號（§2.3;標籤左·輸入置中）-->
+            <div class="sym-basic-idrow">
+              <span class="sym-lbl">名稱</span>
+              <div class="sym-name-wrap">
+                <input class="input input-sm input-center"
+                       :class="{err: nameErr}"
+                       v-model="form.name" @input="onFieldEdit" placeholder="symbol 名稱">
+                <div v-if="nameErr" class="field-err">名稱已重複</div>
+              </div>
+              <span class="sym-lbl">編號</span>
+              <div class="input input-sm input-center sym-num-readonly"
+                   :title="'編號由系統依「啟用中符號的上到下順序」自動指派,停用的符號不佔號'">
+                {{ (selected && selected.enabled === false) ? '—' : (form.number || '00') }}
+              </div>
+            </div>
+            <!-- 基準權重（§2.3 拉桿·標籤左）-->
+            <div class="sym-weight-block sym-weight-inline">
+              <span class="sym-lbl">基準權重<span class="sym-info" data-tip="概略基準；詳細 / 逐輪權重在權重頁">ℹ</span></span>
               <div class="weight-row">
                 <input type="range" class="weight-slider"
                        min="0" max="1000" step="1"
@@ -236,16 +261,7 @@
                 <div class="weight-val">{{ form.weight }}</div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- 外觀 / 識別(顏色/圖片 + 編號 + 名稱 + 代碼)— v7.9 卡片化 + 圖片 -->
-        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.appearance }">
-          <div class="sym-card-head" @click="toggleCard('appearance')">
-            <span class="sym-card-title">外觀 / 識別</span>
-            <span class="sym-card-collapse" :class="{ open: cardOpen.appearance }" title="展開 / 收合">›</span>
-          </div>
-          <div class="sym-card-body" v-show="cardOpen.appearance">
+            <!-- 顏色 + 圖片（§2.3;沿用外觀/識別 markup）-->
           <div class="sym-appearance-row">
             <div class="sym-swatch-preview"
                  :class="{ 'has-img': !!form.image }"
@@ -278,54 +294,54 @@
                 <button class="btn-pill sym-img-btn" @click="pasteImage" title="從剪貼簿貼上圖片(需瀏覽器授權)">📋 貼上圖片</button>
                 <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="onImageFile">
               </div>
-              <div class="sym-img-hint">色票或圖片擇一;圖片僅存本機,不會匯出到 A.xlsx。也可直接 Ctrl+V 貼上。</div>
+              <input class="input input-sm sym-img-url" type="text" v-model="form.image" @input="onFieldEdit" placeholder="或貼圖片網址 https://…">
+              <div class="sym-img-hint">色票或圖片擇一;可上傳 / 貼上 / 貼網址。圖片僅存本機,不會匯出到 A.xlsx。</div>
             </div>
           </div>
-          <div class="sym-id-grid">
-            <div>
-              <div class="field-label-sm">編號 <span class="field-label-hint">依清單排序自動</span></div>
-              <div class="input input-sm input-center input-w-num"
-                   style="background:var(--surface-2, rgba(0,0,0,0.04)); cursor:default; user-select:none;"
-                   :title="'編號由系統依「啟用中符號的上到下順序」自動指派,停用的符號不佔號'">
-                {{ (selected && selected.enabled === false) ? '—' : (form.number || '00') }}
-              </div>
-            </div>
-            <div>
-              <div class="field-label-sm">名稱</div>
-              <input class="input input-sm input-w-id"
-                     :class="{err: nameErr}"
-                     v-model="form.name"
-                     @input="onFieldEdit"
-                     placeholder="symbol 名稱">
-              <div v-if="nameErr" class="field-err">名稱已重複</div>
-            </div>
-            <div>
+          <!-- 尺寸 / 攜帶值 捷徑鈕（§2.3 底部兩顆虛線 accent;點開=彈窗）-->
+          <div class="sym-basic-btns">
+            <button class="sym-basic-btn" @click="sizePopup = true" :title="'目前 ' + sizeSummary + '，點開設定'">
+              <span class="sym-basic-btn-t">尺寸設定</span>
+              <span class="sym-basic-btn-v cfg-mono">{{ sizeSummary }}</span>
+            </button>
+            <button class="sym-basic-btn" @click="carryPopup = true" title="倍數 / 彩金 攜帶值,點開設定">
+              <span class="sym-basic-btn-t">攜帶值設定</span>
+              <span class="sym-basic-btn-v">{{ hasMult ? (multSummary || '已設定') : '未設定' }}</span>
+            </button>
+          </div>
+          <!-- 進階:家族 + 代碼（§2.3 代碼隱藏;家族後續移至賠率卡 ③b）-->
+          <details class="sym-basic-adv">
+            <summary>進階：代碼 Symbol_ID</summary>
+            <div class="sym-adv-body">
               <div class="field-label-sm">
                 Symbol_ID <span class="field-label-hint">A.xlsx 代碼,留空用名稱</span>
               </div>
               <input class="input input-sm cfg-mono input-w-id"
-                     v-model="form.symbol_id"
-                     @input="onFieldEdit"
-                     placeholder="WILD / H1 / L2">
+                     v-model="form.symbol_id" @input="onFieldEdit" placeholder="WILD / H1 / L2">
             </div>
-          </div>
+          </details>
           </div>
         </div>
 
         <!-- 賠付表(#5:移到權重之上;#6:行格式改「N 連線」+ 明顯刪除鈕;#7:錯誤提示區) -->
         <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.pay }">
           <div class="sym-card-head" @click="toggleCard('pay')">
-            <span class="sym-card-title">賠付表</span>
-            <span v-if="cardOpen.pay" class="sym-card-sub">N 連線時的賠付倍數</span>
+            <span class="sym-card-title">賠率</span>
+            <span v-if="cardOpen.pay" class="sym-card-sub">連線數 / 圖示數量 的賠付倍數</span>
             <span v-else class="sym-card-summary">
               <span v-if="paySummary" class="sym-card-summary-chip cfg-mono">{{ paySummary }}</span>
               <span v-else class="sym-card-summary-muted">未設定賠付</span>
+            </span>
+            <span v-if="cardOpen.pay" class="sym-paymode-toggle" @click.stop>
+              <button class="sym-paymode-btn" :class="{ active: payMode === 'line' }" @click.stop="setPayMode('line')">連線數</button>
+              <button class="sym-paymode-btn" :class="{ active: payMode === 'count' }" @click.stop="setPayMode('count')">圖示數量</button>
+              <span class="sym-info" data-tip="連線數＝連線長度；圖示數量＝出現顆數（依賠率模式）">ℹ</span>
             </span>
             <span class="sym-card-collapse" :class="{ open: cardOpen.pay }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.pay">
           <!-- P0-2:最少連線(min_match)。僅連線/百搭有意義;預設 3,可覆寫 1/2 -->
-          <div v-if="spec.isLineLike" class="sym-minmatch-row"
+          <div v-if="payMode === 'line'" class="sym-minmatch-row"
                style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
             <span class="cfg-key" style="white-space:nowrap;">最少連線 · min_match</span>
             <button v-for="n in minMatchChoices" :key="'mm'+n"
@@ -341,13 +357,15 @@
                 <span class="cfg-stepper-val" style="min-width:26px; text-align:center;">{{ row.count }}</span>
                 <button class="cfg-stepper-btn" @click="bumpPayCount(i, 1)" title="增加連線數">+</button>
               </div>
-              <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">連線</span>
-              <!-- v8.3 / R1 A-1:count 區間同賠(選填終點;留空＝單點)。8-9/10-11 scatter-pays / 大盤 cluster 用 -->
-              <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">–</span>
-              <input class="input input-sm cfg-mono sym-pay-to" type="number" min="0"
-                     v-model.number="row.count_to" @input="onFieldEdit" placeholder="迄"
-                     title="區間終點（選填）：填入後為「起–迄連同賠」；留空＝單點"
-                     style="width:56px;">
+              <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">{{ payMode === 'count' ? '圖示' : '連線' }}</span>
+              <!-- v8.3 區間同賠;§2.4:僅「圖示數量」模式顯示區間迄 -->
+              <template v-if="payMode === 'count'">
+                <span style="font-size:12px; color:var(--text-light); white-space:nowrap;">–</span>
+                <input class="input input-sm cfg-mono sym-pay-to" type="number" min="0"
+                       v-model.number="row.count_to" @input="onFieldEdit" placeholder="迄"
+                       title="區間終點（選填）：填入後為「起–迄連同賠」；留空＝單點"
+                       style="width:56px;">
+              </template>
               <input class="input input-sm cfg-mono sym-pay-input" type="number" step="any" min="0"
                      v-model.number="row.pay" @input="onFieldEdit" placeholder="賠付倍數"
                      style="flex:1; min-width:60px;">
@@ -357,8 +375,33 @@
                       style="white-space:nowrap;">🗑 刪除</button>
             </div>
             <div class="sym-pay-actions" style="margin-top:8px;">
-              <button class="btn-pill add sym-pay-add-btn" @click="addPayRow"
-                      :disabled="form.pay_rows.length >= maxPayCount - 1">＋ 新增連線數</button>
+              <button class="btn-pill add sym-pay-add-btn" @click="openPayAdd"
+                      :disabled="form.pay_rows.length >= maxPayCount - 1">＋ 新增{{ payMode === 'count' ? '圖示數量' : '連線數' }}</button>
+            </div>
+            <!-- §2.4 新增對話框（inline·2px accent;單一/區間 + 重複重疊防呆·不阻擋）-->
+            <div v-if="payAddOpen" class="sym-payadd-dialog">
+              <div class="sym-payadd-head">
+                <span class="sym-payadd-title">＋ 新增{{ payMode === 'count' ? '圖示數量' : '連線數' }}</span>
+                <span v-if="payMode === 'count'" class="sym-payadd-kind">
+                  <button class="sym-payadd-kbtn" :class="{ active: payAddKind === 'single' }" @click="payAddKind = 'single'">單一</button>
+                  <button class="sym-payadd-kbtn" :class="{ active: payAddKind === 'range' }" @click="payAddKind = 'range'">區間</button>
+                </span>
+              </div>
+              <div class="sym-payadd-body">
+                <span class="sym-lbl">{{ payMode === 'count' ? '圖示數量' : '連線數' }}</span>
+                <input class="input input-sm input-center cfg-mono" type="number" min="2"
+                       v-model.number="payAddFrom" style="width:64px;">
+                <template v-if="payMode === 'count' && payAddKind === 'range'">
+                  <span style="color:var(--text-light);">–</span>
+                  <input class="input input-sm input-center cfg-mono" type="number" min="2"
+                         v-model.number="payAddTo" style="width:64px;">
+                </template>
+              </div>
+              <div v-if="payAddConflict" class="sym-payadd-warn">ℹ {{ payAddConflict }}</div>
+              <div class="sym-payadd-foot">
+                <button class="btn-pill" @click="cancelPayAdd">取消</button>
+                <button class="btn-pill add" @click="confirmPayAdd">確認</button>
+              </div>
             </div>
             <!-- #7:錯誤/警告提示區(取代原靜態說明文字) -->
             <div v-if="payRowIssues.length"
@@ -367,6 +410,25 @@
                 {{ msg }}
               </div>
             </div>
+          </div>
+
+          <!-- 所屬群組（§2.4;由基本卡進階移入。混合賠付定義見「符號家族」面板 / 群組檢視）-->
+          <div class="sym-paygroup-sep"></div>
+          <div class="sym-paygroup">
+            <span class="sym-lbl">所屬群組<span class="sym-info" data-tip="同群成員可混連、以群組費率計；整條同一成員取自身較高者">ℹ</span></span>
+            <select class="input input-sm" v-model="form.group_id" @change="onFieldEdit">
+              <option value="">（無）</option>
+              <option v-for="gp in symbolGroups" :key="gp.group_id" :value="gp.group_id">
+                {{ gp.display_name || gp.group_id }}（{{ gp.group_id }}）
+              </option>
+            </select>
+          </div>
+          <div v-if="form.group_id && !symbolGroups.some(g => g.group_id === form.group_id)"
+               class="sym-hint-inline" style="color:var(--accent); margin-top:4px;">
+            此群組「{{ form.group_id }}」尚未定義（可於「符號家族」面板新增，或改選其他）
+          </div>
+          <div v-else-if="form.group_id" class="sym-paygroup-peek">
+            同群成員可混連,以群組費率計;整條同一成員取自身較高者。
           </div>
           </div><!-- /sym-card-body -->
         </div><!-- /賠付卡片 -->
@@ -377,19 +439,26 @@
         <!-- 出現限制 / 規則(v7.9.5:合併;出現限制=生成期約束,規則=唯讀引用)-->
         <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.limit }">
           <div class="sym-card-head" @click="toggleCard('limit')">
-            <span class="sym-card-title">出現限制 / 規則</span>
-            <span v-if="cardOpen.limit" class="sym-card-sub">出現輪 / 上限,以及引用此符號的規則</span>
+            <span class="sym-card-title">出現設定</span>
+            <span v-if="cardOpen.limit" class="sym-card-sub">出現模式 · 出現限制</span>
             <span v-else class="sym-card-summary">
               <span class="sym-card-status" :class="{ on: hasLimit }">{{ hasLimit ? '✓' : '—' }}</span>
               <span v-if="limitSummary">{{ limitSummary }}</span>
               <span v-else class="sym-card-summary-muted">無限制</span>
-              <template v-if="rulesSummary">
-                <span class="sym-card-summary-sep">·</span>{{ rulesSummary }}
-              </template>
             </span>
             <span class="sym-card-collapse" :class="{ open: cardOpen.limit }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.limit">
+
+          <!-- ── 出現模式（§2.5;全模式 vs 特定模式互斥。mode_scope 空＝全模式）── -->
+          <div class="sym-subsection-label">出現模式</div>
+          <div class="sym-appear-modes">
+            <button class="sym-mode-chip" :class="{ active: !form.mode_scope }" @click="clearModeScope">全模式</button>
+            <button v-for="mn in modeNames" :key="'msc'+mn" class="sym-mode-chip"
+                    :class="{ active: modeScopeHas(mn) }" @click="toggleModeScope(mn, !modeScopeHas(mn))">{{ mn }}</button>
+          </div>
+          <div class="sym-hint-inline">預設全模式;選特定模式與「全模式」互斥</div>
+          <div class="sym-subsection-divider"></div>
 
           <!-- ── 子區:出現限制 ── -->
           <div class="sym-subsection-label">出現限制</div>
@@ -417,7 +486,7 @@
               </template>
             </div>
             <div>
-              <div class="field-label-sm">出現上限</div>
+              <div class="field-label-sm">出現上限<span class="sym-info" data-tip="每輪＝限每一輪；整盤＝限整盤；空＝不限">ℹ</span></div>
               <div class="sym-max-row">
                 <label class="chk">
                   <input type="checkbox" v-model="form.use_max" @change="onFieldEdit">
@@ -431,17 +500,32 @@
                        @input="onFieldEdit">
                 <span class="sym-unit">顆</span>
               </div>
-              <!-- v8.3 / R1 D-12:出現模式宣告(取代「per-mode 權重 0 繞路」;未勾＝所有模式) -->
-              <div class="field-label-sm" style="margin-top:10px;">出現模式 <span class="field-label-hint">未勾＝所有模式</span></div>
-              <div v-if="modeNames.length" class="reel-limits">
-                <label v-for="mn in modeNames" :key="'msc'+mn" class="chk">
-                  <input type="checkbox" :checked="modeScopeHas(mn)"
-                         @change="toggleModeScope(mn, $event.target.checked)">
-                  <span class="box"></span>
-                  <span>{{ mn }}</span>
-                </label>
-              </div>
-              <div v-else class="field-label-hint">（尚未定義模式）</div>
+            </div>
+          </div>
+
+          <!-- §2.5 依模式分別設定:逐模式不同的出現輪 / 上限(匯出 03f 給下游;不啟用＝沿用上方單一設定)-->
+          <div class="sym-appear-permode" v-if="modeNames.length">
+            <button class="sym-permode-toggle" :class="{ active: form.appear_per_mode }" @click="toggleAppearPerMode">
+              <span class="sym-permode-gear">⚙</span> 依模式分別設定
+              <span class="sym-info" data-tip="各模式輪數 / 盤形可不同,可逐模式設出現輪與上限;不啟用＝沿用上方單一設定。匯出給下游模擬工具(不影響本工具判定)">ℹ</span>
+            </button>
+            <div v-if="form.appear_per_mode" class="sym-permode-body">
+              <template v-for="mn in modeNames" :key="'apm'+mn">
+                <div v-if="form.appear_by_mode[mn]" class="sym-permode-row">
+                  <span class="sym-permode-name">{{ mn }}</span>
+                  <div class="sym-permode-reels">
+                    <label v-for="i in reelCount" :key="i" class="chk">
+                      <input type="checkbox" v-model="form.appear_by_mode[mn].reel_limit[i-1]" @change="onFieldEdit">
+                      <span class="box"></span><span>{{ i }}</span>
+                    </label>
+                  </div>
+                  <span class="sym-permode-max">上限
+                    <input class="input input-sm input-center" style="width:56px;" type="number" min="0" max="999"
+                           v-model.number="form.appear_by_mode[mn].max_count" @input="onFieldEdit">
+                    <span class="sym-unit">顆(0=不限)</span>
+                  </span>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -451,68 +535,89 @@
             <span>更細的「產牌限制」(指定符號於特定 reel / 主盤 / 副盤的出現數量上下限)為生成期約束,
             將於後續版本接入產牌引擎,屆時會在此設定。</span>
           </div>
+          </div><!-- /sym-card-body（出現設定）-->
+        </div><!-- /出現設定卡片 -->
 
-          <div class="sym-subsection-divider"></div>
-
-          <!-- ── 子區:規則(唯讀引用)── -->
+        <!-- 規則 / 事件（§2.6;唯讀引用·與規則頁雙向同步）-->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.rules }">
+          <div class="sym-card-head" @click="toggleCard('rules')">
+            <span class="sym-card-title">規則 / 事件</span>
+            <span class="sym-rule-badge" title="可在此就地新增（開規則頁同一套編輯器）·與規則頁同一份規則庫、雙向同步">可編輯·雙向同步</span>
+            <span v-if="cardOpen.rules" class="sym-card-sub">引用此符號的規則 / 約束（可就地新增·與規則頁同步）</span>
+            <span v-else class="sym-card-summary">
+              <span v-if="rulesSummary">{{ rulesSummary }}</span>
+              <span v-else class="sym-card-summary-muted">尚無規則</span>
+            </span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.rules }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.rules">
           <div class="sym-subsection-label">
-            規則
+            規則 / 事件
             <button class="btn-pill" style="font-size:11px; padding:2px 8px; margin-left:auto;"
                     @click.stop="refreshSymbolRefs" title="重新讀取">⟳</button>
           </div>
           <div v-if="!symbolRefs.constraints.length && !symbolRefs.rules.length && !symbolRefs.discards.length"
                style="font-size:12px; color:var(--text-light); padding:4px 0;">
-            尚無約束 / 規則引用此符號。到「硬約束 / 規則」分頁設定後,這裡會自動顯示。
+            尚無規則 / 約束引用此符號。用下方「＋ 新增規則」就地建立(開規則頁同一套編輯器,建立後返回本頁自動顯示)。
           </div>
           <template v-else>
             <div v-for="c in symbolRefs.constraints" :key="'rc'+c.constraint_id"
                  style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
               🚫 <strong>{{ c.constraint_id }}</strong> · {{ c.ctype }}<span v-if="c.notes"> — {{ c.notes }}</span>
             </div>
-            <div v-for="r in symbolRefs.rules" :key="'rr'+r.rule_id"
-                 style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
-              🧩 <strong>{{ r.rule_id }}</strong> · {{ r.description || r.condition || '(無描述)' }}
+            <div v-for="r in symbolRefs.rules" :key="'rr'+r.rule_id" class="sym-rule-ref"
+                 :class="{ 'sym-rule-ref-open': rulesExpanded[r.rule_id] }">
+              <span class="sym-rule-rid">{{ r.rule_id }}</span>
+              <span class="sym-rule-when" :class="{ 'sym-rule-when-full': rulesExpanded[r.rule_id] }"
+                    @click="toggleRuleExpand(r.rule_id)"
+                    :title="rulesExpanded[r.rule_id] ? '點擊收合' : ruleLine(r)">{{ ruleLine(r) }}</span>
+              <button class="sym-rule-more" @click.stop="toggleRuleExpand(r.rule_id)"
+                      :title="rulesExpanded[r.rule_id] ? '收合' : '展開完整當·若·則'">⋮</button>
+              <button class="sym-rule-goto" @click.stop="goRulesPage(r.rule_id)" title="前往規則頁編輯">↗</button>
             </div>
             <div v-for="d in symbolRefs.discards" :key="'rd'+d.discard_id"
                  style="font-size:12px; padding:3px 0; border-bottom:1px dashed var(--divider, rgba(0,0,0,0.1));">
               🗑 <strong>{{ d.discard_id }}</strong> · {{ d.notes || d.condition || '(棄牌)' }}
             </div>
           </template>
-          <button class="btn-pill add" style="margin-top:8px; font-size:12px;"
-                  :disabled="!selected" @click="addRelatedConstraint"
-                  title="跳到硬約束分頁,並預填此符號">
-            ＋ 新增與此符號相關的約束
-          </button>
+          <div class="sym-rule-addrow">
+            <button class="btn-pill add" :disabled="!selected" @click="addRelatedRule"
+                    title="就地新增規則:開規則頁的同一套當·若·則編輯器,並預填此符號">＋ 新增規則</button>
+            <button class="btn-pill add" :disabled="!selected" @click="addRelatedConstraint"
+                    title="就地新增硬約束:跳約束分頁並預填此符號">＋ 新增約束</button>
+          </div>
           <div style="font-size:11px; color:var(--text-light); margin-top:6px;">
-            ※ 規則為唯讀總覽;按鈕會跳到硬約束分頁並預填此符號(規則 / 棄牌仍請至對應分頁設定)。
+            ※ 就地新增會開規則頁的同一套編輯器並預填此符號、寫入同一份規則庫;建立後返回本頁自動同步顯示（尺寸相關事件請由「尺寸設定」內的 ＋ 新增）。
           </div>
 
           </div><!-- /sym-card-body -->
         </div><!-- /出現限制+規則 合併卡片 -->
 
-        <!-- v6.3 / Q3:倍數(×N)/ 彩金倍數(N×)/ 金幣面額 -->
-        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.mult }">
-          <div class="sym-card-head" @click="toggleCard('mult')">
-            <span class="sym-card-title">倍數 / 彩金</span>
-            <span v-if="cardOpen.mult" class="sym-card-sub">符號自帶倍數(×N)與彩金面額(N×)</span>
-            <span v-else class="sym-card-summary">
-              <span class="sym-card-status" :class="{ on: hasMult }">{{ hasMult ? '✓' : '—' }}</span>
-              <span v-if="multSummary">{{ multSummary }}</span>
-              <span v-else class="sym-card-summary-muted">未設定</span>
-            </span>
-            <button v-if="cardOpen.mult" class="btn-pill sym-mult-refresh"
-                    @click.stop="refreshMultRefs" title="重讀模式 / JP 選項">⟳ 重讀</button>
-            <span class="sym-card-collapse" :class="{ open: cardOpen.mult }" title="展開 / 收合">›</span>
-          </div>
-          <div class="sym-card-body" v-show="cardOpen.mult">
-          <!-- v8.7 / R6 D-14:per-instance 乘數宣告(規格描述;行為細節寫規則/備註) -->
-          <label class="chk" style="margin-bottom:8px;">
-            <input type="checkbox" v-model="form.instance_mult" @change="onFieldEdit">
-            <span class="box"></span>
-            <span>每顆實例攜帶自身乘數 <span class="sym-hint-inline">（xWays / 落地各帶倍數式；取值與疊加行為請寫在規則或備註）</span></span>
-          </label>
-          <!-- 倍數 ×N(× 在數字前) -->
-          <div class="sym-mult-grp">
+        <!-- 攜帶值 popup（§2.8 倍數/彩金分頁·甲案保留權重餵 15/16;③a-3ii:卡殼已移除,入口在基本設定卡,此為同層疊層）-->
+          <div v-if="carryPopup" class="modal-backdrop sym-popup-backdrop" @click.self="carryPopup = false">
+            <div class="sym-popup sym-carry-popup" role="dialog" aria-label="攜帶值設定">
+              <div class="sym-popup-head">
+                <span class="sym-popup-title">攜帶值設定</span>
+                <div class="sym-popup-head-right">
+                  <button class="btn-pill sym-mult-refresh" @click="refreshMultRefs" title="重讀模式 / JP 選項">⟳ 重讀</button>
+                  <button class="sym-popup-x" @click="carryPopup = false" title="關閉">✕</button>
+                </div>
+              </div>
+              <div class="sym-popup-body">
+                <div class="sym-carry-tabs">
+                  <button class="sym-carry-tab" :class="{ active: carryTab === 'mult' }" @click="carryTab = 'mult'">倍數</button>
+                  <button class="sym-carry-tab" :class="{ active: carryTab === 'prize' }" @click="carryTab = 'prize'">彩金</button>
+                </div>
+
+                <div v-show="carryTab === 'mult'" class="sym-carry-tabpane">
+                  <!-- v8.7 / R6 D-14:per-instance 乘數宣告(規格描述;行為細節寫規則/備註) -->
+                  <label class="chk" style="margin-bottom:8px;">
+                    <input type="checkbox" v-model="form.instance_mult" @change="onFieldEdit">
+                    <span class="box"></span>
+                    <span>每顆實例攜帶自身乘數<span class="sym-info" data-tip="每顆實例各自帶值（否則整組共用）">ℹ</span> <span class="sym-hint-inline">（xWays / 落地各帶倍數式；取值與疊加行為請寫在規則或備註）</span></span>
+                  </label>
+                  <!-- 倍數 ×N(× 在數字前) -->
+                  <div class="sym-mult-grp">
             <div class="sym-mult-sublabel">
               倍數 <span>（×N;多筆＝加權隨機，留空＝無）</span>
             </div>
@@ -535,15 +640,15 @@
                 </label>
               </div>
             </div>
-            <button class="btn-pill add" @click="addMultValue">＋ 新增倍數</button>
-          </div>
+                    <button class="btn-pill add" @click="addMultValue">＋ 新增倍數</button>
+                  </div>
+                </div><!-- /倍數 tabpane -->
 
-          <div class="sym-mult-sep"></div>
-
-          <!-- 彩金倍數 N×(× 在數字後)/ 金幣面額 -->
-          <div class="sym-mult-grp">
+                <div v-show="carryTab === 'prize'" class="sym-carry-tabpane">
+                  <!-- 彩金倍數 N×(× 在數字後)/ 金幣面額 -->
+                  <div class="sym-mult-grp">
             <div class="sym-mult-sublabel">
-              彩金倍數 / 面額 <span>（N×;可連結 JP，各模式權重）</span>
+              彩金倍數 / 面額<span class="sym-info" data-tip="連到押注頁定義的 JP 彩池">ℹ</span> <span>（N×;可連結 JP，各模式權重）</span>
             </div>
             <div v-for="(pv, i) in form.prize_values" :key="'pv'+i" class="sym-prize-row">
               <div class="sym-prize-head">
@@ -569,35 +674,30 @@
                 </label>
               </div>
             </div>
-            <button class="btn-pill add" @click="addPrizeValue">＋ 新增彩金倍數 / 面額</button>
-          </div>
-          </div><!-- /sym-card-body -->
-        </div><!-- /倍數彩金卡片 -->
+                    <button class="btn-pill add" @click="addPrizeValue">＋ 新增彩金倍數 / 面額</button>
+                  </div>
+                </div><!-- /彩金 tabpane -->
+              </div><!-- /sym-popup-body -->
+            </div><!-- /sym-popup -->
+          </div><!-- /sym-popup-backdrop -->
+          <!-- /攜帶值 popup -->
 
-        <!-- 圖示尺寸 / Mega(#10:預設 1×1,點擊才展開設定)-->
-        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.size }">
-          <div class="sym-card-head" @click="toggleCard('size')">
-            <span class="sym-card-title">圖示尺寸</span>
-            <span v-if="cardOpen.size" class="sym-card-sub">一般 1×1 或 Mega 多格 / 可擴張</span>
-            <span v-else class="sym-card-summary"><span class="cfg-mono">{{ sizeSummary }}</span></span>
-            <span class="sym-card-collapse" :class="{ open: cardOpen.size }" title="展開 / 收合">›</span>
-          </div>
-          <div class="sym-card-body" v-show="cardOpen.size">
-
-          <!-- #10:可擴張標籤(預設關;實際擴張大小/條件於「規則」頁設定,此處僅開啟標籤) -->
-          <label class="chk" style="margin-bottom:10px;">
-            <input type="checkbox" v-model="form.can_expand" @change="onFieldEdit">
-            <span class="box"></span>
-            <span>此圖示可擴張 <span class="field-label-hint">擴張大小與條件於「規則」頁設定</span></span>
-          </label>
-
-          <div v-if="!showMega" class="sym-size-default">
-            <span class="sym-size-badge">{{ form.mega_w }}×{{ form.mega_h }}</span>
-            <span class="sym-size-desc">{{ (form.mega_w > 1 || form.mega_h > 1) ? 'Mega 符號（佔多格）' : '一般符號（1×1）' }}</span>
-            <button class="btn-pill" @click="showMega = true">⤢ 設定 Mega 尺寸</button>
-          </div>
-
-          <div v-else class="sym-mega-edit">
+        <!-- 尺寸設定 popup（§2.7;③a-3ii:卡殼已移除,入口在基本設定卡,此為同層疊層）-->
+          <div v-if="sizePopup" class="modal-backdrop sym-popup-backdrop" @click.self="sizePopup = false">
+            <div class="sym-popup sym-size-popup" role="dialog" aria-label="尺寸設定">
+              <div class="sym-popup-head">
+                <span class="sym-popup-title">尺寸設定 · {{ form.mega_w }}×{{ form.mega_h }}</span>
+                <button class="sym-popup-x" @click="sizePopup = false" title="關閉">✕</button>
+              </div>
+              <div class="sym-popup-body">
+                <label class="chk" style="margin-bottom:10px;">
+                  <input type="checkbox" v-model="form.can_expand" @change="onFieldEdit">
+                  <span class="box"></span>
+                  <span>此圖示可擴張 <span class="field-label-hint">擴張大小與條件於「規則」頁設定</span></span>
+                </label>
+                <button class="btn-pill add sym-size-addrule" :disabled="!selected" @click="addSizeRule"
+                        title="就地新增尺寸 / 擴張規則:開規則頁的同一套編輯器,預填「落地 → 擴展整輪」骨架">＋ 新增尺寸規則（擴張 / 觸發，與規則頁同步）</button>
+                <div class="sym-mega-edit">
             <div class="sym-mega-steppers">
               <div class="sym-mega-stepper-group">
                 <span class="field-label-sm">寬（Reel）</span>
@@ -647,9 +747,11 @@
                 </span>
               </div>
             </div>
-          </div>
-          </div><!-- /sym-card-body -->
-        </div><!-- /圖示尺寸卡片 -->
+                </div><!-- /sym-mega-edit -->
+              </div><!-- /sym-popup-body -->
+            </div><!-- /sym-popup -->
+          </div><!-- /sym-popup-backdrop -->
+          <!-- /尺寸 popup -->
         </div><!-- /sym-edit-col-right -->
         </div><!-- /sym-edit-cols -->
 
@@ -683,8 +785,46 @@
       const selectedId = ref(null);
       let _detachSymSwipe = null;  // v7.6:行動版邊緣滑動 detach handle
 
-      // #10:Mega 尺寸區是否展開(預設折疊,只有 mega>1×1 才自動展開)
-      const showMega = ref(false);
+      // 尺寸設定彈窗開關(§2.7;切換符號時關閉,見 loadForm)
+      const sizePopup = ref(false);
+      const payMode = ref('line');         // §2.4 賠率模式:'line'連線數 / 'count'圖示數量(暫態,loadForm 衍生)
+      // §2.4 賠率模式衍生:非連線型玩法 / SCATTER·BONUS 型別 / 既有區間資料 → 圖示數量
+      function _deriveDefaultPayMode(s) {
+        if (!spec.isLineLike) return 'count';
+        if (form.type === 'SCATTER' || form.type === 'BONUS') return 'count';
+        if (Array.isArray(s.pay_rows) && s.pay_rows.some(r => r && Number(r.count_to) > 0)) return 'count';
+        return 'line';
+      }
+      function setPayMode(m) { payMode.value = (m === 'count') ? 'count' : 'line'; }
+      const payAddOpen = ref(false);       // §2.4 賠率新增對話框開關
+      const payAddKind = ref('single');     // 'single' | 'range'(區間僅圖示數量)
+      const payAddFrom = ref(3);
+      const payAddTo   = ref(4);
+      const carryPopup = ref(false);       // §2.8 攜帶值設定彈窗開關
+      const carryTab   = ref('mult');       // 攜帶值彈窗分頁:'mult' | 'prize'
+      // §2.2 G8:roster 列右鍵快捷選單(尺寸 / 攜帶值 / 複製 / 刪除)
+      const rosterCtx = ref({ open: false, x: 0, y: 0, id: null });
+      function openRosterCtx(s, ev) {
+        select(s.id);
+        rosterCtx.value = { open: true, x: ev.clientX, y: ev.clientY, id: s.id };
+        Vue.nextTick(() => {
+          const el = document.querySelector('.sym-ctx'); if (!el) return;
+          const p = el.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, PAD = 8;
+          if (rosterCtx.value.x + p.width > vw - PAD) rosterCtx.value.x = Math.max(PAD, vw - p.width - PAD);
+          if (rosterCtx.value.y + p.height > vh - PAD) rosterCtx.value.y = Math.max(PAD, vh - p.height - PAD);
+        });
+        document.addEventListener('pointerdown', _rosterCtxOutside, true);
+        document.addEventListener('keydown', _rosterCtxKey, true);
+      }
+      function closeRosterCtx() {
+        rosterCtx.value = { ...rosterCtx.value, open: false };
+        document.removeEventListener('pointerdown', _rosterCtxOutside, true);
+        document.removeEventListener('keydown', _rosterCtxKey, true);
+      }
+      function _rosterCtxOutside(ev) { const el = document.querySelector('.sym-ctx'); if (el && el.contains(ev.target)) return; closeRosterCtx(); }
+      function _rosterCtxKey(ev) { if (ev.key === 'Escape') closeRosterCtx(); }
+      function rosterCtxSize() { closeRosterCtx(); sizePopup.value = true; }
+      function rosterCtxCarry() { closeRosterCtx(); carryPopup.value = true; }
 
       // ════════════════════════════════════════════════════════
       //  v7.9 #6/#7 + v7.9.3:編輯面板卡片化 — 全部卡片可摺疊
@@ -695,8 +835,8 @@
       const CARD_LS_KEY = 'slotplanner.sym.cardOpen.v1';
       // v7.9.3:權重併入 type 卡;移除獨立 weight;全部卡片可收合
       // v7.9.5:出現限制與規則合併為一張卡(id=limit);移除 rules
-      const OPTIONAL_CARDS = ['type', 'appearance', 'pay', 'mult', 'limit', 'size'];
-      const _cardDefaults = { type: true, appearance: true, pay: true, mult: false, limit: true, size: false };
+      const OPTIONAL_CARDS = ['type', 'appearance', 'pay', 'mult', 'limit', 'rules', 'size'];
+      const _cardDefaults = { type: true, appearance: true, pay: true, mult: false, limit: true, rules: false, size: false };
       const cardOpen = reactive({ ..._cardDefaults });
       try {
         const saved = JSON.parse(localStorage.getItem(CARD_LS_KEY) || 'null');
@@ -719,6 +859,8 @@
         max_count: 0,
         reel_limit: [],
         subreel_limit: {},   // v6.2 #8:副輪出現限制(key→bool)
+        appear_per_mode: false,   // §2.5:是否啟用「依模式分別設定」出現輪/上限
+        appear_by_mode: {},       // §2.5:{ modeName: { reel_limit:[bool], max_count:n } };空=沿用單一設定。匯出限定(03f),不回填、不進 Python
         // ── A.xlsx 03_Symbols 擴充欄位 ──
         symbol_id: '',
         type: '一般得分',
@@ -741,13 +883,14 @@
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
       });
 
-      // Symbol Type 選項(v6.2 #2:移除 High/Low,改下列 7 類)
-      const SYMBOL_TYPES = ['一般得分', 'WILD', 'SCATTER', 'FREE', 'BONUS', 'COIN', 'Other'];
-      // 舊型別 → 新型別 遷移對照(向下相容舊存檔)
+      // Symbol Type 選項(v1.2 圖示頁:兩段式 = 一般得分 + 特殊四類;FREE/COIN 折疊入「其他」)
+      const SYMBOL_TYPES = ['一般得分', 'WILD', 'SCATTER', 'BONUS', '其他'];
+      const SPECIAL_TYPES = ['WILD', 'SCATTER', 'BONUS', '其他'];   // 特殊子類別(展開序)
+      // 舊型別 → 新型別 遷移對照(向下相容舊存檔;FREE/COIN/Other/SPECIAL 皆歸「其他」)
       const _TYPE_MIGRATE = {
         HIGH: '一般得分', LOW: '一般得分', NORMAL: '一般得分',
-        WILD: 'WILD', SCATTER: 'SCATTER', FREE: 'FREE', BONUS: 'BONUS',
-        COIN: 'COIN', SPECIAL: 'Other', OTHER: 'Other',
+        WILD: 'WILD', SCATTER: 'SCATTER', BONUS: 'BONUS',
+        FREE: '其他', COIN: '其他', SPECIAL: '其他', OTHER: '其他',
       };
       function normalizeType(t) {
         if (!t) return '一般得分';
@@ -810,15 +953,29 @@
         form.max_count = s.max_count;
         form.reel_limit = [...s.reel_limit];
         form.subreel_limit = (s.subreel_limit && typeof s.subreel_limit === 'object') ? { ...s.subreel_limit } : {};
+        // §2.5:依模式分別設定(舊資料缺 → false / {})
+        form.appear_per_mode = s.appear_per_mode === true;
+        form.appear_by_mode = {};
+        if (s.appear_by_mode && typeof s.appear_by_mode === 'object') {
+          for (const k of Object.keys(s.appear_by_mode)) {
+            const e = s.appear_by_mode[k] || {};
+            form.appear_by_mode[k] = {
+              reel_limit: Array.isArray(e.reel_limit) ? [...e.reel_limit] : [],
+              max_count: Number(e.max_count) || 0,
+            };
+          }
+        }
         // 擴充欄位(向下相容:舊資料缺欄位給預設)
         form.symbol_id  = s.symbol_id  != null ? s.symbol_id  : '';
         form.type       = normalizeType(s.type);
+        payMode.value   = _deriveDefaultPayMode(s);   // §2.4 賠率模式預設(可於卡頭手動切)
         form.pay_3x     = s.pay_3x     != null ? s.pay_3x     : 0;
         form.pay_4x     = s.pay_4x     != null ? s.pay_4x     : 0;
         form.pay_5x     = s.pay_5x     != null ? s.pay_5x     : 0;
         form.pay_6x     = s.pay_6x     != null ? s.pay_6x     : 0;
         // v6.1:動態賠付表 — 以 pay_rows 為主,舊 pay_Nx 自動遷移;深拷貝避免編輯時改到原資料
         form.pay_rows   = _readPayRows(s);
+        _sortPayRows();            // §2.4 載入即由小到大
         // v6.3 / Q3:倍數 / 彩金倍數(深拷貝;prize 補齊各模式權重 key)
         form.mult_values  = (Array.isArray(s.mult_values) ? s.mult_values : [])
           .map(v => ({ mult: Number(v.mult) || 0, weight: Number(v.weight) || 0,
@@ -837,7 +994,9 @@
         form.is_scatter = !!s.is_scatter;
         form.image      = (s.image != null && typeof s.image === 'string') ? s.image : null;  // v7.9 #4
         // #10:有 mega 才預設展開,否則折疊成 1×1 badge
-        showMega.value  = (Number(form.mega_w) > 1 || Number(form.mega_h) > 1);
+        sizePopup.value = false;   // 切換/載入符號時關閉尺寸彈窗
+        carryPopup.value = false;  // 切換/載入符號時關閉攜帶值彈窗
+        payAddOpen.value = false;  // 切換/載入符號時關閉賠率新增對話框
       }
 
       const selected = computed(() => {
@@ -877,6 +1036,55 @@
       }
       const symbolRefs = computed(() => { _refsTick.value; return scanSymbolRefs(selected.value); });
       function refreshSymbolRefs() { _refsTick.value++; }
+      // ③d-2:rule 列白話 = 規則頁同一顆 humanizeRule(閉包完整、零漂移);未載入時退回自製粗略版
+      function ruleLine(r) {
+        try {
+          if (typeof SP !== 'undefined' && SP.humanizeRule) { const s = SP.humanizeRule(r); if (s) return s; }
+        } catch (e) { /* fallback */ }
+        return '當 ' + ruleCondText(r) + ' → ' + ruleEffectText(r);
+      }
+      // ③d-2:rule 列展開(看完整當·若·則)
+      const rulesExpanded = ref({});
+      function toggleRuleExpand(rid) { rulesExpanded.value = { ...rulesExpanded.value, [rid]: !rulesExpanded.value[rid] }; }
+      // ③d-2 甲案:＋新增規則 → 橋接規則頁「同一套」真編輯器,預填此符號
+      function addRelatedRule() {
+        const s = selected.value; if (!s) return;
+        const id = (s.symbol_id && String(s.symbol_id).trim()) || s.name || ('#' + s.number);
+        flushWrite();
+        if (typeof SP !== 'undefined' && SP.goConfig) SP.goConfig({ tab: 'rules', addRuleFor: id });
+        else emitStatus('err', '無法切換到設定頁');
+      }
+      // §2.7:＋新增尺寸規則 → 橋接規則頁,預填「落地 → 擴展整輪」骨架
+      function addSizeRule() {
+        const s = selected.value; if (!s) return;
+        const id = (s.symbol_id && String(s.symbol_id).trim()) || s.name || ('#' + s.number);
+        flushWrite();
+        if (typeof SP !== 'undefined' && SP.goConfig) SP.goConfig({ tab: 'rules', addSizeRuleFor: id });
+        else emitStatus('err', '無法切換到設定頁');
+      }
+      // §2.6:規則列「當[條件]→[動作]」顯示 helper(防禦性讀欄)
+      function ruleCondText(r) {
+        const c = (r && (r.condition || r.when)) || '';
+        return c ? String(c) : '落地';
+      }
+      function ruleEffectText(r) {
+        const effs = (r && (r.effects || r.actions)) || [];
+        if (Array.isArray(effs) && effs.length) {
+          const e = effs[0] || {};
+          const t = e.type || e.atype || e.action || (e.params && e.params.type) || '';
+          const extra = effs.length > 1 ? ('  +' + (effs.length - 1)) : '';
+          return (t ? String(t) : (r.description || '動作')) + extra;
+        }
+        return (r && r.description) || '動作';
+      }
+      function goRulesPage(rid) {
+        flushWrite();
+        if (typeof SP !== 'undefined' && SP.goConfig) {
+          SP.goConfig({ tab: 'rules', focusRule: rid });
+        } else {
+          emitStatus('err', '無法切換到規則頁');
+        }
+      }
       // v6.2 規則#11 正向:跳到硬約束分頁並預填此符號(輕量雙向)
       function addRelatedConstraint() {
         const s = selected.value;
@@ -938,6 +1146,8 @@
           group_id: (form.group_id || '').trim(),   // P0-3
           reel_limit: [...form.reel_limit],
           subreel_limit: { ...form.subreel_limit },
+          appear_per_mode: !!form.appear_per_mode,   // §2.5
+          appear_by_mode: _cleanAppearByMode(),      // §2.5
           // 擴充欄位
           symbol_id: form.symbol_id.toString().trim(),
           type: normalizeType(form.type),
@@ -1102,6 +1312,56 @@
         while (next >= lo && next <= hi && used.has(next)) next += delta;  // 跳過重複
         if (next < lo || next > hi) return;   // 沒有可用值就不動
         rows[i].count = next;
+        _sortPayRows();           // §2.4:由小到大自動排序
+        onFieldEdit();
+      }
+      // ── §2.4:賠率列一律由小到大排序（count → count_to）──
+      function _sortPayRows() {
+        (form.pay_rows || []).sort((a, b) =>
+          (Number(a.count) || 0) - (Number(b.count) || 0) ||
+          (Number(a.count_to) || 0) - (Number(b.count_to) || 0));
+      }
+      // ── §2.4:新增對話框（單一 / 區間 + 重複重疊防呆;warn 不阻擋）──
+      function openPayAdd() {
+        const used = new Set((form.pay_rows || []).map(r => Number(r.count)));
+        const hi = maxPayCount.value;
+        let c = (payMode.value === 'count') ? 5 : 3;
+        while (c <= hi && used.has(c)) c++;
+        if (c > hi) c = hi;
+        payAddKind.value = 'single';
+        payAddFrom.value = c;
+        payAddTo.value   = Math.min(hi, c + 1);
+        payAddOpen.value = true;
+      }
+      function cancelPayAdd() { payAddOpen.value = false; }
+      // 防呆:回傳衝突說明(重複 / 區間重疊);無衝突回 ''(純靜態·不阻擋)
+      const payAddConflict = computed(() => {
+        if (!payAddOpen.value) return '';
+        const from = Math.round(Number(payAddFrom.value) || 0);
+        const isRange = (payMode.value === 'count' && payAddKind.value === 'range');
+        const to = isRange ? Math.round(Number(payAddTo.value) || 0) : from;
+        if (from < 2) return '數值需 ≥ 2';
+        if (isRange && to < from) return '區間終點需 ≥ 起點';
+        const lo = Math.min(from, to), up = Math.max(from, to);
+        for (const r of (form.pay_rows || [])) {
+          const rlo = Number(r.count) || 0;
+          const rup = (Number(r.count_to) > rlo) ? Number(r.count_to) : rlo;
+          if (lo <= rup && rlo <= up) {   // 區間相交
+            const rtxt = (rup > rlo) ? (rlo + '–' + rup) : String(rlo);
+            return `與現有列 ${rtxt} 重複 / 重疊（仍可新增,建議調整）`;
+          }
+        }
+        return '';
+      });
+      function confirmPayAdd() {
+        const from = Math.round(Number(payAddFrom.value) || 0);
+        const isRange = (payMode.value === 'count' && payAddKind.value === 'range');
+        const to = isRange ? Math.round(Number(payAddTo.value) || 0) : 0;
+        if (from < 2) { emitStatus('err', '數值需 ≥ 2'); return; }
+        const up = (isRange && to > from) ? to : 0;
+        form.pay_rows.push({ count: from, count_to: up, pay: 0 });   // 不阻擋:即使重疊也插入
+        _sortPayRows();
+        payAddOpen.value = false;
         onFieldEdit();
       }
 
@@ -1269,6 +1529,32 @@
         form.mode_scope = [...set].join(',');
         onFieldEdit();
       }
+      function clearModeScope() { form.mode_scope = ''; onFieldEdit(); }   // §2.5 全模式(空=所有模式)
+      // ── §2.5:依模式分別設定(出現輪 / 上限逐模式覆寫;匯出限定 03f,不回填 / 不進 Python)──
+      function ensureAppearMode(mn) {
+        if (!form.appear_by_mode[mn]) {
+          const rl = []; const n = reelCount.value || (form.reel_limit ? form.reel_limit.length : 0) || 0;
+          for (let i = 0; i < n; i++) rl.push(form.reel_limit[i] !== false);   // 種子:沿用單一設定當起點
+          form.appear_by_mode[mn] = { reel_limit: rl, max_count: Number(form.max_count) || 0 };
+        }
+        return form.appear_by_mode[mn];
+      }
+      function toggleAppearPerMode() {
+        form.appear_per_mode = !form.appear_per_mode;
+        if (form.appear_per_mode) { for (const mn of modeNames.value) ensureAppearMode(mn); }
+        onFieldEdit();
+      }
+      function _cleanAppearByMode() {
+        if (!form.appear_per_mode) return {};   // 未啟用 → 不落地(單一設定為權威)
+        const out = {};
+        for (const mn of modeNames.value) {
+          const e = form.appear_by_mode[mn];
+          if (!e) continue;
+          out[mn] = { reel_limit: Array.isArray(e.reel_limit) ? e.reel_limit.map(b => b !== false) : [],
+                      max_count: Number(e.max_count) || 0 };
+        }
+        return out;
+      }
 
       // #9:Type 為單一來源,wild/scatter 由 Type 推導
       function setType(t) {
@@ -1277,6 +1563,15 @@
         form.is_scatter = (t === 'SCATTER');
         onFieldEdit();
       }
+      // 兩段式類別:一般得分 / 特殊(展開 WILD/SCATTER/BONUS/其他)。
+      const specialExpanded = ref(false);
+      function isSpecialType(t) { return !!t && t !== '一般得分'; }
+      function pickTier(tier) {
+        if (tier === 'normal') { specialExpanded.value = false; setType('一般得分'); }
+        else { specialExpanded.value = true; }   // 展開待選子類別;不強制改值
+      }
+      // 切換符號時收合特殊展開(特殊型符號仍由 isSpecialType 使子類別可見)。
+      watch(selectedId, () => { specialExpanded.value = false; });
       const roleNote = computed(() => {
         if (form.is_wild) return '✦ 此符號為 Wild —— 可替代其他符號';
         if (form.is_scatter) return '★ 此符號為 Scatter —— 不受中獎線位置限制';
@@ -1355,7 +1650,7 @@
       function resetMega() {
         form.mega_w = 1;
         form.mega_h = 1;
-        showMega.value = false;   // #9:還原後收回展開狀態,回到 1×1 badge 畫面
+        // resetMega 不關閉尺寸彈窗(使用者仍在彈窗內操作,還原後續看 1×1)
         onFieldEdit();
       }
 
@@ -1421,6 +1716,7 @@
           if (writeTimer) clearTimeout(writeTimer);
           writeForm();
           selectedId.value = sid;
+          try { if (window.SlotPlanner) window.SlotPlanner._symLastSel = sid; } catch (e) { /* 記憶失敗不影響 */ }
           const s = symbols.value.find(x => x.id === sid);
           if (s) loadForm(s);
         }
@@ -1451,9 +1747,14 @@
       }
 
       function deleteSelected() {
-        if (selectedId.value === null) return;
-        const s = selected.value;
-        if (!s) return;
+        if (selectedId.value !== null) deleteSymbol(selectedId.value);
+      }
+
+      // 刪除指定 id（列 hover ✕ 與工具列共用）。inform + fallback:可經「復原」取回。
+      function deleteSymbol(id) {
+        const idx = symbols.value.findIndex(x => x.id === id);
+        if (idx === -1) return;
+        const s = symbols.value[idx];
         const name = s.name || (s.number ? `#${s.number}` : `id=${s.id}`);
         if (!confirm(
           `確定要刪除「${name}」嗎？\n\n` +
@@ -1462,23 +1763,101 @@
         )) return;
 
         flushWrite();
-        const idx = symbols.value.findIndex(x => x.id === selectedId.value);
-        if (idx === -1) return;
         symbols.value.splice(idx, 1);
-        delete swatchMap.value[selectedId.value];
+        delete swatchMap.value[id];
 
-        // 選下一個
-        if (symbols.value.length) {
-          const nidx = Math.min(idx, symbols.value.length - 1);
-          selectedId.value = symbols.value[nidx].id;
-          loadForm(symbols.value[nidx]);
-        } else {
-          selectedId.value = null;
+        // 若刪的是目前選取項 → 選鄰近；否則維持選取
+        if (selectedId.value === id) {
+          if (symbols.value.length) {
+            const nidx = Math.min(idx, symbols.value.length - 1);
+            selectedId.value = symbols.value[nidx].id;
+            loadForm(symbols.value[nidx]);
+          } else {
+            selectedId.value = null;
+          }
         }
         renumber();   // #4:刪除後重新編號
         commit();
         emitStatus('ok', `已刪除「${name}」`);
       }
+
+      // 複製指定 id 的圖示（列 hover ⧉）。取全新 id + 預設欄骨架後覆蓋來源可攜欄位;
+      //   代碼 symbol_id 留空避免撞既有參照;插入到來源下一列;色票沿用來源。
+      function copySymbol(id) {
+        flushWrite();
+        const idx = symbols.value.findIndex(x => x.id === id);
+        if (idx === -1) return;
+        const src = symbols.value[idx];
+        const clone = SP.createSymbol('', '', 100, reelCount.value);   // 全新 id + 預設欄
+        const newId = clone.id;
+        Object.keys(src).forEach(k => {
+          if (k === 'id' || k === 'symbol_id') return;
+          const v = src[k];
+          clone[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+        });
+        clone.id = newId;
+        clone.symbol_id = '';                       // 代碼留空 → 另配,不撞參照
+        clone.name = (src.name || '圖示') + ' 複本';
+        clone.number = 0;                           // renumber 會重指
+        symbols.value.splice(idx + 1, 0, clone);
+        if (swatchMap.value[id]) {
+          swatchMap.value[newId] = [...swatchMap.value[id]];
+          swatchMap.value = { ...swatchMap.value };
+        }
+        renumber();
+        commit();
+        select(newId);
+        emitStatus('ok', `已複製「${src.name || ('#' + src.number)}」`);
+      }
+
+      // 列上類別晶片:顯示標籤 + 是否特殊類(accent .hi)。
+      //   相容原始 enum(HIGH/LOW/NORMAL)與顯示類別(一般得分/WILD/…)。得分族不 hi。
+      function catChip(s) {
+        const t = String((s && s.type) || '').trim();
+        const up = t.toUpperCase();
+        if (!t || t === '一般得分' || up === 'HIGH' || up === 'LOW' || up === 'NORMAL') {
+          return { label: '得分', hi: false };
+        }
+        const M = { WILD: 'WILD', SCATTER: 'SCATTER', BONUS: 'BONUS' };
+        if (M[up]) return { label: M[up], hi: true };
+        if (up === 'SPECIAL' || up === 'OTHER' || up === 'FREE' || up === 'COIN' || t === '其他' || t === 'Other') {
+          return { label: '其他', hi: true };
+        }
+        return { label: t, hi: true };   // 未知 → 原樣、視為特殊
+      }
+
+      // roster 搜尋 / 篩選(名稱 / 代碼 / 型別 / 類別標籤;空 = 全顯)。
+      //   用 v-show 隱藏不符列(保留 v-for 全 index → 拖曳/編號不受影響);篩選中另關閉拖曳。
+      const rosterQuery = ref('');
+      function rosterMatch(s) {
+        const q = String(rosterQuery.value || '').trim().toLowerCase();
+        if (!q) return true;
+        const hay = [s.name, s.symbol_id, s.type, catChip(s).label]
+          .map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.indexOf(q) >= 0;
+      }
+      // roster 統計列:N 圖示·M 停用 · 類別摘要(得分數 + 特殊類單字母,依序去重)。
+      const rosterStats = computed(() => {
+        const list = symbols.value || [];
+        const total = list.length;
+        const disabled = list.filter(s => s.enabled === false).length;
+        const SP_LETTER = { WILD: 'W', SCATTER: 'S', BONUS: 'B', FREE: 'F', COIN: 'C', 其他: '他' };
+        let normalCount = 0;
+        const specials = [];
+        for (const s of list) {
+          const c = catChip(s);
+          if (!c.hi) { normalCount++; continue; }
+          const letter = SP_LETTER[c.label] || (c.label ? c.label[0] : '?');
+          if (specials.indexOf(letter) < 0) specials.push(letter);
+        }
+        const catParts = [];
+        if (normalCount) catParts.push(`${normalCount}得分`);
+        for (const l of specials) catParts.push(l);
+        return {
+          countText: total ? (`${total} 圖示` + (disabled ? `·${disabled} 停用` : '')) : '尚無圖示',
+          catText: catParts.join('·'),
+        };
+      });
 
       // ════════════════════════════════════════════════════════
       //  Swatch 選色
@@ -1854,7 +2233,11 @@
         let _isMobile = false;
         try { _isMobile = window.matchMedia('(max-width: 767px)').matches; } catch (e) {}
         if (symbols.value.length && selectedId.value === null && !_isMobile) {
-          select(symbols.value[0].id);
+          // ③d-2:優先選回上次編輯的符號(從規則頁新增規則返回時,立即看到新規則);不存在才退回第一個
+          let _restore = null;
+          try { _restore = (window.SlotPlanner && window.SlotPlanner._symLastSel != null) ? window.SlotPlanner._symLastSel : null; } catch (e) {}
+          const _ok = _restore != null && symbols.value.some(x => x.id === _restore);
+          select(_ok ? _restore : symbols.value[0].id);
         }
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('paste', onGlobalPaste);   // v7.9 #4:Ctrl+V 貼上圖片
@@ -1891,25 +2274,32 @@
         symbolGroups, groupsOpen, SYMGROUP_MATCH_MODES,   // P0-3
         addSymbolGroup, removeSymbolGroup, groupMemberCount,   // P0-3
         groupModeNames, toggleGroupModePay,   // P0-3 進階
-        symbolRefs, refreshSymbolRefs, addRelatedConstraint,
+        symbolRefs, refreshSymbolRefs, addRelatedConstraint, ruleCondText, ruleEffectText, goRulesPage,
+        ruleLine, rulesExpanded, toggleRuleExpand, addRelatedRule, addSizeRule,
         selectedId, selected, form,
         numErr, nameErr,
         totalWeight,
         importInput,
         megaPreview,
-        showMega, roleNote,
+        sizePopup, payMode, setPayMode,
+        payAddOpen, payAddKind, payAddFrom, payAddTo, openPayAdd, cancelPayAdd, confirmPayAdd, payAddConflict,
+        carryPopup, carryTab, roleNote,
+        rosterCtx, openRosterCtx, closeRosterCtx, rosterCtxSize, rosterCtxCarry,
         cardOpen, toggleCard,
         paySummary, limitSummary, sizeSummary, multSummary, rulesSummary,
         hasLimit, hasMult,
-        select, toggleEnabled, addSymbol, deleteSelected,
+        select, toggleEnabled, addSymbol, deleteSelected, deleteSymbol, copySymbol, catChip,
+        rosterQuery, rosterMatch, rosterStats,
         moveSymbol, dragIdx, dragOverIdx, dragHandleArmed, onDragStart, onDragOver, onDrop, onDragEnd,
         pickSwatch, isCurrentSwatch, swatchStyle,
         currentBg, isCustomSwatch, pickCustom,
         imageInput, triggerImageUpload, onImageFile, pasteImage, clearImage,
         initialOf, pctOf,
         onFieldEdit, setType, bumpMega, resetMega,
+        SPECIAL_TYPES, specialExpanded, isSpecialType, pickTier,
         addPayRow, removePayRow, bumpPayCount, toggleSubLimit,
-        modeScopeHas, toggleModeScope,   // v8.3 D-12
+        modeScopeHas, toggleModeScope, clearModeScope,   // v8.3 D-12 / §2.5
+        ensureAppearMode, toggleAppearPerMode,           // §2.5 依模式分別設定
         modeNames, jackpotOptions, refreshMultRefs,
         addMultValue, removeMultValue, addPrizeValue, removePrizeValue,
         exportJson, triggerImport, importJson,
