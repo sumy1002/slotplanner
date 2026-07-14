@@ -114,6 +114,11 @@ class ActionType(Enum):
     #   value(數值,依 op 語意)。logic_parser 不註冊 handler,容量/當前值追蹤交下游模擬工具實作
     #   (比照 v8.21 值引擎慣例)。
     METER_ADJUST       = "METER_ADJUST"       # 計量條容量/當前值調整(Outlaws Inc Star Box)
+    # ── v8.51 / 缺口提案12:重新觸發(描述型;本工具不執行) ──
+    #   語意:讓畫面上 N 個「已消耗/已完成效果」的特殊符號再次發動一次自身效果;
+    #   非 REVIVE 的「重置/延長 respin 次數」語意。a_loader 經 condition_parser.parse_actions
+    #   照收(enum 成員即合法);logic_parser 不註冊 handler(執行語意由下游模擬工具實作)。
+    RETRIGGER          = "RETRIGGER"          # 重新觸發已消耗符號效果(Money Train 3 死靈法師)
 
 
 class ConditionOp(Enum):
@@ -854,7 +859,10 @@ class PuzzleRule:
     #   fire_chance 是「單條規則要不要真的發生」的獨立貝努利試驗,可疊加使用。
     #   純描述,引擎不消費;骰子求值與亂數來源交下游模擬工具實作(比照 random_weight 慣例)。
     #   缺欄(舊 A.xlsx)→ 1.0(安全降級,行為與舊檔一致,不影響既有規則)。
-    fire_chance: float = 1.0
+    #   v8.51 / 缺口提案13:型別放寬 float → float | str(比照 v8.34 GAP-S1 的 dyn 慣例)。
+    #   字串 = 動態公式(如 "bet / 1000000"),求值語意交下游模擬工具;純數字仍為 float,
+    #   行為與 v8.49 完全一致(只鬆不緊,舊資料無感)。Mega Moolah 機率與下注金額成正比即此路。
+    fire_chance: "float | str" = 1.0
     # v8.21 / G1 價值引擎:persistent 規則層修飾子(★機主拍板:放規則層布林,非動作 params)。
     #   語意=此規則的動作「每回合(spin/respin)重跑」,同時完成界-2 sticky「重跑」。
     #   純描述,引擎不消費;缺欄(舊 A.xlsx)→ False(安全降級,行為與舊檔一致)。

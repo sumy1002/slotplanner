@@ -137,6 +137,8 @@
     PANEL_SET: '面板啟停',
     // v8.49 / 缺口3:計量條容量/當前值動態調整
     METER_ADJUST: '計量調整',
+    // v8.51 / 缺口提案12:重新觸發已消耗符號效果
+    RETRIGGER: '重新觸發',
   };
   // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
   function _mdCell(v) {
@@ -185,6 +187,13 @@
     // v8.45 / 批次D(track_covered 為 1/0 謂詞不入;雙形:SID 全輪最大 / SID.r 指定輪)
     m = s.match(/^reel_stack_count\.([A-Za-z0-9_]+)(?:\.([0-9]+))?$/);
     if (m) return m[2] ? `「${m[1]}」第 ${m[2]} 輪疊數` : `「${m[1]}」的單輪最大疊數`;
+    // v8.50 / 缺口提案9-11
+    m = s.match(/^meter_value\.([A-Za-z0-9_]+)$/);
+    if (m) return `計量條「${m[1]}」的目前累積值`;
+    m = s.match(/^reel_spread_count\.([A-Za-z0-9_]+)$/);
+    if (m) return `「${m[1]}」出現的輪軸數`;
+    m = s.match(/^adjacent_count_dir\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\.(UP|DOWN|LEFT|RIGHT)$/);
+    if (m) return `「${m[2]}」${m[3]}方向為「${m[1]}」的顆數`;
     return s;
   }
   // v8.34 / GAP-S1:動態式白話化 — _dynVal 的泛化。

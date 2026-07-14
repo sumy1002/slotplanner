@@ -1,8 +1,9 @@
 {
  "_meta": {
-  "version": "v12 (v8.48)",
+  "version": "v13 (v8.51)",
   "purpose": "SlotPlanner DSL 金測試集 — 三守恆:①JS builder 可產出的條件 Python 必可解析;②動作 DSL 兩端解析出的 params 必逐鍵相等;③非法輸入 Python 必以可見錯誤拒絕(不靜默毀損)。",
   "usage": "python3 dsl_golden_py.py(產 /tmp/dsl_py.json 並驗條件) → node dsl_golden_js.js(產 /tmp/dsl_js.json) → python3 dsl_golden_py.py --compare(跨端比對)。任何 parser/分割器改動後必跑。",
+  "v8.51_additions": "缺口提案9-12 新增:meter_value / reel_spread_count / adjacent_count_dir 三條件變數(純識別字,零 parser 改動);RETRIGGER 新 ActionType(需 enum 收錄);MULTIPLY_VALUE op、SPLIT into/scope、DESTROY_ADJACENT shape、WALK trail_value、GROW_BOARD target=ALL、positions RANDOM(n)/BY_ATTR 皆既有 dict[str,Any] 參數擴充,零 parser 改動。fire_chance 型別放寬不在此檔(非 condition_parser/parse_actions 範疇,見 a_loader._to_fire_chance)。",
   "known_edges": [
    "二元減需左右留空白(a - 1);「a -1」會綁成負數字面造成殘留 token 錯誤(既有 tokenizer 語意,文件化)",
    "左側算術(a * 2 > b)不支援 — 左側必為單一變數;算術僅右側值",
@@ -55,7 +56,10 @@
   "track_covered.T001 == 1",
   "track_covered.CURRENT == 1 AND global.track_current >= 2",
   "reel_stack_count.APE >= 4",
-  "reel_stack_count.LEGION.3 >= 3 AND reel_height.3 == 3"
+  "reel_stack_count.LEGION.3 >= 3 AND reel_height.3 == 3",
+  "meter_value.STAR_BAR >= 20",
+  "reel_spread_count.MYST >= 3",
+  "adjacent_count_dir.WILD.WILD.UP >= 1"
  ],
  "conditions_py_illegal": [
   "a == 1 &&  b == 2",
@@ -114,7 +118,21 @@
   "MOVE(subject=BIRD, to=SELF_LANDED)",
   "BOARD_TRANSFORM(from_symbol=RANDOM, to_symbol=A, positions=SELF:LEFT, except_if=\"target == WILD\", order=PAYOUT_DESC)",
   "BOARD_DESTROY(positions=SELF, except_if=\"target == WILD\")",
-  "BOARD_FILL(symbol_id=WILD, positions=SELF:RIGHT, except_if=\"target in [WILD,SCAT]\", order=RANDOM)"
+  "BOARD_FILL(symbol_id=WILD, positions=SELF:RIGHT, except_if=\"target in [WILD,SCAT]\", order=RANDOM)",
+  "RETRIGGER(target=NECROMANCER_TARGET, count=\"2-7\")",
+  "RETRIGGER(target=group_any:CONSUMED, count=3)",
+  "MULTIPLY_VALUE(op=add, factor=1, target=symbol_value.WILD)",
+  "MULTIPLY_VALUE(op=sub, factor=1, target=symbol_value.COUNTDOWN)",
+  "SPLIT(symbol=XWAYS, into=\"2-3\", scope=same_row)",
+  "DESTROY_ADJACENT(symbol=DJ, radius=2, shape=CROSS)",
+  "WALK(symbol=COCKROACH, steps=1, dir=PATH, trail_value=1)",
+  "GROW_BOARD(effect=ADD_ROW, target=ALL, amount=1, cap=8)",
+  "BOARD_TRANSFORM(from_symbol=RANDOM, to_symbol=WILD, positions=\"RANDOM(5)\")",
+  "BOARD_TRANSFORM(from_symbol=COIN, to_symbol=WILD, positions=\"BY_ATTR:MARKED\")",
+  "MOVE(subject=WILD, manner=DIR, dir=RANDOM, amount=1)",
+  "MOVE(subject=WILD, to=RANDOM)",
+  "SPAWN(target=WILD, cell=RANDOM)",
+  "NUDGE(symbol=WILD, direction=RANDOM, full_reel=N)"
  ],
  "actions_py_illegal": [
   "SPAWN(cell=2,3, symbol=BIRD)",

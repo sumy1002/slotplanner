@@ -1899,6 +1899,23 @@
       desc: '該符號在「單一輪內」的最大縱向連續疊數;subkey「SID」= 全輪取最大,' +
             '「SID.r」= 指定輪(1-based;雙段 subkey 同 object_pos/cluster_shape 前例)。' +
             '「reel_stack_count.APE >= 4」= 猿群疊 4(PotA);配 reel_height 可表「整輪疊滿」(ML)。' },
+    // ── v8.50 / 缺口提案9-11:條件變數三枚(純描述詞彙;parse_condition 任意識別字皆合法,
+    //    Python 端零改;求值語意由下游模擬工具實作;沿 v8.4/v8.37/v8.40/v8.45 常數增列前例) ──
+    { id: 'meter_value',           label: 'meter_value',           needsSubkey: true,
+      subkeyHint: '計量條 ID',     valueType: 'number', subkeySource: 'text',
+      desc: '該 21_Collection_Meters 計量條的目前累積值(讀取;寫入用 METER_ADJUST);' +
+            '「meter_value.STAR_BAR」可當 ADJUST_MULTIPLIER/PAY 等 Action 的動態值' +
+            '(Outlaws Inc Star Box 一次性套用進度條累積倍數至總贏分)。' },
+    { id: 'reel_spread_count',     label: 'reel_spread_count',     needsSubkey: true,
+      subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
+      desc: '該符號出現在幾條不同的主輪上(橫向跨輪計數,與 reel_stack_count 的縱向疊數對稱);' +
+            '「reel_spread_count.MYST >= 3」= 神秘堆疊出現在 3 輪以上(Mystery Museum)。' },
+    { id: 'adjacent_count_dir',    label: 'adjacent_count_dir',    needsSubkey: true,
+      subkeyHint: '符號A.符號B.方向', valueType: 'number', subkeySource: 'text',
+      desc: '盤面上「B 的指定方向恰為 A」的顆數;subkey 格式「A.B.DIR」(DIR=UP/DOWN/LEFT/RIGHT,' +
+            '三段 subkey 同 object_pos/cluster_shape 前例,首點切分)。' +
+            '「adjacent_count_dir.WILD.WILD.UP >= 1」= 存在 WILD 正上方疊新 WILD' +
+            '(Divine Fortune 疊 Wild 擴展判定,方向性 adjacent_count 前例的無方向限制補強)。' },
   ];
   const VAR_CATEGORY_MAP = Object.fromEntries(VAR_CATEGORIES.map(c => [c.id, c]));
 
@@ -2588,9 +2605,12 @@
       params: [
         { key: 'symbol_id', label: '符號',        type: 'symbol', required: true, sentinels: ['RANDOM'] },
         // v8.48 / 項目一 Batch A:positions 可填目標參照 SELF/SELF_LANDED/SELF:方向(相對觸發物件的格)
-        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
-          placeholder: '[[0,1],[2,3]] 或 SELF', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...];' +
-            '或目標參照 SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)' },
+        // v8.50 / 缺口提案2+3:positions 加 RANDOM(n)(隨機挑 n 格)與 BY_ATTR:<attr_id>(帶格屬性標記的格子)
+        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED', 'RANDOM', 'BY_ATTR'],
+          placeholder: '[[0,1],[2,3]] 或 SELF 或 RANDOM(5)', desc: '省略則填所有 destroyed 格;格式 [[reel,row],...];' +
+            '或目標參照 SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)/' +
+            'RANDOM(n)=盤面隨機挑 n 格(Star Bounty 飛彈 / Ted 噴啤酒)/BY_ATTR:<attr_id>=所有帶該 02d ' +
+            '格屬性標記的格子(Rome: The Golden Age 印記格集體轉 Wild)' },
         // v8.34 / GAP-S1+🟢-1:填入顆數(Finn 2–5 / SF2 3–7 / Holy Diver 1–4 皆範圍式)。
         //   additive 加參數尾;留空=填所有 destroyed 格(現行語意不變)。
         { key: 'count', label: '數量(可選)', type: 'number', dyn: true, placeholder: '3 或 "2-5"',
@@ -2612,9 +2632,12 @@
           desc: '單一符號、RANDOM、或家族:group:<家族ID>(全員)/ group_any:<家族ID>(隨機一種)' },
         { key: 'to_symbol',   label: '新符號', type: 'symbol', required: true, sentinels: ['RANDOM', 'BEST'] },
         // v8.48 / 項目一 Batch A:目標位置限定(可選;可填參照 SELF/SELF:方向 — 只轉「觸發物件當前/相鄰格」)
-        { key: 'positions', label: '限定位置(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
-          placeholder: 'SELF:LEFT', desc: '省略=全盤符合 from_symbol 者;填目標參照 SELF/SELF_LANDED/SELF:LEFT|RIGHT|UP|DOWN,' +
-            '則只轉該格(如「把物件左邊那格轉成 A」)' },
+        // v8.50 / 缺口提案2+3:positions 加 RANDOM(n)與 BY_ATTR:<attr_id>
+        { key: 'positions', label: '限定位置(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED', 'RANDOM', 'BY_ATTR'],
+          placeholder: 'SELF:LEFT 或 RANDOM(5) 或 BY_ATTR:MARKED',
+          desc: '省略=全盤符合 from_symbol 者;填目標參照 SELF/SELF_LANDED/SELF:LEFT|RIGHT|UP|DOWN,' +
+            '則只轉該格(如「把物件左邊那格轉成 A」);或 RANDOM(n)=隨機挑 n 格(Star Bounty 飛彈 / Ted 噴啤酒);' +
+            '或 BY_ATTR:<attr_id>=所有帶該 02d 格屬性標記的格子(Rome: The Golden Age 印記格集體轉 Wild)' },
         // v8.48 / 項目一 Batch A:排除過濾 + 取用順序(三件套的排除/排序半;無 handler,下游求值)
         { key: 'except_if', label: '排除條件(可選)', type: 'text', placeholder: 'target == WILD',
           desc: '對選中目標做轉換,但符合此謂詞者跳過(如 target == WILD =「除非左邊是 WILD」);純謂詞,下游求值' },
@@ -2629,9 +2652,11 @@
         { key: 'symbol_id', label: '符號(可選)',    type: 'symbol', sentinels: ['RANDOM', 'NON_WIN'],
           desc: 'NON_WIN = 全盤非中獎符(xBoot xBomb 清場式)' },
         // v8.48 / 項目一 Batch A:positions 可填目標參照 SELF/SELF:方向(相對觸發物件;如「消除物件腳下那格」=吃)
-        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED'],
-          placeholder: '[[0,1],[2,3]] 或 SELF', desc: '格式 [[reel,row],...];或目標參照 ' +
-            'SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)' },
+        // v8.50 / 缺口提案2+3:positions 加 RANDOM(n)與 BY_ATTR:<attr_id>
+        { key: 'positions', label: '位置清單(可選)', type: 'text', sentinels: ['SELF', 'SELF_LANDED', 'RANDOM', 'BY_ATTR'],
+          placeholder: '[[0,1],[2,3]] 或 SELF 或 RANDOM(5)', desc: '格式 [[reel,row],...];或目標參照 ' +
+            'SELF(觸發物件當前格)/SELF_LANDED(降落格)/SELF:LEFT|RIGHT|UP|DOWN(相鄰偏移一格)/' +
+            'RANDOM(n)=盤面隨機挑 n 格/BY_ATTR:<attr_id>=所有帶該 02d 格屬性標記的格子' },
         // v8.48 / 項目一 Batch A:排除過濾 + 取用順序(三件套的排除/排序半;無 handler,下游求值)
         { key: 'except_if', label: '排除條件(可選)', type: 'text', placeholder: 'target == WILD',
           desc: '對選中目標做銷毀,但符合此謂詞者跳過(如 target == WILD 保留 Wild 不炸);純謂詞,下游求值' },
@@ -2648,15 +2673,18 @@
         // v8.48 / 項目一 Batch A:from/to 由 required 放寬(subject 模式時不需座標;只鬆不緊,舊資料無感)
         { key: 'from', label: '從(絕對)',  type: 'pos', placeholder: '[0,1]',
           desc: 'manner=TO(預設)時的來源格;用 subject 物件式時可留空' },
-        { key: 'to',   label: '到(絕對)',  type: 'pos', placeholder: '[2,3]', sentinels: ['SELF', 'SELF_LANDED'],
-          desc: 'manner=TO 時的目的格;可填哨兵 SELF/SELF_LANDED(見目標參照);用 DIR/PATH 時忽略' },
+        // v8.50 / 缺口提案2:to 加 RANDOM 哨兵(盤面隨機一格;San Quentin Jumping Wild)
+        { key: 'to',   label: '到(絕對)',  type: 'pos', placeholder: '[2,3]', sentinels: ['SELF', 'SELF_LANDED', 'RANDOM'],
+          desc: 'manner=TO 時的目的格;可填哨兵 SELF/SELF_LANDED(見目標參照)/RANDOM=盤面隨機一格' +
+            '(San Quentin Jumping Wild 每局跳至隨機新位置);用 DIR/PATH 時忽略' },
         // v8.48 / 項目一 Batch A:物件式移動(subject + manner/dir/amount/track;純描述,無 handler,語意交下游)
         { key: 'subject', label: '移動物件(可選)', type: 'symbol',
           desc: '要移動的符號/物件(如 BIRD);填了就不必知座標,語意=移動盤上的該物件。與 from 互斥擇一' },
         { key: 'manner', label: '移動方式', type: 'enum', options: ['TO', 'DIR', 'PATH'], default: 'TO',
           desc: 'TO=絕對 from→to(既有);DIR=依方向;PATH=沿 02c 軌道' },
-        { key: 'dir', label: '方向', type: 'enum', options: ['', 'LEFT', 'RIGHT', 'UP', 'DOWN'], default: '',
-          desc: 'manner=DIR 時的移動方向' },
+        // v8.50 / 缺口提案1:dir 加 RANDOM(隨機挑一個可行方向;Jammin' Jars Wild 隨機移動相鄰空位)
+        { key: 'dir', label: '方向', type: 'enum', options: ['', 'LEFT', 'RIGHT', 'UP', 'DOWN', 'RANDOM'], default: '',
+          desc: 'manner=DIR 時的移動方向;RANDOM=隨機挑一個可行方向(Jammin\' Jars Wild 隨機移動相鄰空位)' },
         { key: 'amount', label: '一次幾格', type: 'number', dyn: true, placeholder: '1', default: 1,
           desc: 'manner=DIR 時單次移動的格數;留空=1' },
         { key: 'track', label: '軌道(可選)', type: 'text', placeholder: 'T001',
@@ -2706,7 +2734,9 @@
       desc: '符號逐格推移(可整輪、可每步乘數+N;xNudge / Razor Shark)',
       params: [
         { key: 'symbol',        label: '符號',        type: 'symbol', required: true },
-        { key: 'direction',     label: '方向',        type: 'enum', options: ['UP', 'DOWN'], default: 'DOWN', required: true },
+        // v8.50 / 缺口提案1:direction 加 RANDOM(隨機挑 UP 或 DOWN)
+        { key: 'direction',     label: '方向',        type: 'enum', options: ['UP', 'DOWN', 'RANDOM'], default: 'DOWN', required: true,
+          desc: 'RANDOM=隨機挑 UP 或 DOWN' },
         { key: 'full_reel',     label: '推滿整輪',     type: 'enum', options: ['Y', 'N'], default: 'N' },
         { key: 'mult_per_step', label: '每步乘數+(可選)', type: 'number', placeholder: '1',
           desc: '乘數=推移步數的耦合(xNudge);0/留空=無' },
@@ -2730,14 +2760,19 @@
         { key: 'trail', label: '留痕符號(可選)', type: 'symbol',
           desc: '走過的格位留下該符(snail-trail wilds;Ecuador Gold 幽靈 Wild 足跡 / ' +
                 'Gemix 公主蔓延路徑);留空 = 不留痕' },
+        // v8.50 / 缺口提案8:trail_value(留值而非留符號;累加至 cell_value,與 trail 可並用)
+        { key: 'trail_value', label: '留值(可選)', type: 'text', dyn: true, placeholder: '1',
+          desc: '走過的格位留下該數值(累加至 cell_value,而非留符號;Folsom Prison 蟑螂經過格位獲得' +
+                '乘數加成);留空 = 不留值,可與 trail 並用' },
       ] },
     // v8.28 / 缺口A:物件初始放置(純描述,本工具不執行;新一局 ON_SPIN_START 觸發)
     { type: 'SPAWN', label: '放置物件', icon: '📍',
       desc: '於新一局把物件放到指定格(初始位置;搭配 WALK 走位。四角鳥即四條 SPAWN)',
       params: [
         { key: 'target', label: '物件符號', type: 'symbol', required: true },
-        { key: 'cell',   label: '初始位置(r,c)', type: 'text', placeholder: '2,3', required: true,
-          desc: '幾何座標,列,欄(沿用 cell_value.<r,c> 記法);於新一局觸發放置' },
+        // v8.50 / 缺口提案2:cell 加 RANDOM 哨兵(盤面隨機一格)
+        { key: 'cell',   label: '初始位置(r,c)', type: 'text', placeholder: '2,3 或 RANDOM', required: true, sentinels: ['RANDOM'],
+          desc: '幾何座標,列,欄(沿用 cell_value.<r,c> 記法);於新一局觸發放置;或 RANDOM=盤面隨機一格' },
       ] },
     { type: 'REVEAL_AS', label: '揭示符號', icon: '🎭',
       desc: '佔位符號落定後統一揭示為其他符號(Mystery Stack / ER 罐 / xWays)',
@@ -2762,10 +2797,16 @@
           desc: 'spread=ADJACENT_REEL 時,每個候選鄰輪被感染的機率(0~1);純描述,求值交下游' },
       ] },
     { type: 'SPLIT', label: '分裂符號', icon: '🪓',
-      desc: '把符號一分為 N(數量翻倍計分;razor split / xSplit)',
+      desc: '把符號一分為 N(數量翻倍計分;razor split / xSplit / xWays)',
       params: [
         { key: 'symbol', label: '符號',   type: 'symbol', required: true },
-        { key: 'into',   label: '分裂數', type: 'number', placeholder: '2', default: 2, required: true },
+        // v8.50 / 缺口提案6:into 泛化為 dyn(數字/範圍字串/公式,比照 BOARD_FILL.count 慣例)
+        { key: 'into',   label: '分裂數', type: 'number', dyn: true, placeholder: '2 或 "2-3"', default: 2, required: true,
+          desc: '固定數、範圍 "2-3"(含引號)、或公式;Mental xWays 2-3 隨機分裂即此路' },
+        // v8.50 / 缺口提案6:scope(沿用 G5 範圍謂詞語彙;連同觸發符號同排/同列的其他圖示一起分裂)
+        { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'same_row / same_column …',
+          desc: 'G5 範圍謂詞;連同觸發符號同排/同列的其他圖示一起分裂(Mental xSplit 同橫排全部一分為二);' +
+            '留空=僅分裂觸發符號自身' },
       ] },
     { type: 'DESTROY_ADJACENT', label: '相鄰消除', icon: '🧨',
       desc: '以符號為中心消除相鄰範圍(可炸開封閉列;xBomb)',
@@ -2779,14 +2820,20 @@
         // v8.45 / 批次D GAP-A4:錨定族(一族收編 Gonzo 系 anchor=WIN / xBomb 系 / 炸彈符全類)
         { key: 'anchor',    label: '錨定',    type: 'enum', options: ['SYMBOL', 'WIN'], default: 'SYMBOL',
           desc: 'SYMBOL=以中心符號為錨(現行為);WIN=以本筆中獎格為錨,消除其相鄰' +
-                '(Temple Tumble 銷毀中獎相鄰石磚)' },
+            '(Temple Tumble 銷毀中獎相鄰石磚)' },
+        // v8.50 / 缺口提案7:shape(範圍形狀;自由詞彙,同 cluster_shape 慣例,幾何定義寫規則備註、判定交下游)
+        { key: 'shape', label: '範圍形狀(可選)', type: 'text', placeholder: 'CROSS / L / SQUARE',
+          desc: '消除範圍的幾何形狀(自由詞彙,同 cluster_shape 慣例;幾何定義寫規則備註);' +
+            '留空=圓形(以 radius 為半徑,現行為;DJ Psycho 十字/L型消除即此路)' },
       ] },
     { type: 'GROW_BOARD', label: '盤面成長', icon: '📐',
       desc: '事件驅動的加列/加輪/開格(White Rabbit / Nitro / Infinity Reels / Money Train)',
       params: [
         { key: 'effect',  label: '效果',   type: 'enum', options: ['ADD_ROW', 'ADD_REEL', 'OPEN_CELL'], default: 'ADD_ROW', required: true },
-        { key: 'target',  label: '目標',   type: 'text', placeholder: '3 或 RIGHTMOST',
-          desc: 'reel_id(1-based)/RIGHTMOST=最右輪;ADD_REEL 時為插入位置' },
+        // v8.50 / 缺口提案4:target 補上 ALL 慣例值(所有輪同時套用;Tahiti Gold 整體漲列)
+        { key: 'target',  label: '目標',   type: 'text', placeholder: '3 或 RIGHTMOST 或 ALL',
+          desc: 'reel_id(1-based)/RIGHTMOST=最右輪/ALL=所有輪同時套用(Tahiti Gold 每次消除整體漲 1 列);' +
+            'ADD_REEL 時為插入位置' },
         { key: 'amount',  label: '數量',   type: 'number', placeholder: '1', default: 1 },
         { key: 'cap',     label: '上限(可選)', type: 'number', placeholder: '12',
           desc: '成長上限(如 White Rabbit 高度 12、Infinity 12 輪巨獎門檻搭配 reel_height 條件)' },
@@ -2816,12 +2863,17 @@
           desc: '派彩依據;留空=直接用 value' },
       ] },
     { type: 'MULTIPLY_VALUE', label: '值乘算', icon: '✳️',
-      desc: '對盤面 / 某格的「值」做乘算(值成長,不同於 ADJUST_MULTIPLIER 的贏分倍數)',
+      desc: '對盤面 / 某格的「值」做運算(值成長或遞減,不同於 ADJUST_MULTIPLIER 的贏分倍數)',
       params: [
-        { key: 'factor', label: '乘數', type: 'text', dyn: true, placeholder: '2 或 symbol_count.WILD', required: true,
-          desc: '固定乘數或動態值/公式(symbol_count.<SID> * 2)' },   // v8.34 GAP-S1:泛化為公式
+        // v8.50 / 缺口提案5:op 運算子(留空=mul,向後相容現行行為;比照 ADJUST_MULTIPLIER/UPDATE_GLOBAL 慣例,
+        //   統一「值運算」詞彙)。舊資料無此 key → 沿用 mul,行為與舊檔一致。
+        { key: 'op', label: '運算(可選)', type: 'enum', options: ['mul', 'add', 'sub', 'set'], default: 'mul',
+          desc: '留空=mul(向後相容現行行為);add/sub=遞增遞減(Hellcatraz 倒數符號-1 / Jammin\' Jars Wild ' +
+            '自身倍數+1);set=直接設定' },
+        { key: 'factor', label: '數值', type: 'text', dyn: true, placeholder: '2 或 symbol_count.WILD', required: true,
+          desc: '依 op 語意套用的量;固定值或動態值/公式(symbol_count.<SID> * 2)' },   // v8.34 GAP-S1:泛化為公式
         { key: 'target', label: '標的(可選)', type: 'text', placeholder: 'symbol_value.COIN / cell_value',
-          desc: '要乘算哪個值;留空=範圍內所有帶值格' },
+          desc: '要運算哪個值;留空=範圍內所有帶值格' },
         { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'same_column / adjacent_8 …',
           desc: 'G5 範圍謂詞;留空=全盤' },
       ] },
@@ -2912,6 +2964,19 @@
           desc: 'CAPACITY_ADD=容量增量(可負)/CAPACITY_SET=容量直接設定/VALUE_ADD=當前值增量' },
         { key: 'value', label: '數值', type: 'number', dyn: true, placeholder: '1 或 "1-3"', required: true,
           desc: '固定數、範圍 "1-3"(含引號)、或動態公式;依 op 語意套用' },
+      ] },
+
+    // ── v8.51 / 缺口提案12:重新觸發(描述型;無 handler,語意交下游) ──
+    //   語意:讓畫面上 N 個「已消耗/已完成效果」的特殊符號再次發動一次自身效果;
+    //   非 REVIVE 的「重置/延長 respin 次數」語意。target 可填符號或家族參照
+    //   (對齊 BOARD_TRANSFORM v8.36 家族語法);count 為重觸發顆數(可 dyn/範圍)。
+    { type: 'RETRIGGER', label: '重新觸發', icon: '♻️',
+      desc: '讓畫面上 N 個已消耗/已完成效果的特殊符號再次發動自身效果(非 respin 重置,那是 REVIVE)',
+      params: [
+        { key: 'target', label: '符號', type: 'symbol', required: true, groupable: true,
+          desc: '單一符號、或家族:group:<家族ID>(全員)/group_any:<家族ID>(隨機一種)' },
+        { key: 'count',  label: '數量', type: 'number', dyn: true, placeholder: '3 或 "2-7"', required: true,
+          desc: '固定數、範圍 "2-7"(含引號)、或公式;Money Train 3 死靈法師復活 2-7 顆已消耗符號即此路' },
       ] },
   ];
   const ACTION_BY_TYPE = Object.fromEntries(ACTION_CATALOG.map(a => [a.type, a]));

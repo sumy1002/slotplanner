@@ -1743,8 +1743,9 @@ def _parse_puzzle_rules(df: pd.DataFrame) -> list[PuzzleRule]:
                 persistent=_to_bool(r.get("Persistent")),
                 # v8.28 / 缺口A:補充判斷說明(自由文字,給前端/下游;缺欄 → "";純描述引擎不消費)
                 notes=_to_str(r.get("Notes")).strip(),
-                # v8.49 / 缺口1:額外機率閘門(缺欄 → 1.0;安全降級,純描述引擎不消費)
-                fire_chance=float(r.get("Fire_Chance")) if pd.notna(r.get("Fire_Chance")) else 1.0,
+                # v8.49 / 缺口1 + v8.51 / 缺口提案13:額外機率閘門(缺欄 → 1.0;安全降級,純描述引擎不消費)。
+                #   型別放寬 float → float | str,純數字行為不變,非數字視為動態公式字串。
+                fire_chance=_to_fire_chance(r.get("Fire_Chance")),
             ))
             seen_priorities[(trigger, priority)].append(rule_id)
         except ConfigValidationError:
@@ -2193,6 +2194,22 @@ def _to_str(v: Any, default: str = "") -> str:
     if s.lower() == "nan":
         return default
     return s
+
+
+def _to_fire_chance(v: Any) -> "float | str":
+    """v8.51 / 缺口提案13:PuzzleRule.fire_chance 讀取(型別放寬 float → float | str)。
+
+    先嘗試轉 float(純數字,舊檔行為與 v8.49 完全一致,只鬆不緊);轉不動則視為
+    動態公式字串原樣保留(比照 v8.34 GAP-S1 的 dyn 慣例,求值語意交下游模擬工具;
+    如 Mega Moolah「機率與下注金額成正比」)。缺欄/空值 → 1.0(安全降級)。
+    """
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return 1.0
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        s = str(v).strip()
+        return s if s else 1.0
 
 
 def _coerce_sym_type(v: Any) -> SymbolType:
