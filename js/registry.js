@@ -14,6 +14,39 @@
 (function () {
   'use strict';
 
+  // ════════════════════════════════════════════════════════════
+  //  架構檢閱 #4:全站 localStorage 容量超限(QuotaExceededError)防呆
+  //
+  //  問題:全站 20+ 個 localStorage.setItem 呼叫點(helpers.js/registry.js/
+  //  aconfig-xlsx.js/setup.js)各自 try/catch + console.warn,使用者存檔失敗時
+  //  只看到 statusbar 一句「localStorage 寫入失敗」,不知道是容量滿了、該怎麼辦
+  //  (symbol.image dataURL 累積最容易撞到上限)。
+  //
+  //  解法:在 registry.js(全站最先載入的資料層模組)包一層 Storage.prototype.setItem,
+  //  攔截到 QuotaExceededError 時廣播全域 DOM 事件 'sp:ls-quota-exceeded',
+  //  再原樣把例外往外丟(不改變任何既有 try/catch 呼叫端的行為/回傳值)。
+  //  app.js 監聽此事件,用既有 statusbar 顯示明確中文提示 + 處理建議,
+  //  不需要逐一修改 20+ 個呼叫點。
+  // ════════════════════════════════════════════════════════════
+  (function _installLsQuotaGuard() {
+    if (window.__SP_LS_QUOTA_GUARD__) return;   // 避免 script 重載時重複掛
+    window.__SP_LS_QUOTA_GUARD__ = true;
+    if (typeof Storage === 'undefined' || !Storage.prototype || !Storage.prototype.setItem) return;
+    const _origSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      try {
+        return _origSetItem.call(this, key, value);
+      } catch (e) {
+        const isQuota = !!(e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014));
+        if (isQuota) {
+          try { window.dispatchEvent(new CustomEvent('sp:ls-quota-exceeded', { detail: { key } })); }
+          catch (e2) { /* no-op:事件建構失敗不應蓋掉原例外 */ }
+        }
+        throw e;   // 原樣往外丟,既有 catch(e){...} 呼叫端行為不變
+      }
+    };
+  })();
+
   // ── 快選盤顏色（§2.3 固定序:綠 → 藍 → 紫 → 紅 → 粉 → 橘 → 金黃;[bg, fg 對比文字色]） ──
   const SWATCH_COLORS = [
     ['#8FD581', '#2c5e26'],  // 綠
@@ -106,6 +139,7 @@
       instance_mult: false, // v8.7 / R6 D-14:per-instance 乘數宣告(每顆實例攜帶自身乘數;規格描述)
       min_match: 3,       // P0-2:最少連線(達此數才成立;預設 3,可覆寫 1/2;僅 LINE/WAYS 有意義)
       group_id: '',       // P0-3:所屬符號家族 ID(空=不屬任何家族;ANY_BAR 等混合賠付)
+      wild_behavior: '',  // 架構檢閱 #6:Wild 行為分類('' 標準/EXPANDING/WALKING/STICKY/MULTIPLIER)
     };
   }
 
@@ -141,6 +175,7 @@
       instance_mult: s.instance_mult === true,                                      // v8.7 D-14
       min_match: _normMinMatch(s.min_match), // P0-2(缺欄/空/≤0→3)
       group_id: (s.group_id != null ? String(s.group_id).trim() : ''), // P0-3
+      wild_behavior: (s.wild_behavior != null ? String(s.wild_behavior).trim().toUpperCase() : ''), // 架構檢閱 #6
     };
   }
 
@@ -344,6 +379,7 @@
       instance_mult: s.instance_mult === true,                                      // v8.7 D-14
           min_match: _normMinMatch(s.min_match), // P0-2
           group_id: (s.group_id != null ? String(s.group_id).trim() : ''), // P0-3
+          wild_behavior: (s.wild_behavior != null ? String(s.wild_behavior).trim().toUpperCase() : ''), // 架構檢閱 #6
           swatch: this._swatchMap[s.id] || ['#DABA90', '#6a5230'],
         })),
       };
@@ -386,6 +422,7 @@
           instance_mult: d.instance_mult === true,                                  // v8.7 D-14
           min_match: _normMinMatch(d.min_match), // P0-2
           group_id: (d.group_id != null ? String(d.group_id).trim() : ''), // P0-3
+          wild_behavior: (d.wild_behavior != null ? String(d.wild_behavior).trim().toUpperCase() : ''), // 架構檢閱 #6
         };
         // 對齊 reel_limit 長度
         setSymbolReelCount(s, reelCount);
@@ -452,6 +489,7 @@
           instance_mult: d.instance_mult === true,                                  // v8.7 D-14
           min_match: _normMinMatch(d.min_match), // P0-2
           group_id: (d.group_id != null ? String(d.group_id).trim() : ''), // P0-3
+          wild_behavior: (d.wild_behavior != null ? String(d.wild_behavior).trim().toUpperCase() : ''), // 架構檢閱 #6
           };
           setSymbolReelCount(s, reelCount);
           symbols.push(s);

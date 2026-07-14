@@ -234,6 +234,17 @@
               </div>
             </div>
             <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
+            <!-- 架構檢閱 #6:Wild 行為分類(僅 Wild 顯示;純描述標籤,實際觸發條件仍在規則頁設定) -->
+            <div v-if="form.is_wild" class="sym-basic-idrow">
+              <span class="sym-lbl">Wild 行為</span>
+              <select class="input input-sm" v-model="form.wild_behavior" @change="onFieldEdit">
+                <option value="">標準（無特殊行為）</option>
+                <option value="EXPANDING">Expanding（擴滿整輪）</option>
+                <option value="WALKING">Walking（走位存續）</option>
+                <option value="STICKY">Sticky（黏著多局）</option>
+                <option value="MULTIPLIER">Multiplier（攜帶倍數）</option>
+              </select>
+            </div>
             <!-- 名稱 + 編號（§2.3;標籤左·輸入置中）-->
             <div class="sym-basic-idrow">
               <span class="sym-lbl">名稱</span>
@@ -881,6 +892,7 @@
         is_wild: false,
         is_scatter: false,
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
+        wild_behavior: '',   // 架構檢閱 #6:Wild 行為分類('' 標準/EXPANDING/WALKING/STICKY/MULTIPLIER)
       });
 
       // Symbol Type 選項(v1.2 圖示頁:兩段式 = 一般得分 + 特殊四類;FREE/COIN 折疊入「其他」)
@@ -991,6 +1003,7 @@
         form.mega_h     = s.mega_h     != null ? s.mega_h     : 1;
         form.can_expand = !!s.can_expand;
         form.is_wild    = !!s.is_wild;
+        form.wild_behavior = (s.wild_behavior != null ? String(s.wild_behavior) : '');   // 架構檢閱 #6
         form.is_scatter = !!s.is_scatter;
         form.image      = (s.image != null && typeof s.image === 'string') ? s.image : null;  // v7.9 #4
         // #10:有 mega 才預設展開,否則折疊成 1×1 badge
@@ -1164,6 +1177,8 @@
           is_wild: !!form.is_wild,
           is_scatter: !!form.is_scatter,
           image: (form.image != null && typeof form.image === 'string') ? form.image : null,  // v7.9 #4
+          // 架構檢閱 #6:非 Wild 不留殘留分類(切換 type 後這欄應清空;避免匯出出現矛盾狀態)
+          wild_behavior: form.is_wild ? (form.wild_behavior || '') : '',
         };
         // 替換陣列元素（用 splice 確保 Vue 偵測）
         symbols.value.splice(idx, 1, updated);
@@ -2047,21 +2062,27 @@
       //   高亮 mega_w × mega_h 區域(從左上角 R1 開始放)
       // ════════════════════════════════════════════════════════
       const megaPreview = computed(() => {
-        // 嘗試從 LS 讀 02_Layout
-        let layoutRows = [];
-        try {
-          const raw = localStorage.getItem('slotplanner.aconfig.layout.v1');
-          if (raw) layoutRows = JSON.parse(raw) || [];
-        } catch (e) {}
-
-        // 退路:沒有設定就用 5×3 預設盤
+        // 架構檢閱 #2(記憶體優先讀取):改讀 gameSpec.state(Vue reactive,由 config-editor
+        // 以記憶體資料即時 refresh,不受 LS 400ms 防抖延遲),取代直讀 LS 的
+        // 'slotplanner.aconfig.layout.v1'——後者在剛編輯完盤面切到符號頁時可能讀到舊輪數/舊列數。
+        // gameSpec 不存在(理論上不會發生,registry/game-spec.js 必定先載入)時才退回 LS 讀取兜底。
         let reelCols, maxRows;
-        if (layoutRows.length > 0) {
-          reelCols = layoutRows.length;
-          maxRows = Math.max(...layoutRows.map(r => Number(r.max_rows) || 3), 3);
+        if (gameSpec && gameSpec.state) {
+          reelCols = gameSpec.state.reelCount || reelCount.value || 5;
+          maxRows  = gameSpec.state.maxRows  || 3;
         } else {
-          reelCols = reelCount.value || 5;
-          maxRows = 3;
+          let layoutRows = [];
+          try {
+            const raw = localStorage.getItem('slotplanner.aconfig.layout.v1');
+            if (raw) layoutRows = JSON.parse(raw) || [];
+          } catch (e) {}
+          if (layoutRows.length > 0) {
+            reelCols = layoutRows.length;
+            maxRows = Math.max(...layoutRows.map(r => Number(r.max_rows) || 3), 3);
+          } else {
+            reelCols = reelCount.value || 5;
+            maxRows = 3;
+          }
         }
 
         // 限制盤面顯示尺寸(最大 8x8,超出就視為截斷顯示)

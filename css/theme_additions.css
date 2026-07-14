@@ -12266,6 +12266,18 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 
 /* ============================================================
+   架構檢閱 #3:畫布鍵盤導覽焦點格
+   虛線描邊 + focus-ring 陰影,與全站 [tabindex]:focus-visible 語彙一致,
+   但用虛線與「整輪選取(sel)/單格卡(cellsel)」的實線描邊區隔,避免混淆。
+   ============================================================ */
+#app .cfg-cv-cell-kbfocus {
+  outline: 2px dashed var(--accent-hex, #4338ca);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+  z-index: 3;
+}
+
+/* ============================================================
    盤面 P3a:選中副盤（active panel）的 sub 格高亮
    accent 描邊,與整輪選取一致。零資料。
    ============================================================ */

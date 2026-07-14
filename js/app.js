@@ -476,9 +476,18 @@
       const themeIcon  = computed(() => ({ auto:'◐', light:'☀', dark:'☾' })[themeMode.value] || '◐');
       const themeLabel = computed(() => ({ auto:'跟隨系統', light:'亮色', dark:'暗色' })[themeMode.value] || '?');
 
+      // 架構檢閱 #4:接住 registry.js 裝的全站 LS 容量超限事件,statusbar 顯示明確中文提示
+      // (取代原本各處「localStorage 寫入失敗」這種看不出原因的訊息)。
+      function _onLsQuotaExceeded(ev) {
+        const key = (ev && ev.detail && ev.detail.key) || '';
+        console.warn('[app] localStorage 容量已滿:', key);
+        setStatus('err', '瀏覽器儲存空間已滿,剛才的變更可能沒存到;請清除符號圖片/範本或釜底抽薪清掉舊資料後再試');
+      }
+
       onMounted(() => {
         initColSettings();
         setupBusListeners();
+        window.addEventListener('sp:ls-quota-exceeded', _onLsQuotaExceeded);
         // 初始套用主題(讀 LS 或跟隨系統)
         _applyTheme(themeMode.value);
         if (window.matchMedia) {

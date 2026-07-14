@@ -1221,8 +1221,9 @@
                   </button>
                 </div>
                 <div class="cfg-cv-stage" :class="{ 'is-pan': cvMode==='pan' }" ref="cvStageRef"
+                     tabindex="0" @keydown="cvKeydown" @focus="cvFocusInit"
                      @contextmenu.prevent="cvContextMenu($event)" @pointerdown="cvPanStart" @pointermove="cvPanMove" @pointerup="cvStageUp()" @pointerleave="cvStageUp()"
-                     title="中鍵拖曳可平移畫布(也可直接捲動)">
+                     title="中鍵拖曳可平移畫布(也可直接捲動);點一下取得焦點後可用方向鍵移動、Enter/Space 套用、數字鍵 1–5 切換工具">
                   <!-- v7.x（C）:R 欄標籤 + 網格包在同一個置中容器,標籤與網格同欄寬、隨盤面欄一起浮動平移。 -->
                   <div class="cfg-cv-board">
                     <div class="cfg-cv-collabels" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)' }">
@@ -1232,7 +1233,7 @@
                     <div class="cfg-cv-grid" @pointermove="cvGridMove" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
                       <div v-for="cell in cvGrid" :key="cell.key"
                            class="cfg-cv-cell"
-                           :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', (cvRubberSet && cvRubberSet.has(cell.key)) ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '', cell.sel ? 'cfg-cv-cell-sel' : '', cell.cellSel ? 'cfg-cv-cell-cellsel' : '', cell.pcellSel ? 'cfg-cv-cell-psel' : '', cell.dragT ? ('cfg-cv-cell-drag' + cell.dragT) : '', cell.flt ? 'cfg-cv-cell-flt' : '' ]"
+                           :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', (cvRubberSet && cvRubberSet.has(cell.key)) ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '', cell.sel ? 'cfg-cv-cell-sel' : '', cell.cellSel ? 'cfg-cv-cell-cellsel' : '', cell.pcellSel ? 'cfg-cv-cell-psel' : '', cell.dragT ? ('cfg-cv-cell-drag' + cell.dragT) : '', cell.flt ? 'cfg-cv-cell-flt' : '', (cell.key === cvFocusKey) ? 'cfg-cv-cell-kbfocus' : '' ]"
                            @pointerdown.prevent="cvCellDown(cell, $event)" @dblclick.prevent="cvCellDbl(cell)"></div>
                     </div>
                   </div>
@@ -1261,6 +1262,7 @@
                 </span>
                 <span class="cfg-cv-railhint" v-if="!cvDirty && cvMode==='pan'">＊預設為移動工具,選一支筆刷開始編輯</span>
                 <span class="cfg-cv-railhint" v-if="activePanelIdx >= 0 && (cvMode==='add' || cvMode==='cancel')">◈ 副盤編輯中:＋加格 / 取消 → 套用後成遮罩（點空白處或選整輪可離開）</span>
+                <span class="cfg-cv-railhint" title="點一下畫布取得焦點即可使用">⌨ 方向鍵移動・Enter/Space 套用・1–5 切工具</span>
                 <span class="cfg-cv-fx"></span>
                 <button class="cfg-cv-act" @click="cvResetView()" title="把畫布捲回盤面中央(中鍵拖曳可平移)">⊕ 置中視圖</button>
                 <button class="cfg-cv-act" @click="cvDiscard()" :disabled="!cvDirty" title="捨棄畫布上未套用的編輯,還原成目前盤面">↺ 捨棄</button>
@@ -5577,6 +5579,24 @@
                       <div class="cfg-hint">此模式的補盤軌道;留空 = 沿用全域「補盤路徑」。軌道於 02_Layout 頁定義。</div>
                     </div>
 
+                    <!-- 架構檢閱 #6:消除連鎖(Cascade / Tumble)結構化宣告 -->
+                    <div class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">消除連鎖(Cascade)<span class="cfg-key">cascade_enabled</span></label>
+                      <div class="cfg-chip-row">
+                        <button class="cfg-chip cfg-chip-sm" :class="{ active: m.cascade_enabled === true }"
+                                @click="m.cascade_enabled = true">開</button>
+                        <button class="cfg-chip cfg-chip-sm" :class="{ active: m.cascade_enabled !== true }"
+                                @click="m.cascade_enabled = false">關</button>
+                      </div>
+                      <div v-if="m.cascade_enabled" class="cfg-field" style="margin-top:6px;">
+                        <label class="cfg-label">連鎖深度上限覆寫(可選) <span class="cfg-key">cascade_max_depth</span></label>
+                        <input class="input input-sm cfg-mono" type="number" min="0" step="1"
+                               v-model.number="m.cascade_max_depth" style="width:100px;" placeholder="0">
+                        <div class="cfg-hint">0 = 沿用全域「連鎖深度上限」(01_Global.max_chain_depth)。</div>
+                      </div>
+                      <div class="cfg-hint">此模式是否走消除掉落 / 補位連鎖迴圈(Cascading / Tumbling / Avalanche)。實際消除規則(何時消除、如何補位)仍以「規則」頁的 BOARD_DESTROY / BOARD_FILL 拼圖規則為準;此旗標只是讓文件與下游一眼確認遊戲類型,不取代規則。</div>
+                    </div>
+
                     <!-- v8.22 / G3:Hold&Win 設定面(常見收集玩法走設定;罕見互動走 G1 拼圖)-->
                     <div class="cfg-field" style="margin-top:8px;">
                       <label class="cfg-label">Hold&amp;Win 收集設定 <span class="cfg-key">collect_*</span></label>
@@ -6537,6 +6557,54 @@
             </div>
             <button class="cfg-action-add-btn" style="margin-top:6px;" @click="addJackpotTier">＋ 新增級距</button>
           </div>
+        </div>
+
+        <!-- 架構檢閱 #21:收集條 / 進度條(拼圖式機制原生只能描述單次事件→單次動作,
+             收集條類玩法需要跨局/跨消除持續累積的狀態,故獨立成第一級描述)。 -->
+        <div class="cfg-section" style="margin-top:14px;">
+          <details class="cfg-section-collapsible" :open="meters.length > 0">
+            <summary class="cfg-section-title">收集條 / 進度條 <span class="cfg-key">21_Collection_Meters</span></summary>
+            <div class="cfg-hint">
+              跨局/跨消除持續累積的進度條(如 Scatter 收集、金幣計量)。填充來源命中一次累積 Fill_Amount,
+              到 Capacity 即視為集滿(0 = 無上限,純計數不觸發集滿動作)。純描述,本工具不模擬累積時機,執行交下游。
+            </div>
+            <div v-if="meters.length === 0" class="cfg-hint" style="margin:4px 0;">尚無收集條。</div>
+            <div v-for="(mt, mi) in meters" :key="mt.meter_id || mi" class="cfg-field cfg-field-compact cfg-reveal-zone" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+              <span class="cfg-key" style="min-width:52px;">{{ mt.meter_id }}</span>
+              <input class="input input-sm" type="text" v-model.trim="mt.label" placeholder="顯示名(如:糖果收集條)" style="width:160px;">
+              <input class="input input-sm cfg-mono" type="text" v-model.trim="mt.mode_scope" placeholder="ALL 或 NG,FG1" title="生效模式:ALL 或逗號多選" style="width:110px;">
+              <input class="input input-sm cfg-mono" type="text" v-model.trim="mt.fill_source" placeholder="填充來源:symbol_id 或條件式" style="flex:1; min-width:180px;" title="慣例填 symbol_id(如 SCAT)或條件式(沿用規則頁 DSL 語彙)">
+              <span class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">每次+</span>
+                <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="mt.fill_amount" style="width:64px;">
+              </span>
+              <span class="cfg-bonus-icell">
+                <span class="cfg-bonus-ilabel">容量</span>
+                <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="mt.capacity" style="width:64px;" title="0 = 無上限(純計數)">
+              </span>
+              <select class="input input-sm" v-model="mt.reset_scope" style="width:110px;" title="歸零範圍">
+                <option v-for="rs in METER_RESET_SCOPES" :key="'mrs'+rs" :value="rs">{{ rs }}</option>
+              </select>
+              <input class="input input-sm" type="text" v-model.trim="mt.on_full_action" placeholder="集滿動作(如 AWARD_FREE_SPIN)" style="flex:1; min-width:160px;">
+              <select class="input input-sm" v-model="mt.link_jackpot" style="width:130px;" title="集滿連動的彩池">
+                <option value="">(不連動彩池)</option>
+                <option v-for="j in jackpots" :key="'mtjp'+j.jp_id" :value="j.jp_id">{{ j.jp_id }}{{ j.name ? '·'+j.name : '' }}</option>
+              </select>
+              <label class="chk" title="切換模式時是否延續累積(否=視同離開此收集條情境)">
+                <input type="checkbox" v-model="mt.carry_over">
+                <span class="box"></span>
+                <span>跨模式延續</span>
+              </label>
+              <input class="input input-sm" type="text" v-model="mt.notes" placeholder="備註" style="flex:1; min-width:120px;">
+              <button class="btn-pill" @click="duplicateMeter(mi)" title="複製此收集條">⧉ 複製</button>
+              <button class="cfg-mode-delete-btn cfg-reveal" @click="removeMeter(mi)" title="刪除此收集條">✕</button>
+              <div v-if="meterWarn(mt)" class="cfg-warn cfg-warn-inline" style="width:100%;">{{ meterWarn(mt) }}</div>
+            </div>
+            <button class="cfg-mode-add-btn" @click="addMeter">
+              <span style="font-size:16px">+</span>
+              <span>新增收集條</span>
+            </button>
+          </details>
         </div>
       </div><!-- /gamble -->
 

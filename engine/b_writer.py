@@ -398,6 +398,10 @@ def _write_config_echo(wb: Workbook, cfg: "AConfig"):
         ("puzzle_rule_count",   len(cfg.puzzle_rules)),
         ("discard_rule_count",  len(cfg.discard_rules)),
         ("mode_count",          len(cfg.modes)),
+        ("meter_count",         len(cfg.meters)),  # 架構檢閱 #21:收集條 / 進度條
+        # 架構檢閱 #6:消除連鎖 / 特殊 Wild 分類的宣告面 — 供快速確認設定是否吃到新欄
+        ("cascade_mode_count",       sum(1 for m in cfg.modes.values() if m.cascade_enabled)),
+        ("wild_behavior_symbol_count", sum(1 for s in cfg.symbols.values() if s.wild_behavior)),
     ]
 
     for r, (k, v) in enumerate(params, 2):

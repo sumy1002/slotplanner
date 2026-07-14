@@ -47,6 +47,7 @@ from core.schemas import (
     ConfigValidationError,
     RTPVariant, GambleConfig, CellAttr,
     JackpotTier,
+    MeterDef,
     ReelLink,
     Track,
     ModeGridRange,
@@ -179,6 +180,9 @@ def load_a_config(path: str | Path) -> AConfig:
 
     # v8.25 / G4:19_Jackpot_Tiers(獎池級距 + 觸發方式)。選用,舊檔 → []。
     cfg.jackpot_tiers, cfg.jackpot_trigger = _parse_jackpot_tiers(sheets.get('19_Jackpot_Tiers'))
+
+    # 架構檢閱 #21:21_Collection_Meters(收集條 / 進度條)。選用,舊檔 → []。
+    cfg.meters = _parse_meters(sheets.get('21_Collection_Meters'))
 
     # 全分頁交叉驗證
     _cross_validate(cfg)
@@ -904,6 +908,13 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
             except (TypeError, ValueError):
                 _mm_num = float("nan")
             min_match_val = int(round(_mm_num)) if (pd.notna(_mm_num) and _mm_num >= 1) else 3
+            # 架構檢閱 #6:Wild_Behavior(尾端新欄;缺欄/空 → "" 標準 Wild;非法值 → 報錯)
+            wb_raw = _to_str(r.get("Wild_Behavior")).strip().upper()
+            if wb_raw and wb_raw not in _VALID_WILD_BEHAVIORS:
+                raise ConfigValidationError(
+                    sheet,
+                    f"Wild_Behavior '{wb_raw}' 非合法值({'/'.join(_VALID_WILD_BEHAVIORS)} 或留空)",
+                    row=idx + 2)
             sym = SymbolDef(
                 symbol_id=sid,
                 display_name=str(r.get("Display_Name") or sid),
@@ -920,6 +931,7 @@ def _parse_symbols(df: pd.DataFrame) -> dict[str, SymbolDef]:
                 min_match=min_match_val,                          # P0-2(缺欄 / ≤0 → 3)
                 group_id=_to_str(r.get("Group_ID")).strip(),      # P0-3(缺欄 → "")
                 mega_sizes=_to_str(r.get("Mega_Sizes")).strip(),  # v8.35 GAP-H1(缺欄 → "";原樣字串)
+                wild_behavior=wb_raw,                             # 架構檢閱 #6(缺欄 → "")
             )
             out[sid] = sym
         except (ValueError, KeyError) as e:
@@ -1100,6 +1112,52 @@ def _parse_jackpot_tiers(df) -> tuple[list["JackpotTier"], str]:
             notes=_to_str(r.get("Notes")).strip(),
         ))
     return tiers, trigger
+
+
+def _parse_meters(df) -> list["MeterDef"]:
+    """架構檢閱 #21:21_Collection_Meters(收集條 / 進度條)。
+
+    additive 契約:sheet 不存在 → [](安全降級)。by-name .get 讀、缺欄安全降級。
+    純描述,引擎不消費;累積 / 歸零時機由下游模擬工具依欄位定義實作。Meter_ID 空列略過。
+    """
+    sheet = "21_Collection_Meters"
+    out: list["MeterDef"] = []
+    if df is None:
+        return out
+    for idx, r in df.iterrows():
+        mid = _to_str(r.get("Meter_ID")).strip()
+        if not mid:
+            continue
+        try:
+            fill_amount = float(r.get("Fill_Amount", 1) or 1)
+        except (TypeError, ValueError):
+            fill_amount = 1.0
+        try:
+            capacity = float(r.get("Capacity", 0) or 0)
+        except (TypeError, ValueError):
+            capacity = 0.0
+        rs_raw = _to_str(r.get("Reset_Scope")).strip().upper()
+        reset_scope = ResetScope.FEATURE
+        if rs_raw:
+            try:
+                reset_scope = ResetScope(rs_raw)
+            except ValueError:
+                raise ConfigValidationError(
+                    sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE 或留空)", row=idx + 2)
+        out.append(MeterDef(
+            meter_id=mid,
+            label=_to_str(r.get("Label")).strip(),
+            mode_scope=_to_str(r.get("Mode_Scope")).strip() or "ALL",
+            fill_source=_to_str(r.get("Fill_Source")).strip(),
+            fill_amount=fill_amount,
+            capacity=capacity,
+            reset_scope=reset_scope,
+            on_full_action=_to_str(r.get("On_Full_Action")).strip(),
+            link_jackpot=_to_str(r.get("Link_Jackpot")).strip(),
+            carry_over=_to_bool(r.get("Carry_Over")),
+            notes=_to_str(r.get("Notes")).strip(),
+        ))
+    return out
 
 
 def _parse_reel_weights(
@@ -1733,6 +1791,8 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
 _VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION")
 _VALID_RESPIN_RESET = ("NEW_SYMBOL", "ANY_WIN", "NEVER")   # v8.5:Respin_Reset_On 合法值(另可留空)
 _VALID_PAY_TYPES = ("LINE", "WAYS", "SCATTER", "CLUSTER")   # v8.7 A-2:Pay_Type_Override 合法值(另可留空=繼承)
+# 架構檢閱 #6:Wild_Behavior 合法值(另可留空 = 標準 Wild,無特殊分類)
+_VALID_WILD_BEHAVIORS = ("EXPANDING", "WALKING", "STICKY", "MULTIPLIER")
 
 
 def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
@@ -1831,6 +1891,10 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 # v8.28 / 缺口C:此模式的倍數複合覆寫(缺欄/空 → "";純描述引擎不消費)
                 mult_compose_override=_to_str(r.get("Mult_Compose_Override")).strip().upper(),
                 refill_track_override=_to_str(r.get("Refill_Track_Override")).strip(),   # v8.39(缺欄 → "")
+                # 架構檢閱 #6:消除連鎖(Cascade)結構化宣告(by-name .get;缺欄 → False/0,安全降級;
+                #   純描述,引擎不消費;cascade_max_depth=0 代表沿用 GlobalConfig.max_chain_depth)
+                cascade_enabled=_to_bool(r.get("Cascade_Enabled")),
+                cascade_max_depth=int(r.get("Cascade_Max_Depth", 0) or 0),
             )
         except ConfigValidationError:
             raise

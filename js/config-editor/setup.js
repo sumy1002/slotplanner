@@ -1599,6 +1599,10 @@
         if (m.row_max == null) m.row_max = 0;
         if (!Array.isArray(m.reel_ranges)) m.reel_ranges = [];
         if (m.grid_explicit == null) m.grid_explicit = false;
+        // 架構檢閱 #6:消除連鎖(Cascade)結構化宣告(additive;makeMode 在 helpers 凍結,此處補預設)。
+        //   cascade_enabled=此模式是否走消除補位迴圈;cascade_max_depth=0 沿用全域 max_chain_depth。
+        if (m.cascade_enabled == null) m.cascade_enabled = false;
+        if (m.cascade_max_depth == null) m.cascade_max_depth = 0;
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1809,6 +1813,10 @@
           });
           // v8.44 / C-2:面板作動模式 csv(欄名 active_modes)一併盤點
           panels.forEach(pp => { if (_hasTok(pp && pp.active_modes)) refs++; });
+          // R-H1 修補:符號(registry)mode_scope 一併盤點,警告文字才會反映真實孤兒數
+          if (registry && typeof registry.symbols === 'function') {
+            registry.symbols().forEach(s => { if (_hasTok(s && s.mode_scope)) refs++; });
+          }
           const _escN = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const _dslRe = new RegExp(
             '\\bmode\\s*==\\s*' + _escN + '\\b|\\bmode\\s+in\\s+\\[[^\\]]*\\b' + _escN + '\\b[^\\]]*\\]');
@@ -1817,7 +1825,7 @@
           for (const x of modes)    { if (x !== m && x.trigger_condition && _dslRe.test(x.trigger_condition)) refs++; }
         } catch (e) { /* 盤點失敗不擋刪除 */ }
         const extra = (name && refs)
-          ? `\n\n注意:仍有 ${refs} 筆設定(規則/棄牌/約束/產牌限制/格子屬性/JP/家族/條件)參照「${name}」。\n刪除後不會自動清理這些參照;之後以原名重建模式即可復原對應。`
+          ? `\n\n注意:仍有 ${refs} 筆設定(規則/棄牌/約束/產牌限制/格子屬性/JP/家族/條件/符號)參照「${name}」。\n刪除後不會自動清理這些參照;之後以原名重建模式即可復原對應。`
           : '';
         if (!confirm(`確定要刪除模式「${name || '(未命名)'}」嗎?${extra}`)) return;
         modes.splice(idx, 1);
@@ -1905,6 +1913,23 @@
         [rules, discards, constraints, genLimits, cellAttrs, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
           if (Array.isArray(arr)) arr.forEach(_renScope);
         });
+        // 3b-1b) R-H1 修補:符號(registry)mode_scope 逗號名單一併重寫。
+        //   symbols 不在上面的陣列清單內(存於 SymbolRegistry,非本元件的 reactive 容器),
+        //   改名前若有符號 mode_scope 指到 old,改名後會變成幽靈模式參照,故獨立處理。
+        if (registry && typeof registry.symbols === 'function') {
+          try {
+            const allSyms = registry.symbols();
+            let symChanged = false;
+            for (const s of allSyms) {
+              if (!s.mode_scope || s.mode_scope === 'ALL') continue;
+              const parts = String(s.mode_scope).split(',').map(x => x.trim()).filter(Boolean);
+              let changed = false;
+              const next = parts.map(p => (p === old ? (changed = true, newName) : p));
+              if (changed) { s.mode_scope = Array.from(new Set(next)).join(','); symChanged = true; }
+            }
+            if (symChanged) registry.applyAll(allSyms, registry.swatchMap());
+          } catch (e) { /* 不擋改名流程 */ }
+        }
         // 3b-2) v8.44 / C-2 R-H1:面板作動模式 csv(欄名 active_modes,與 _renScope 同式重寫)
         for (const pp of panels) {
           if (!pp || !pp.active_modes) continue;
@@ -2256,6 +2281,11 @@
         return labels;
       });
       const cvSelCell = ref(null);   // Board v2 §7.3:雙擊選中的單格 { key, col, row, reel }
+      // 架構檢閱 #3:畫布鍵盤導覽的焦點格({col,row});方向鍵移動、Enter/Space 套用當前工具。
+      // 獨立成輕量 ref + cvFocusKey computed(仿 cvRubberSet 的作法),不進 cvGrid(400 格陣列)本體,
+      // 避免每次移動焦點都重算整個 cvGrid。
+      const cvFocusCell = ref({ col: 0, row: 0 });
+      const cvFocusKey = computed(() => cvFocusCell.value.col + ',' + cvFocusCell.value.row);
       const cvSubOwner = ref(new Map());   // Board v2 P3a:canvas sub 格 key → 所屬 panel index(cvLoadFromBoard 建)
       const cvSelCols = computed(() => {
         const usedCols = [...new Set(cvMain.value.map(k => Number(String(k).split(',')[0])))].sort((a, b) => a - b);
@@ -2522,6 +2552,70 @@
         });
       }
       function cvSetMode(m) { cvMode.value = m; cvSelCell.value = null; }
+      // ════════════════════════════════════════════════════════
+      //  架構檢閱 #3:畫布鍵盤導覽
+      //  方向鍵移動焦點格 → Enter/Space 對焦點格套用當前工具(等同左鍵單擊該格,
+      //  重用 cvUp() 既有的 select/marquee/add/cancel 分支,零邏輯分裂)。
+      //  數字鍵 1–5 對應工具列由左到右順序(箭頭/框選/新增/取消/移動)。
+      // ════════════════════════════════════════════════════════
+      const CV_TOOL_KEYS = { '1': 'select', '2': 'marquee', '3': 'add', '4': 'cancel', '5': 'pan' };
+      function _cvClampFocus(col, row) {
+        return {
+          col: Math.max(0, Math.min(cvCols.value - 1, col)),
+          row: Math.max(0, Math.min(cvRows.value - 1, row)),
+        };
+      }
+      // 焦點格捲出可視範圍時,把畫布捲動到剛好露出該格(不像 cvResetView 整體置中,只做最小捲動)
+      function _cvScrollFocusIntoView() {
+        try {
+          const el = cvStageRef.value;
+          if (!el) return;
+          const { col, row } = cvFocusCell.value;
+          const step = cvCell.value + CV_GAP;
+          const x = col * step, y = row * step;
+          if (x < el.scrollLeft) el.scrollLeft = x - CV_GAP;
+          else if (x + cvCell.value > el.scrollLeft + el.clientWidth) el.scrollLeft = x + cvCell.value - el.clientWidth + CV_GAP;
+          if (y < el.scrollTop) el.scrollTop = y - CV_GAP;
+          else if (y + cvCell.value > el.scrollTop + el.clientHeight) el.scrollTop = y + cvCell.value - el.clientHeight + CV_GAP;
+        } catch (e) { /* no-op */ }
+      }
+      // Enter/Space:對焦點格模擬一次「單擊放開」(_cvDown 為本函式作用域內的既有拖曳旗標,
+      // 與滑鼠路徑共用同一段 cvUp() 判斷邏輯,鍵盤 / 滑鼠行為保證一致、不會分岔維護)。
+      function cvActivateFocusCell() {
+        if (cvMode.value === 'pan') {
+          emit('status', { type: 'info', msg: '移動工具沒有編輯動作;按 1–4 切換箭頭/框選/新增/取消' });
+          return;
+        }
+        const cell = cvFocusCell.value;
+        _cvDown = true;
+        _cvStart = { col: cell.col, row: cell.row };
+        _cvCur = _cvStart;
+        cvRubber.value = _cvRect(_cvStart, _cvCur);
+        cvUp();
+      }
+      // 畫布取得鍵盤焦點時(如 Tab 進來或點擊空白處),把焦點格重置到目前盤面外接框中心,
+      // 避免使用者一開始就要從畫布左上角(0,0)一路按方向鍵才能走到盤面上。
+      function cvFocusInit() {
+        const bb = _cvBoardBBox();
+        const col = bb ? Math.round(bb.minC + bb.bw / 2) : Math.floor(cvCols.value / 2);
+        const row = bb ? Math.round(bb.minR + bb.bh / 2) : Math.floor(cvRows.value / 2);
+        cvFocusCell.value = _cvClampFocus(col, row);
+      }
+      function cvKeydown(ev) {
+        if (ev.altKey || ev.ctrlKey || ev.metaKey) return;   // 讓瀏覽器/其他快捷鍵正常運作
+        const tool = CV_TOOL_KEYS[ev.key];
+        if (tool) { ev.preventDefault(); cvSetMode(tool); return; }
+        const delta = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[ev.key];
+        if (delta) {
+          ev.preventDefault();
+          const cur = cvFocusCell.value;
+          cvFocusCell.value = _cvClampFocus(cur.col + delta[0], cur.row + delta[1]);
+          _cvScrollFocusIntoView();
+          return;
+        }
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cvActivateFocusCell(); return; }
+        if (ev.key === 'Escape') { ev.preventDefault(); cvSelCell.value = null; cvSetMode('select'); return; }
+      }
       // Board v2 §7.3:雙擊主輪格 → 開單格卡(僅箭頭工具下;顯示所屬輪 / 座標 + 前往規則 + 取消格開關)
       function cvCellDbl(cell) {
         if (cvMode.value !== 'select') return;
@@ -5433,7 +5527,72 @@
         tracks.push(_normTrack({ track_id: id, scope: 'MAIN', cells: '', entry: 'START', notes: '' }));
       }
       function removeTrack(idx) { if (idx >= 0 && idx < tracks.length) tracks.splice(idx, 1); }
-      // Board v2 §6:反轉軌道方向(反轉座標序列;首 / 尾入口語意隨之翻面)
+      // ── 架構檢閱 #21:收集條 / 進度條(Collection Meters)──
+      //   新 LS key slotplanner.aconfig.meters.v1(比照 tracks/reelLinks 慣例,已納入
+      //   aconfig-xlsx 快照/還原);A.xlsx 對應新表 21_Collection_Meters(additive;
+      //   舊檔無此 sheet → loader 降級 [] = 無收集條)。
+      //   拼圖式機制原生只能描述「單次事件觸發單次動作」,收集條類玩法(Sweet Bonanza
+      //   Scatter 收集、Money Train 計量、任何「累積到 N 才觸發」的橫向進度條)需要
+      //   跨局/跨消除持續累積的狀態,硬塞進單一 PuzzleRule 得另開隱藏全域變數 + 多條規則
+      //   湊「累積」與「歸零」語意。MeterDef 把它變成第一級描述:填充來源 + 容量 +
+      //   歸零範圍 + 集滿動作,四個欄位講完。純描述,本工具引擎不消費。
+      const METERS_LS_KEY = 'slotplanner.aconfig.meters.v1';
+      const METER_RESET_SCOPES = ['CASCADE', 'SPIN', 'FEATURE'];
+      function _normMeter(m) {
+        m = (m && typeof m === 'object') ? m : {};
+        return {
+          meter_id:       (m.meter_id != null ? String(m.meter_id).trim() : ''),
+          label:          (m.label != null ? String(m.label) : ''),
+          mode_scope:     (m.mode_scope != null && String(m.mode_scope).trim()) ? String(m.mode_scope).trim() : 'ALL',
+          fill_source:    (m.fill_source != null ? String(m.fill_source).trim() : ''),
+          fill_amount:    Number(m.fill_amount) || 1,
+          capacity:       Number(m.capacity) || 0,
+          reset_scope:    (METER_RESET_SCOPES.includes(String(m.reset_scope).toUpperCase()) ? String(m.reset_scope).toUpperCase() : 'FEATURE'),
+          on_full_action: (m.on_full_action != null ? String(m.on_full_action).trim() : ''),
+          link_jackpot:   (m.link_jackpot != null ? String(m.link_jackpot).trim() : ''),
+          carry_over:     !!m.carry_over,
+          notes:          (m.notes != null ? String(m.notes) : ''),
+        };
+      }
+      function _loadMeters() {
+        try {
+          const raw = localStorage.getItem(METERS_LS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(_normMeter) : [];
+        } catch (e) { return []; }
+      }
+      const meters = reactive(_loadMeters());
+      function addMeter() {
+        const taken = new Set(meters.map(m => m.meter_id).filter(Boolean));
+        let i = meters.length + 1;
+        let id = `MT${String(i).padStart(3, '0')}`;
+        while (taken.has(id)) { i++; id = `MT${String(i).padStart(3, '0')}`; }
+        meters.push(_normMeter({ meter_id: id, label: '', mode_scope: 'ALL', fill_amount: 1, capacity: 10, reset_scope: 'FEATURE' }));
+        emit('status', { type: 'ok', msg: `已新增收集條 ${id}` });
+      }
+      function removeMeter(idx) {
+        if (idx < 0 || idx >= meters.length) return;
+        const id = meters[idx].meter_id;
+        meters.splice(idx, 1);
+        emit('status', { type: 'ok', msg: `已刪除收集條「${id}」` });
+      }
+      // 軟性 lint(警示不阻擋):容量非正數(0 合法 = 無上限純計數,不算警示)+ 填充來源空白
+      function meterWarn(m) {
+        if (!m) return '';
+        if (!String(m.fill_source || '').trim()) return '⚠ 尚未設定填充來源(符號 ID 或條件式)';
+        if (Number(m.capacity) < 0) return '⚠ 容量不可為負數';
+        return '';
+      }
+      // Board v2 §6 同款複製:插在原列後,ID 另編避免撞號
+      function duplicateMeter(idx) {
+        if (idx < 0 || idx >= meters.length) return;
+        const taken = new Set(meters.map(m => m.meter_id).filter(Boolean));
+        let i = meters.length + 1;
+        let id = `MT${String(i).padStart(3, '0')}`;
+        while (taken.has(id)) { i++; id = `MT${String(i).padStart(3, '0')}`; }
+        meters.splice(idx + 1, 0, _normMeter({ ...meters[idx], meter_id: id }));
+      }
+      // Board v2:反轉軌道方向(反轉座標序列;首 / 尾入口語意隨之翻面)
       function reverseTrack(idx) {
         if (idx < 0 || idx >= tracks.length) return;
         const parts = String(tracks[idx].cells || '').split(';').map(s => s.trim()).filter(Boolean);
@@ -8972,6 +9131,9 @@
                 unlock_requires:        asStr(C11(row, 'Unlock_Requires')).split(',').map(s => s.trim()).filter(Boolean),
                 mult_compose_override:  asStr(C11(row, 'Mult_Compose_Override')).trim().toUpperCase(),
                 refill_track_override:   asStr(C11(row, 'Refill_Track_Override')).trim(),   // v8.39 GAP-F1(缺欄→'')
+                // 架構檢閱 #6:消除連鎖(Cascade)結構化宣告(舊檔缺欄 → false/0 安全降級)
+                cascade_enabled:   asBool(C11(row, 'Cascade_Enabled')),
+                cascade_max_depth: asNum(C11(row, 'Cascade_Max_Depth'), 0),
                 items: [],          // 由 11c sheet 補(見下)
                 trigger_pays: [],   // 由 11b sheet 補(見下)
               });
@@ -10430,10 +10592,15 @@
           case '中獎線':   return () => savePaylines(paylines.map(p => ({ ...p })));
           case '硬約束':   return () => saveConstraints(constraints.map(c => ({ ...c })));
           case '產牌限制': return () => { saveGenLimits(genLimits.map(g => ({ ...g }))); saveGenConstraints(genConstraints.map(c => ({ ...c }))); };
-          case '格子屬性': return () => { try { localStorage.setItem(CELLATTRS_LS_KEY, JSON.stringify(cellAttrs.map(c => ({ ...c })))); } catch (e) {} };
-          case '符號家族': return () => { try { localStorage.setItem(SYMGROUPS_LS_KEY, JSON.stringify(symbolGroups.map(g => ({ ...g })))); } catch (e) {} };   // P0-3
-          case '輪帶連動': return () => { try { localStorage.setItem(REELLINKS_LS_KEY, JSON.stringify(reelLinks.map(l => ({ ...l })))); } catch (e) {} };   // v8.38 GAP-T1
-          case '軌道':     return () => { try { localStorage.setItem(TRACKS_LS_KEY, JSON.stringify(tracks.map(t => ({ ...t })))); } catch (e) {} };   // v8.39 GAP-F1
+          // 架構檢閱 #4 補充:以下 4 個 saver 原本 try 成功時沒有 return true,
+          // 讓 _flushLabels 的 !saver() 恆為 true → ok 恆 false,使用者存這些分頁
+          // 時永遠看到「localStorage 寫入失敗」(其實有寫成功)、dirty 也卡著不清。
+          // 補 return true(失敗才 return false,交由 safeSetItem 的全域 quota 事件補提示)。
+          case '格子屬性': return () => { try { localStorage.setItem(CELLATTRS_LS_KEY, JSON.stringify(cellAttrs.map(c => ({ ...c })))); return true; } catch (e) { return false; } };
+          case '符號家族': return () => { try { localStorage.setItem(SYMGROUPS_LS_KEY, JSON.stringify(symbolGroups.map(g => ({ ...g })))); return true; } catch (e) { return false; } };   // P0-3
+          case '輪帶連動': return () => { try { localStorage.setItem(REELLINKS_LS_KEY, JSON.stringify(reelLinks.map(l => ({ ...l })))); return true; } catch (e) { return false; } };   // v8.38 GAP-T1
+          case '軌道':     return () => { try { localStorage.setItem(TRACKS_LS_KEY, JSON.stringify(tracks.map(t => ({ ...t })))); return true; } catch (e) { return false; } };   // v8.39 GAP-F1
+          case '收集條':   return () => { try { localStorage.setItem(METERS_LS_KEY, JSON.stringify(meters.map(m => ({ ...m })))); return true; } catch (e) { return false; } };   // 架構檢閱 #21
           case 'Reel 權重': return () => saveReelWeights(JSON.parse(JSON.stringify(reelWeights)));
           case '格數權重': return () => saveGridWeights(JSON.parse(JSON.stringify(gridWeights)));
           case '連爆權重': return () => saveComboWeights(JSON.parse(JSON.stringify(comboWeights)));
@@ -10449,6 +10616,28 @@
           default: return null;
         }
       }
+      // 400ms debounce 到點時真正執行的寫入邏輯,拆成獨立函式讓 flushPendingSaves()
+      // 可以在「立刻」的情境(匯出/跨頁讀取前)重用同一套寫入 + 狀態更新程式碼,
+      // 而不是各自另寫一份 LS 寫入邏輯(否則兩處邏輯會漂移)。
+      function _flushLabels(labels, label) {
+        let ok = true;
+        for (const lb of labels) {
+          const saver = _saverFor(lb);
+          if (saver && !saver()) ok = false;
+        }
+        if (ok) {
+          sourceMode.value = sourceMode.value === 'xlsx' ? 'xlsx' : 'local';
+          dirty.value = false;
+          // #10:LS 寫入成功 → 觸發變更回顧重算
+          changesVersion.value++;
+          // [效能] 健康度檢查與儲存同一拍(防抖)重算,解耦每次編輯的同步成本
+          recomputeValidation();
+          if (label) emit('status', { type: 'ok', msg: `${label} 已自動儲存` });
+        } else {
+          emit('status', { type: 'err', msg: 'localStorage 寫入失敗' });
+        }
+        return ok;
+      }
       function scheduleSave(label) {
         dirty.value = true;
         markTabDirty(label);
@@ -10457,23 +10646,22 @@
         saveTimer = setTimeout(() => {
           const labels = [..._pendingSaves];
           _pendingSaves.clear();
-          let ok = true;
-          for (const lb of labels) {
-            const saver = _saverFor(lb);
-            if (saver && !saver()) ok = false;
-          }
-          if (ok) {
-            sourceMode.value = sourceMode.value === 'xlsx' ? 'xlsx' : 'local';
-            dirty.value = false;
-            // #10:LS 寫入成功 → 觸發變更回顧重算
-            changesVersion.value++;
-            // [效能] 健康度檢查與儲存同一拍(防抖)重算,解耦每次編輯的同步成本
-            recomputeValidation();
-            emit('status', { type: 'ok', msg: `${label} 已自動儲存` });
-          } else {
-            emit('status', { type: 'err', msg: 'localStorage 寫入失敗' });
-          }
+          saveTimer = null;
+          _flushLabels(labels, label);
         }, 400);
+      }
+      // ── 記憶體優先讀取修補(架構檢閱 #2):匯出 A.xlsx / 跨頁讀取 LS 前呼叫此函式,
+      //   強制立即寫完所有還在 400ms 防抖佇列裡的變更,避免「切頁/匯出讀到舊值」
+      //   (根因見 syncGameSpec 旁註解)。無 pending 變更時是 no-op,不影響效能。
+      //   於 onMounted 曝露到 window.SlotPlanner,讓 aconfig-xlsx.js / config-compare.js
+      //   等非本元件模組在讀 LS 前可呼叫。
+      function flushPendingSaves() {
+        if (!saveTimer && _pendingSaves.size === 0) return true;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        const labels = [..._pendingSaves];
+        _pendingSaves.clear();
+        return _flushLabels(labels, null);
       }
       watch(g,            () => scheduleSave('全域設定'), { deep: true });
       watch(modes,        () => scheduleSave('模式設定'), { deep: true });
@@ -10489,6 +10677,7 @@
       watch(symbolGroups, () => scheduleSave('符號家族'), { deep: true });   // P0-3
       watch(reelLinks, () => scheduleSave('輪帶連動'), { deep: true });        // v8.38 GAP-T1
       watch(tracks, () => scheduleSave('軌道'), { deep: true });               // v8.39 GAP-F1
+      watch(meters, () => scheduleSave('收集條'), { deep: true });             // 架構檢閱 #21
       watch(reelWeights,  () => scheduleSave('Reel 權重'), { deep: true });
       watch(gridWeights,  () => scheduleSave('格數權重'), { deep: true });
       watch(comboWeights, () => scheduleSave('連爆權重'), { deep: true });
@@ -11755,6 +11944,8 @@
         window.addEventListener('resize', _onWindowResizeForCanvas);
         // ③d-2 潤飾:曝露規則白話描述函式給圖示頁,rule 列顯示與規則頁完全一致(閉包完整、零漂移)
         try { if (window.SlotPlanner) window.SlotPlanner.humanizeRule = humanizeRule; } catch (e) { /* no-op */ }
+        // 架構檢閱 #2:曝露 flushPendingSaves,讓匯出/比對等跨模組讀 LS 前可強制 flush
+        try { if (window.SlotPlanner) window.SlotPlanner.flushPendingSaves = flushPendingSaves; } catch (e) { /* no-op */ }
         // v6.2 規則#11:消費符號頁帶來的「新增相關約束」意圖
         try {
           const intent = window.SlotPlanner && window.SlotPlanner.pendingConfigIntent;
@@ -12047,6 +12238,8 @@
         cvMode, boardHints, cvCols, cvRows, cvCell, cvDirty, cvMainInvalid, cvRubberSet, cvEditCount,
         cvGrid, cvColLabels,
         cvCellDown, cvCellEnter, cvGridMove, cvUp, cvSetMode, cvClear, cvLoadFromBoard, cvCommit, cvDiscard,
+        // 架構檢閱 #3:畫布鍵盤導覽
+        cvFocusCell, cvFocusKey, cvKeydown, cvActivateFocusCell, cvFocusInit,
         cvSelCell, cvSelCellInMain, cvCellDbl, cvSelCellToggleHole, cvCloseCellCard,
         cvCtx, cvContextMenu, cvCtxClose, cvCtxSelReel, cvCtxCancelCell, cvCtxSelPanel, cvCtxPanelType, cvCtxDelPanel, cvCtxAddPanel, cvCtxAddTrack, cvCtxGoRules,
         cvStageRef, cvPanStart, cvPanMove, cvPanEnd, cvStageUp, cvResetView,
@@ -12277,6 +12470,7 @@
         reelLinks, addReelLink, removeReelLink, reelLinkWarn,   // v8.38 GAP-T1
         tracks, addTrack, removeTrack, reverseTrack, trackCellsWarn, trackOptions, isOrphanTrackRef,
         trackPreviewIdx, trackPreview,   // v8.39 GAP-F1+軌道
+        meters, addMeter, removeMeter, duplicateMeter, meterWarn, METER_RESET_SCOPES,   // 架構檢閱 #21
         addAction, removeAction, moveAction, duplicateAction,
         changeActionAtType, setActionsFromDSL, setActionEditMode,
         buildActionsDSL,

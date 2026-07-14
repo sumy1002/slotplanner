@@ -408,6 +408,15 @@ class SymbolDef:
     #   原樣字串、不解析不求值(抽取語意交下游);"" = 沿用 mega_width/height 單一固定尺寸。
     #   純描述,引擎不消費;is_mega 判定不受此欄影響(維持既有語意)。
     mega_sizes: str = ""
+    # 架構檢閱 #6:Wild 行為分類標籤(規格描述;引擎不消費)。
+    #   拼圖規則系統(PuzzleRule + EXPAND_REEL/WALK/STICKY/ADJUST_MULTIPLIER 等 action)
+    #   已能「執行」特殊 Wild 行為,但要知道「這顆符號是哪種特殊 Wild」得反查整套規則,
+    #   docgen/符號清單無法一眼列出。此欄只是分類標籤,給文件與 UI 快速呈現用;
+    #   實際觸發條件 / 行為細節仍以拼圖規則為權威來源,兩者不衝突、不重複規範。
+    #   "" = 標準 Wild(替代符無特殊行為)/ EXPANDING(擴滿整輪)/ WALKING(走位存續)/
+    #   STICKY(黏著多局)/ MULTIPLIER(攜帶倍數)。is_wild=False 時本欄應為 ""(非 Wild 無此分類)。
+    #   缺欄(舊 A.xlsx)→ ""(安全降級)。
+    wild_behavior: str = ""
 
     @property
     def is_mega(self) -> bool:
@@ -485,6 +494,37 @@ class JackpotTier:
     tier: str = ""            # 層級序號或代號(如 1 / GRAND;自由)
     label: str = ""           # 顯示名(如 GRAND / MAJOR / MINOR / MINI)
     value: float = 0.0        # 級距值(×注額)
+    notes: str = ""
+
+
+# ============================================================
+# 收集條 / 進度條 (MeterDef;架構檢閱 #21;對應 21_Collection_Meters)
+#   拼圖式機制原生描述「單次事件觸發單次動作」(PuzzleRule),但收集條類玩法
+#   (如 Sweet Bonanza 的 Scatter 符號收集、Money Train 的收集計量、任何
+#   「累積到 N 才觸發」的橫向進度條)本質是跨局/跨消除持續累積的狀態機,
+#   硬塞進單一 PuzzleRule 需要額外的隱藏全域變數 + 多條規則湊出「累積」與
+#   「歸零」語意,難以在文件/UI 上一眼看出這是一條收集條。
+#   MeterDef 是這類玩法的第一級（first-class）描述:一條收集條 = 填充來源
+#   + 容量 + 歸零範圍 + 集滿動作,四個欄位講完,取代 3–5 條隱藏 PuzzleRule 的湊法。
+#   純描述,引擎不消費;累積 / 歸零時機由下游模擬工具依此定義實作。
+#   additive:缺 sheet → [];缺欄安全降級。
+# ============================================================
+@dataclass
+class MeterDef:
+    meter_id: str = ""
+    label: str = ""
+    mode_scope: str = "ALL"       # 生效模式(逗號名單;"ALL" = 不限)
+    # 填充來源:寬鬆字串,慣例上填 symbol_id(如 "SCAT")或條件式(沿用 09_Puzzle_Rules
+    # 的 condition DSL 語彙,如 "symbol_count.SCAT >= 1"),下游模擬工具自行決定如何判讀。
+    fill_source: str = ""
+    fill_amount: float = 1.0      # 每次命中 fill_source 累積的量
+    capacity: float = 0.0         # 集滿所需總量;0 = 無上限(純計數,不觸發 on_full)
+    # 歸零範圍(復用 Multipliers.reset_scope 同一組 enum,語意一致:
+    # CASCADE=每次連線中斷即歸零 / SPIN=每局歸零 / FEATURE=整個 feature 全程不歸零)。
+    reset_scope: ResetScope = ResetScope.FEATURE
+    on_full_action: str = ""      # 集滿動作描述(寬鬆字串;可填 ActionType 字面值或自由文字)
+    link_jackpot: str = ""        # 集滿連動的彩池(同構 BonusItem.link_jackpot;""=無)
+    carry_over: bool = False      # 是否跨模式延續(False=切模式即視同離開此收集條情境)
     notes: str = ""
 
 
@@ -890,6 +930,15 @@ class ModeConfig:
     mult_compose_override: str = ""
     # v8.39 / GAP-F1:此模式補盤軌道覆寫("" = 沿用 GlobalConfig.refill_track)。缺欄 → ""。
     refill_track_override: str = ""
+    # 架構檢閱 #6:消除掉落 / 連鎖(Cascade / Tumble / Avalanche)結構化宣告(規格描述;
+    #   引擎不消費、不執行)。拼圖規則系統已能描述整套消除迴圈(BOARD_DESTROY 消除中獎格 →
+    #   BOARD_FILL 補位 → ON_COMBO_STEP/ON_COMBO_END 觸發下一輪判定,GlobalConfig.max_chain_depth
+    #   為全域上限),但「此模式是否走連鎖消除玩法」目前只能靠掃描 BOARD_DESTROY+BOARD_FILL
+    #   規則組合反推,文件/下游工具無法一眼確認遊戲類型。cascade_enabled 補上這個第一級旗標;
+    #   cascade_max_depth 為此模式的連鎖深度上限覆寫(0 = 沿用 GlobalConfig.max_chain_depth,
+    #   常見於基本盤與 Bonus 模式連鎖上限不同的設計)。缺欄(舊 A.xlsx)→ False / 0(安全降級)。
+    cascade_enabled: bool = False
+    cascade_max_depth: int = 0
 
 
 # ============================================================
@@ -974,6 +1023,10 @@ class AConfig:
     #   jackpot_trigger:PROBABILITY(機率)/COLLECT_METER(集滿進度)/TOKEN_COUNT(收滿 N 枚);"" = 未指定。
     jackpot_tiers: list["JackpotTier"] = field(default_factory=list)
     jackpot_trigger: str = ""
+
+    # 架構檢閱 #21:收集條 / 進度條（選用;對應 21_Collection_Meters）。
+    #   純描述,引擎不消費;累積 / 歸零由下游模擬工具依欄位定義實作。舊檔無 sheet → []。
+    meters: list["MeterDef"] = field(default_factory=list)
 
     # ---- 原始 DataFrame 留存 (供 B 文件「A 參數回填」分頁用) ----
     raw_dataframes: dict[str, Any] = field(default_factory=dict)
