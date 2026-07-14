@@ -106,6 +106,14 @@ class ActionType(Enum):
     SWITCH_STRIP       = "SWITCH_STRIP"       # 整帶切換為 04b 變體帶("模式#變體名" 列)
     # ── v8.44 / C-2 GAP-P5:面板動態啟停(描述型;與 02b Active_Modes 靜態域疊加) ──
     PANEL_SET          = "PANEL_SET"          # 副盤啟用/停用(panel=Panel_ID, active=Y|N)
+    # ── v8.49 / 缺口3:計量條容量/當前值動態調整(描述型;本工具不執行) ──
+    #   語意:對指定 meter_id 的 MeterDef 做動態調整,取代「容量寫死」的限制
+    #   (Outlaws Inc Star Box「補星(VALUE_ADD)/開空格(CAPACITY_ADD)」)。
+    #   params:meter_id(對應 21_Collection_Meters 的 meter_id)、
+    #   op(CAPACITY_ADD 容量增量,可負 / CAPACITY_SET 容量直接設定 / VALUE_ADD 當前值增量)、
+    #   value(數值,依 op 語意)。logic_parser 不註冊 handler,容量/當前值追蹤交下游模擬工具實作
+    #   (比照 v8.21 值引擎慣例)。
+    METER_ADJUST       = "METER_ADJUST"       # 計量條容量/當前值調整(Outlaws Inc Star Box)
 
 
 class ConditionOp(Enum):
@@ -799,6 +807,11 @@ class CellAttr:
     value: str = ""               # 屬性值(MULT=倍數;可含區間字串;其餘型式選填)
     mode_scope: str = "ALL"       # ALL 或模式名(逗號分隔)
     notes: str = ""
+    # v8.49 / 缺口4:此格屬性(通常是 attr="MULT")的數值上限,格式與 value 一致(可含區間字串)。
+    #   "" = 無上限(向後相容,行為與舊檔一致)。
+    #   Sugar Rush 式「格位倍數逐次翻倍,封頂128x」即填 cap_value="128"。
+    #   純描述,引擎不消費;封頂判定(MULTIPLY_VALUE 執行到此格時是否還能再翻倍)交下游模擬工具。
+    cap_value: str = ""
 
 
 
@@ -833,6 +846,15 @@ class PuzzleRule:
     #   (描述層;抽選由下游實作。Girl Power 三選一施放式)。"" = 不屬任何隨機組。
     random_group: str = ""
     random_weight: float = 100.0
+    # v8.49 / 缺口1:規則觸發後的「額外機率閘門」(0~1;1.0=100%=現行行為,安全預設)。
+    #   語意:condition 為 True(或 None=無條件)之後,再抽一次 fire_chance 機率骰,
+    #   骰過才真正執行 actions。用於「無可數圖示條件,純機率直觸發」的機制
+    #   (PG Soft Prize Symbol 系列的隨機 Feature 直觸發,如 Fortune Rabbit / Lucky Neko)。
+    #   與 random_group/random_weight 正交:後者是「同組多條規則互斥擇一」,
+    #   fire_chance 是「單條規則要不要真的發生」的獨立貝努利試驗,可疊加使用。
+    #   純描述,引擎不消費;骰子求值與亂數來源交下游模擬工具實作(比照 random_weight 慣例)。
+    #   缺欄(舊 A.xlsx)→ 1.0(安全降級,行為與舊檔一致,不影響既有規則)。
+    fire_chance: float = 1.0
     # v8.21 / G1 價值引擎:persistent 規則層修飾子(★機主拍板:放規則層布林,非動作 params)。
     #   語意=此規則的動作「每回合(spin/respin)重跑」,同時完成界-2 sticky「重跑」。
     #   純描述,引擎不消費;缺欄(舊 A.xlsx)→ False(安全降級,行為與舊檔一致)。

@@ -5685,7 +5685,7 @@
         let i = cellAttrs.length + 1;
         while (taken.has('CA' + i)) i++;
         cellAttrs.push({ attr_id: 'CA' + i, reel: 1, row: 1, attr: 'MULT',
-                         value: '', mode_scope: 'ALL', notes: '' });
+                         value: '', mode_scope: 'ALL', notes: '', cap_value: '' });
       }
       function removeCellAttr(idx) { cellAttrs.splice(idx, 1); }
 
@@ -7935,6 +7935,8 @@
           if (r.random_weight == null || isNaN(Number(r.random_weight))) r.random_weight = 100;
           // v8.28 / 缺口A:補充判斷說明(自由文字;與 description 分離)。makeRule 在 helpers 凍結,此處補預設。
           if (r.notes == null) r.notes = '';
+          // v8.49 / 缺口1:額外機率閘門(舊資料補預設 1.0=100%,行為不變)。makeRule 在 helpers 凍結,此處補預設。
+          if (r.fire_chance == null || isNaN(Number(r.fire_chance))) r.fire_chance = 1;
         }
         return r;
       }
@@ -8980,7 +8982,8 @@
                          attr: asStr(C02d(row, 'Attr')).trim().toUpperCase() || 'MULT',
                          value: asStr(C02d(row, 'Value')).trim(),
                          mode_scope: asStr(C02d(row, 'Mode_Scope')).trim() || 'ALL',
-                         notes: asStr(C02d(row, 'Notes')) });
+                         notes: asStr(C02d(row, 'Notes')),
+                         cap_value: asStr(C02d(row, 'Cap_Value')).trim() });   // v8.49 缺口4
             });
             cellAttrs.splice(0, cellAttrs.length, ...cas);
           }
@@ -9431,6 +9434,7 @@
                   random_weight: C9.has('Random_Weight') ? asNum(C9(row, 'Random_Weight'), 100) : 100,  // v8.4 P5
                   persistent: asBool(C9(row, 'Persistent')),                           // v8.21 G1
                   notes:      asStr(C9(row, 'Notes')).trim(),                          // v8.28 缺口A
+                  fire_chance: C9.has('Fire_Chance') ? asNum(C9(row, 'Fire_Chance'), 1) : 1,  // v8.49 缺口1
                 });
               } else {
                 // 舊 schema:轉換到新 schema 結構

@@ -1666,6 +1666,8 @@ def _parse_cell_attrs(df, layout: LayoutConfig) -> list:
                 value=_v,
                 mode_scope=_to_str(r.get("Mode_Scope")).strip() or "ALL",
                 notes=_to_str(r.get("Notes")),
+                # v8.49 / 缺口4:格位數值上限(缺欄 → "";安全降級,純描述引擎不消費)
+                cap_value=_to_str(r.get("Cap_Value")).strip(),
             ))
         except ConfigValidationError:
             raise
@@ -1741,6 +1743,8 @@ def _parse_puzzle_rules(df: pd.DataFrame) -> list[PuzzleRule]:
                 persistent=_to_bool(r.get("Persistent")),
                 # v8.28 / 缺口A:補充判斷說明(自由文字,給前端/下游;缺欄 → "";純描述引擎不消費)
                 notes=_to_str(r.get("Notes")).strip(),
+                # v8.49 / 缺口1:額外機率閘門(缺欄 → 1.0;安全降級,純描述引擎不消費)
+                fire_chance=float(r.get("Fire_Chance")) if pd.notna(r.get("Fire_Chance")) else 1.0,
             ))
             seen_priorities[(trigger, priority)].append(rule_id)
         except ConfigValidationError:

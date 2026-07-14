@@ -135,6 +135,8 @@
     SYMBOL_SWAP: '輪帶符號置換', SWITCH_STRIP: '輪帶切換',
     // v8.44 / C-2 GAP-P5:面板動態啟停
     PANEL_SET: '面板啟停',
+    // v8.49 / 缺口3:計量條容量/當前值動態調整
+    METER_ADJUST: '計量調整',
   };
   // markdown 表格儲存格跳脫(condition DSL 可能含 || / 換行)
   function _mdCell(v) {
@@ -1125,7 +1127,8 @@
         _cell(wsX, XR, 1, ca.attr_id, { h: 'center' });
         _cell(wsX, XR, 2, `(R${Number(ca.reel) || '?'}, ${Number(ca.row) || '?'})`, { h: 'center' });
         _cell(wsX, XR, 3, _al[String(ca.attr || 'MULT').toUpperCase()] || ca.attr, { h: 'center' });
-        _cell(wsX, XR, 4, (ca.value || '').trim() || '—', { h: 'center' });
+        // v8.49 / 缺口4:上限(cap_value)有值才附註,舊資料(cap_value 缺欄/空)輸出零 diff
+        _cell(wsX, XR, 4, ((ca.value || '').trim() || '—') + ((ca.cap_value || '').trim() ? `(上限${String(ca.cap_value).trim()})` : ''), { h: 'center' });
         _cell(wsX, XR, 5, (ca.mode_scope && ca.mode_scope !== 'ALL') ? ca.mode_scope : '全部', { h: 'center' });
         _cell(wsX, XR, 6, ca.notes || '');
         XR++;
@@ -2920,7 +2923,10 @@
         const at = String(ca.attr || 'MULT').toUpperCase();
         const scope = (ca.mode_scope && ca.mode_scope !== 'ALL') ? ca.mode_scope : '全部';
         const notes = String(ca.notes || '').replace(/\|/g, '\\|');
-        L.push(`| (R${Number(ca.reel) || '?'}, 列 ${Number(ca.row) || '?'}) | ${_attrLabel[at] || at} | ${(ca.value || '').trim() ? _mdCell(String(ca.value)) : '—'} | ${scope} | ${notes} |`);
+        // v8.49 / 缺口4:上限(cap_value)有值才附註,舊資料(cap_value 缺欄/空)輸出零 diff
+        const valCell = (ca.value || '').trim() ? _mdCell(String(ca.value)) : '—';
+        const capSuffix = (ca.cap_value || '').trim() ? `（上限${_mdCell(String(ca.cap_value))}）` : '';
+        L.push(`| (R${Number(ca.reel) || '?'}, 列 ${Number(ca.row) || '?'}) | ${_attrLabel[at] || at} | ${valCell}${capSuffix} | ${scope} | ${notes} |`);
       });
       L.push('');
       L.push('> 位置型格子屬性：固定盤面座標上的乘數 / 強化 / 框格宣告，供實作端遵循；本工具不執行。');
@@ -2967,6 +2973,10 @@
         if (r.random_group) rid += `〔隨機組 ${_mdCell(r.random_group)}｜權重 ${Number(r.random_weight) || 100}〕`;
         // v8.21 / G1:persistent 規則層修飾子標示(每回合重跑)
         if (r.persistent) rid += '〔每回合重跑〕';
+        // v8.49 / 缺口1:額外機率閘門標示(僅非預設 1.0 才印,舊資料零 diff)
+        if (r.fire_chance != null && Number(r.fire_chance) !== 1 && !isNaN(Number(r.fire_chance))) {
+          rid += `〔機率 ${Number(r.fire_chance) * 100}%〕`;
+        }
         const scope = _mdCell(r.mode_scope || 'ALL');
         const trg   = _RULE_TRIGGER_LABEL[r.trigger] || _mdCell(r.trigger || '');
         const cond  = _mdCell(r.condition || '') || '—';
@@ -2976,7 +2986,7 @@
       });
       L.push('');
       L.push('> 特色規則為結構化描述（觸發 / 條件 / 動作），供數值組 / 模擬工具實作時遵循；本工具不執行、不計算 RTP。');
-      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／揭示／分裂／相鄰消除／盤面成長；收集值／直接派彩／值乘算／回補回合／盤面壓實／值/型態轉換）之執行語意由下游模擬工具實作。標記「每回合重跑」（persistent）的規則，其動作於每個 spin／respin 重複套用。');
+      L.push('> 同「隨機組」的規則同時觸發時，依權重隨機擇一執行；描述型動作（擴展整輪／推移／走位／揭示／分裂／相鄰消除／盤面成長／計量調整；收集值／直接派彩／值乘算／回補回合／盤面壓實／值/型態轉換）之執行語意由下游模擬工具實作。標記「每回合重跑」（persistent）的規則，其動作於每個 spin／respin 重複套用；標記「機率 N%」（fire_chance）的規則，於條件成立後再抽一次此機率，骰過才真正觸發（用於無可數圖示條件的純機率直觸發）。');
       L.push('');
     }
     // 棄牌規則(10_Discard_Rules;有資料才輸出)

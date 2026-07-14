@@ -1,3 +1,5 @@
+node_modules/
+
 .agents/skills/find-skills/SKILL.md
 .agents/skills/frontend-design/LICENSE.txt
 .agents/skills/frontend-design/SKILL.md

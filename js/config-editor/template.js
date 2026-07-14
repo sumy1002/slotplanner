@@ -1306,6 +1306,11 @@
               <label class="cfg-label">值 <span class="cfg-key">MULT=倍數</span></label>
               <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="ca.value" placeholder="2">
             </div>
+            <!-- v8.49 / 缺口4:格位數值上限(選用;""=無上限,安全降級;Sugar Rush 式格位倍數封頂用) -->
+            <div class="cfg-bf-cell">
+              <label class="cfg-label">上限(可選) <span class="cfg-key">cap_value</span></label>
+              <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="ca.cap_value" placeholder="128" title="此格屬性數值上限;留空=無上限">
+            </div>
             <div class="cfg-bf-cell">
               <label class="cfg-label">適用模式</label>
               <input class="input input-w-id cfg-mono" type="text" v-model.trim="ca.mode_scope" placeholder="ALL 或 NG,FG1" title="ALL 或逗號多選(任一相符即適用)">
@@ -4051,6 +4056,17 @@
               <input class="input input-w-num" type="number" min="0"
                      v-model.number="rules[selectedRuleIdx].random_weight">
               <div class="cfg-hint">同組內依權重抽選</div>
+            </div>
+
+            <!-- v8.49 / 缺口1:額外機率閘門(condition 之外再抽一次機率骰,才真正觸發;
+                 用於無可數圖示條件的純機率直觸發,如 Fortune Rabbit / Lucky Neko) -->
+            <div class="cfg-field cfg-field-compact">
+              <label class="cfg-label">
+                觸發機率(可選) <span class="cfg-key">fire_chance</span>
+              </label>
+              <input class="input input-w-num" type="number" min="0" max="1" step="0.001"
+                     v-model.number="rules[selectedRuleIdx].fire_chance">
+              <div class="cfg-hint">0~1;1=100%=現行行為。condition 成立後再抽一次此機率骰,骰過才真正執行 actions；與 random_group 正交(可疊加)。</div>
             </div>
           </div>
 

@@ -371,13 +371,16 @@
     {
       const cas = readLS('slotplanner.aconfig.cellattrs.v1', []) || [];
       const wsCA = wb.addWorksheet('02d_Cell_Attributes');
-      wsCA.addRow(['Attr_ID', 'Reel', 'Row', 'Attr', 'Value', 'Mode_Scope', 'Notes']);
+      // v8.49 / 缺口4:尾端 additive 加 Cap_Value(格位數值上限;前 7 欄不動;
+      //          "" = 無上限,安全降級;Sugar Rush 式「格位倍數逐次翻倍,封頂128x」用此欄)。
+      wsCA.addRow(['Attr_ID', 'Reel', 'Row', 'Attr', 'Value', 'Mode_Scope', 'Notes', 'Cap_Value']);
       for (const ca of (Array.isArray(cas) ? cas : [])) {
         if (!ca || !String(ca.attr_id || '').trim()) continue;
         wsCA.addRow([ca.attr_id, Number(ca.reel) || 1, Number(ca.row) || 1,
-                     ca.attr || 'MULT', ca.value || '', ca.mode_scope || 'ALL', ca.notes || '']);
+                     ca.attr || 'MULT', ca.value || '', ca.mode_scope || 'ALL', ca.notes || '',
+                     ca.cap_value || '']);
       }
-      boldHdr(wsCA); setCols(wsCA, [10, 8, 8, 12, 14, 14, 30]);
+      boldHdr(wsCA); setCols(wsCA, [10, 8, 8, 12, 14, 14, 30, 12]);
     }
 
     const wsS = wb.addWorksheet('03_Symbols');
@@ -751,9 +754,11 @@
     // v8.21 / G1:尾端再 additive 加 Persistent(前 10 欄不動;規則層修飾子,每回合重跑)
     // v8.28 / 缺口A:尾端再 additive 加 Notes(補充判斷說明,自由文字;前 11 欄不動)。
     //          與 Description 分離:Description=人看的規則摘要;Notes=給前端/下游的判斷規則。
+    // v8.49 / 缺口1:尾端再 additive 加 Fire_Chance(額外機率閘門;前 12 欄不動;
+    //          1.0=100%=現行行為,安全預設;純機率直觸發如 Fortune Rabbit 用此欄)。
     wsPR.addRow(['Rule_ID', 'Priority', 'Trigger', 'Condition',
                  'Actions', 'Emits', 'Enabled', 'Description',
-                 'Random_Group', 'Random_Weight', 'Persistent', 'Notes']);
+                 'Random_Group', 'Random_Weight', 'Persistent', 'Notes', 'Fire_Chance']);
     const sortedRules = [...rules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
     for (const r of sortedRules) {
       const condition = _composeConditionWithModeScope(r.mode_scope, r.condition);
@@ -774,9 +779,10 @@
         (r.random_group ? (Number(r.random_weight) || 100) : ''),        // v8.4 P5(無組不寫權重)
         r.persistent ? 'TRUE' : 'FALSE',                                 // v8.21 G1(規則層修飾子)
         r.notes || '',                                                   // v8.28 缺口A(補充判斷說明)
+        (r.fire_chance != null ? Number(r.fire_chance) : 1),             // v8.49 缺口1(額外機率閘門)
       ]);
     }
-    boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28, 14, 14, 12, 40]);
+    boldHdr(wsPR); setCols(wsPR, [12, 10, 22, 40, 50, 18, 10, 28, 14, 14, 12, 40, 12]);
 
     // 10_Discard_Rules
     const wsDR = wb.addWorksheet('10_Discard_Rules');

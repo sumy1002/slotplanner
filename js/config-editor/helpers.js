@@ -2750,6 +2750,16 @@
           desc: 'CELL=各格獨立揭示;REEL=同輪佔位統一揭示為同一符號;' +
                 'BOARD=全盤所有佔位統一揭示為同一符號(業界 mystery symbol 標準語意;' +
                 'Gorilla Gold 神祕符 / xBoot xWays / Goonies 神祕金幣)' },
+        // v8.49 / 缺口2:相鄰輪感染擴散(additive 尾端,描述層,引擎不消費;預設不擴散,舊資料零影響)。
+        //   語意:本次 REVEAL_AS 完成後,以 spread_chance 機率對左右 spread_range 輪內、
+        //   仍為未展開的同款佔位符「感染」再觸發一次同一 REVEAL_AS(遞迴,直到骰不中或無鄰輪可感染)。
+        //   取代逐輪對硬編碼座標規則的寫法(Nolimit City Infectious xWays / East Coast vs West Coast)。
+        { key: 'spread', label: '相鄰擴散(可選)', type: 'enum', options: ['', 'ADJACENT_REEL'], default: '',
+          desc: '留空=不擴散(現行行為);ADJACENT_REEL=感染左右相鄰輪的同款佔位符' },
+        { key: 'spread_range', label: '擴散範圍(輪數)', type: 'number', placeholder: '1', default: 1,
+          desc: 'spread=ADJACENT_REEL 時,每次感染波及左右各幾輪;留空=1' },
+        { key: 'spread_chance', label: '每輪擴散機率', type: 'number', dyn: true, placeholder: '0.5',
+          desc: 'spread=ADJACENT_REEL 時,每個候選鄰輪被感染的機率(0~1);純描述,求值交下游' },
       ] },
     { type: 'SPLIT', label: '分裂符號', icon: '🪓',
       desc: '把符號一分為 N(數量翻倍計分;razor split / xSplit)',
@@ -2888,6 +2898,20 @@
         { key: 'panel',  label: '面板', type: 'panel', required: true, placeholder: 'GRID2',
           desc: '02b 的 Panel_ID' },
         { key: 'active', label: '啟停', type: 'enum', options: ['Y', 'N'], default: 'Y', required: true },
+      ] },
+
+    // ── v8.49 / 缺口3:計量條容量/當前值動態調整(描述型;無 handler,語意交下游模擬工具) ──
+    { type: 'METER_ADJUST', label: '計量調整', icon: '📊',
+      desc: '動態調整 21_Collection_Meters 計量條的容量或當前值' +
+            '(取代容量寫死;Outlaws Inc Star Box「補星/開空格」)',
+      params: [
+        { key: 'meter_id', label: '計量條', type: 'text', placeholder: 'STAR_BAR', required: true,
+          desc: '對應 21_Collection_Meters 的 Meter_ID' },
+        { key: 'op', label: '運算', type: 'enum',
+          options: ['CAPACITY_ADD', 'CAPACITY_SET', 'VALUE_ADD'], default: 'VALUE_ADD', required: true,
+          desc: 'CAPACITY_ADD=容量增量(可負)/CAPACITY_SET=容量直接設定/VALUE_ADD=當前值增量' },
+        { key: 'value', label: '數值', type: 'number', dyn: true, placeholder: '1 或 "1-3"', required: true,
+          desc: '固定數、範圍 "1-3"(含引號)、或動態公式;依 op 語意套用' },
       ] },
   ];
   const ACTION_BY_TYPE = Object.fromEntries(ACTION_CATALOG.map(a => [a.type, a]));
