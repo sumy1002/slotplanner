@@ -1117,15 +1117,15 @@
 
 /* ── 左:13 分頁清單 ── */
 .cfg-tabs {
-  width: 220px;
+  width: 196px;                       /* v9.0:工作流主軸收窄,讓右側 Canvas 更寬敞純淨 */
   flex-shrink: 0;
   background: var(--left-pane-bg);
-  border-right: 1px solid var(--glass-edge);
-  padding: 10px 8px;
+  border-right: 0.5px solid var(--glass-edge);  /* v9.0:髮絲邊取代實邊,降線條噪音 */
+  padding: var(--space-3) var(--space-2);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .cfg-tab {
   display: flex;
@@ -1134,19 +1134,21 @@
   padding: 8px 10px;
   border-radius: 10px;
   cursor: pointer;
-  background: var(--input-bg);
+  background: transparent;            /* v9.0:idle 態去底色,只靠 hover/active 才現形,更沉靜 */
   border: 1.5px solid transparent;
+  border-left: 2px solid transparent; /* v9.0:active 指示改用左側細條,取代整塊軟填底 */
   transition: background 0.15s, border-color 0.15s, transform 0.06s;
   position: relative;
 }
 .cfg-tab:hover {
-  background: var(--input-focus);
-  border-color: var(--input-focus-brd);
+  background: var(--glass-3);
+  border-color: transparent;
 }
 .cfg-tab.active {
   background: var(--accent);
   border-color: var(--accent-brd);
-  box-shadow: var(--shadow-md);
+  border-left-color: var(--accent-hex);
+  box-shadow: none;                   /* v9.0:去陰影,純靠底色+左側細條做出「當前」感 */
 }
 .cfg-tab.active .cfg-tab-name {
   color: var(--accent-text);
@@ -1338,7 +1340,7 @@
   font-size: 10px;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-faint);
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
   border-radius: 5px;
@@ -1346,7 +1348,7 @@
 }
 .cfg-hint {
   font-size: 10.5px;
-  color: var(--text-light);
+  color: var(--text-faint);
   margin-top: 4px;
   line-height: 1.45;
 }
@@ -2019,6 +2021,44 @@
   padding: 0 10px !important;
   white-space: nowrap;
 }
+
+/* v9.0 / 硬核工作站:Reel-First Micro-viz — 每列一條迷你分佈柱狀圖,
+   取代純心算比較,一眼讀出這條 Reel 的權重是集中還是分散 */
+.cfg-matrix-spark-head {
+  font-size: 9.5px !important;
+  color: var(--text-faint) !important;
+  background: var(--glass-2);
+}
+.cfg-matrix-spark-cell {
+  background: var(--glass-2);
+  padding: 0 8px !important;
+  vertical-align: middle;
+}
+.cfg-matrix-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 22px;
+  width: 64px;
+}
+.cfg-matrix-spark-bar {
+  flex: 1 1 auto;
+  min-width: 2px;
+  max-width: 6px;
+  border-radius: 1px 1px 0 0;
+  background: rgb(var(--tint-accent) / 0.55);
+  transition: height var(--t-fast), background var(--t-fast);
+}
+.cfg-matrix-spark-bar.is-zero {
+  background: rgb(var(--tint-muted) / 0.30);
+}
+.cfg-matrix-spark-cell:hover .cfg-matrix-spark-bar {
+  background: rgb(var(--tint-accent) / 0.85);
+}
+.cfg-matrix-spark-cell:hover .cfg-matrix-spark-bar.is-zero {
+  background: rgb(var(--tint-muted) / 0.45);
+}
+:root[data-theme="dark"] .cfg-matrix-spark-bar { background: rgb(var(--tint-accent) / 0.65); }
 
 .cfg-matrix-act {
   padding: 0 4px !important;
@@ -6015,6 +6055,16 @@
 .cfg-search-item:hover .cfg-search-item-cat,
 .cfg-search-item.active .cfg-search-item-cat {
   background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+/* v9.0:動作類項目(可直接執行,非單純跳轉)用點綴色標籤區隔,呼應 Raycast 的 action 語彙 */
+.cfg-search-item-cat.is-action {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.cfg-search-item:hover .cfg-search-item-cat.is-action,
+.cfg-search-item.active .cfg-search-item-cat.is-action {
+  background: rgba(255,255,255,0.28);
   color: #fff;
 }
 
@@ -10674,11 +10724,11 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
   /* 釘選態 = 常駐展開(正常流,推開內容 → 點擊跳板) */
   .cfg-tabs.cfg-rail-pinned {
-    width: 220px;
+    width: 196px;                     /* v9.0:與 .cfg-tabs 基準寬度一致(收窄的工作流主軸) */
     transition: width 0.18s cubic-bezier(0.4,0,0.2,1);
   }
   @media (max-width: 1100px) {
-    .cfg-tabs.cfg-rail-pinned { width: 188px; }
+    .cfg-tabs.cfg-rail-pinned { width: 172px; }
   }
 
   /* ── 收合切換鈕(桌面樣式;原本只有行動版有樣式) ── */
@@ -11022,6 +11072,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-key           { font-size: var(--fs-key); }
 #app .cfg-hint          { font-size: var(--fs-hint); }
 #app .cfg-warn          { font-size: var(--fs-hint); }
+/* v9.0:key 徽章 / 說明字屬「雜訊」,刻意反向收斂(不跟隨批2-A 全體放大),
+   讓眼睛在讀卡片時 0.1 秒內自動略過,只抓核心數據與標題 */
+#app .cfg-key  { font-size: 10px; }
+#app .cfg-hint { font-size: 10.5px; }
 #app .input             { font-size: var(--fs-body); }
 #app .input-sm          { font-size: var(--fs-label); }
 #app .cfg-chip          { font-size: var(--fs-label); }
@@ -11044,11 +11098,22 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-style: solid;
   border-color: var(--glass-brd);
   margin-bottom: 16px;
+  /* v9.0:邊框/陰影/透明度統一走 t-slow,聚焦「漸變亮起」與失焦「調淡」共用同一條曲線 */
+  transition: border-color var(--t-slow), box-shadow var(--t-slow), opacity var(--t-slow);
 }
 #app .cfg-section:focus-within,
 #app .cfg-mode-card:focus-within {
   border-color: var(--accent-brd);
   box-shadow: var(--focus-ring), var(--shadow-sm);
+}
+/* v9.0:狀態聚焦 — 畫面上有任一卡片正在編輯時,其餘卡片自動調淡,
+   做出「聚光燈」效果,讓視線只留在使用者正在動手的那一張。
+   範圍鎖在 .cfg-form/.cfg-sticky-form 容器內,不影響彈窗/氣泡等獨立卡片。 */
+#app .cfg-form:has(.cfg-section:focus-within, .cfg-mode-card:focus-within) .cfg-section:not(:focus-within),
+#app .cfg-form:has(.cfg-section:focus-within, .cfg-mode-card:focus-within) .cfg-mode-card:not(:focus-within),
+#app .cfg-sticky-form:has(.cfg-section:focus-within, .cfg-mode-card:focus-within) .cfg-section:not(:focus-within),
+#app .cfg-sticky-form:has(.cfg-section:focus-within, .cfg-mode-card:focus-within) .cfg-mode-card:not(:focus-within) {
+  opacity: 0.72;
 }
 /* 卡片內設定項之間的視覺斷點(僅限直接子層,避免波及 grid 並排欄位) */
 #app .cfg-card-body > .cfg-field + .cfg-field,

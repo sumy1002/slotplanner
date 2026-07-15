@@ -75,6 +75,7 @@
   --text: #e5e9f0;
   --text-light: rgba(229,233,240,0.62);
   --text-muted: rgba(229,233,240,0.40);
+  --text-faint: rgba(229,233,240,0.32);  /* v9.0:暗色 key/hint 淡化階調 */
   --nav-inactive: rgba(229,233,240,0.55);
 
   /* Accent:暗底靛紫 */

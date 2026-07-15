@@ -6531,6 +6531,20 @@
         }
         return s;
       }
+      // v9.0 / 硬核工作站:行內 Micro-viz — 每列(Reel)一條迷你分佈柱狀圖,
+      // 高度依「此列自身最大值」正規化(看形狀,不是看跨列絕對量),
+      // 讓使用者掃一眼就知道這條 Reel 的權重是集中還是分散,不必逐格心算。
+      function reelRowSparkBars(mode, reel_id) {
+        const e = reelW(mode);
+        const syms = visibleReelSyms(mode);
+        const vals = syms.map(sid => Number(e.weights[`${reel_id}-${sid}`]) || 0);
+        const mx = Math.max(0, ...vals);
+        return syms.map((sid, i) => ({
+          sid,
+          v: vals[i],
+          pct: mx > 0 ? Math.max(6, Math.round((vals[i] / mx) * 100)) : 0,
+        }));
+      }
       // 一鍵填整列為均勻 100
       function reelFillRowUniform(mode, reel_id, v = 100) {
         _pushUndo("reel", mode);        const e = reelW(mode);
@@ -10404,6 +10418,30 @@
           });
         }
 
+        // ─ 10. 全域動作(Raycast 式 Command Palette:不只跳轉,也能直接執行)─
+        const actionItems = [
+          { id: 'action:reset-tab', title: '重設此分頁為預設值', subtitle: '清空目前分頁的所有輸入',
+            run: () => resetCurrent() },
+          { id: 'action:export-xlsx', title: '匯出 A.xlsx', subtitle: '產生設定檔並下載',
+            run: () => exportXlsx() },
+          { id: 'action:open-preset', title: '開啟規則庫（Preset）', subtitle: '快速插入常用 slot 機制條件',
+            run: () => { navTo('rules'); presetDrawerOpen.value = true; } },
+          { id: 'action:validation-panel', title: '開啟健檢面板', subtitle: '檢視全案驗證問題（錯誤/警告）',
+            run: () => toggleValidationPanel() },
+        ];
+        for (const a of actionItems) {
+          items.push({
+            id: a.id,
+            category: 'action',
+            categoryLabel: '動作',
+            icon: '⚡',
+            title: a.title,
+            subtitle: a.subtitle,
+            haystack: `${a.title} ${a.subtitle} action 動作`.toLowerCase(),
+            run: a.run,
+          });
+        }
+
         return items;
       });
 
@@ -10438,10 +10476,10 @@
       const searchResults = computed(() => {
         const q = searchQuery.value.trim();
         if (!q) {
-          // 空 query → 列出 tab 與 modes 作為「快速跳轉」
+          // 空 query → 列出 tab / modes / 常用動作 作為「快速跳轉」
           return searchIndex.value
-            .filter(i => i.category === 'tab' || i.category === 'mode')
-            .slice(0, 12);
+            .filter(i => i.category === 'tab' || i.category === 'mode' || i.category === 'action')
+            .slice(0, 14);
         }
         const scored = [];
         for (const item of searchIndex.value) {
@@ -10467,9 +10505,15 @@
       }
       function executeSearchResult(item) {
         if (!item) return;
+        closeSearch();
+        // v9.0:動作類項目直接執行(Raycast 式),不只是跳轉
+        if (item.run) {
+          item.run();
+          emit('status', { type: 'ok', msg: `⚡ 已執行:${item.title}` });
+          return;
+        }
         // 切到對應 tab
         if (item.tab) navTo(item.tab);
-        closeSearch();
         emit('status', { type: 'ok', msg: `→ 跳至 ${item.categoryLabel}:${item.title}` });
       }
       function onSearchKeydown(ev) {
@@ -12317,7 +12361,7 @@
         softDiscardItems, discardDlg, openDiscardDlg, closeDiscardDlg, confirmDiscardDlg, dupDiscardRow, removeDiscardRow,
         reelWeights, reelWeightsDebugJson,
         reelW, reelSymbolIdsStr, setReelSymbolIdsStr,
-        reelMaxWeight, reelHeatColor, reelTotalForRow, onMatrixKeydown,
+        reelMaxWeight, reelHeatColor, reelTotalForRow, reelRowSparkBars, onMatrixKeydown,
         reelFillRowUniform, reelCopyToAll, sortReelSymbols,
         matrixRowSort, getRowSort, setRowSort, sortedReels,
         // ── #4 矩陣模式級操作(04/05/08 共用)──

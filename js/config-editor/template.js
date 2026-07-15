@@ -1747,6 +1747,7 @@
                           </span>
                         </div>
                       </th>
+                      <th class="cfg-matrix-spark-head" title="此列(Reel)權重分佈形狀 · 一眼看出集中或分散">分佈</th>
                       <th class="cfg-matrix-total">合計</th>
                     </tr>
                   </thead>
@@ -1777,6 +1778,15 @@
                         <span v-if="cellPercent('reel', reelActiveMode, r.reel_id, sid)"
                               class="cfg-matrix-cell-pct"
                               :class="'is-' + getMatrixDisplayMode('reel', reelActiveMode)">{{ cellPercent('reel', reelActiveMode, r.reel_id, sid) }}</span>
+                      </td>
+                      <td class="cfg-matrix-spark-cell" :title="'R' + r.reel_id + ' 權重分佈(依此列自身最大值正規化)'">
+                        <span class="cfg-matrix-spark">
+                          <span v-for="bar in reelRowSparkBars(reelActiveMode, r.reel_id)" :key="bar.sid"
+                                class="cfg-matrix-spark-bar"
+                                :class="{ 'is-zero': bar.v === 0 }"
+                                :style="{ height: bar.pct + '%' }"
+                                :title="bar.sid + ' = ' + bar.v"></span>
+                        </span>
                       </td>
                       <td class="cfg-matrix-total-cell">
                         <span class="cfg-matrix-row-menu-host" @click.stop>
@@ -6812,7 +6822,7 @@
         <input class="cfg-search-input"
                v-model="searchQuery"
                type="text"
-               placeholder="搜尋分頁、模式、符號、規則、欄位…(Esc 關閉)"
+               placeholder="搜尋分頁、模式、符號、規則、欄位…或直接執行動作(Esc 關閉)"
                autocomplete="off"
                spellcheck="false">
         <span class="cfg-search-kbd">Ctrl+K</span>
@@ -6820,7 +6830,7 @@
 
       <div class="cfg-search-results">
         <div v-if="searchResults.length === 0" class="cfg-search-empty">
-          沒有結果。試試模式名(FG1)、符號名(WILD)、分頁名(規則)、或欄位 key(pay_type)。
+          沒有結果。試試模式名(FG1)、符號名(WILD)、分頁名(規則)、欄位 key(pay_type),或動作(匯出、重設、健檢)。
         </div>
         <div v-else>
           <div v-for="(item, idx) in searchResults" :key="item.id"
@@ -6833,14 +6843,14 @@
               <div class="cfg-search-item-title">{{ item.title }}</div>
               <div class="cfg-search-item-subtitle">{{ item.subtitle }}</div>
             </div>
-            <span class="cfg-search-item-cat">{{ item.categoryLabel }}</span>
+            <span class="cfg-search-item-cat" :class="{ 'is-action': item.category === 'action' }">{{ item.categoryLabel }}</span>
           </div>
         </div>
       </div>
 
       <div class="cfg-search-footer">
         <span><kbd>↑</kbd><kbd>↓</kbd> 導覽</span>
-        <span><kbd>Enter</kbd> 跳轉</span>
+        <span><kbd>Enter</kbd> 跳轉 / 執行</span>
         <span><kbd>Esc</kbd> 關閉</span>
         <span class="cfg-search-footer-count">{{ searchResults.length }} 個結果</span>
       </div>

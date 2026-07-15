@@ -66,6 +66,7 @@
   --text:        #1b1e28;
   --text-light:  rgba(27,30,40,0.62);
   --text-muted:  rgba(27,30,40,0.42);
+  --text-faint:  rgba(27,30,40,0.34);  /* v9.0:key 徽章 / hint 專用,比 text-muted 再淡一階(60% 階調降噪) */
   --nav-inactive:rgba(27,30,40,0.55);
 
   /* ── 輸入框 ── */
@@ -150,6 +151,17 @@
   --touch-min:    44px;   /* 觸控最小尺寸 */
   --mobile-nav-h: 56px;   /* 底部導覽高度(不含 safe-area)*/
   --z-nav:        100;    /* 底部導覽層級 */
+
+  /* ── v9.0 / 硬核工作站大改版:間距刻度(外鬆內緊的統一單位)──
+     1-3 給卡片內部(緊湊:格點/輸入框/表格列),4-8 給卡片之間與版面級留白(寬敞)。 */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
 }
 
 * { box-sizing: border-box; }
@@ -1175,9 +1187,18 @@ code {
   background: var(--glass-2);
   border: 0.5px solid var(--glass-edge);
   border-radius: var(--r-md);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);  /* v9.0:外鬆內緊 — 與 cfg-section 的卡片外距統一收斂到同一階 */
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  /* v9.0:與 cfg-section 統一卡片語彙 — 聚焦漸變亮起 + 失焦調淡共用同一條曲線 */
+  transition: border-color var(--t-slow), box-shadow var(--t-slow), opacity var(--t-slow);
+}
+.sym-card:focus-within {
+  border-color: var(--accent-brd);
+  box-shadow: var(--focus-ring), var(--shadow-sm);
+}
+.sym-edit-body:has(.sym-card:focus-within) .sym-card:not(:focus-within) {
+  opacity: 0.72;
 }
 .sym-card-head {
   display: flex; align-items: center; gap: 8px;
