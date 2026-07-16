@@ -94,10 +94,19 @@
     </div>
 
     <!-- §2.2 G8:roster 列右鍵快捷選單（fixed 於游標;複用 cfg-cv-ctx 樣式）-->
+    <!-- UI/UX 改版 P2:補上原本註解就寫了、但一直沒實作的「複製 / 刪除」,
+         再加上停用切換與上移/下移,減少對清單上一排小按鈕的依賴 -->
     <div class="cfg-cv-ctx sym-ctx" v-if="rosterCtx.open" :style="{ left: rosterCtx.x + 'px', top: rosterCtx.y + 'px' }">
       <div class="cfg-cv-ctx-head">圖示快捷</div>
       <button class="cfg-cv-ctx-item" @click="rosterCtxSize()">尺寸設定…</button>
       <button class="cfg-cv-ctx-item" @click="rosterCtxCarry()">攜帶值設定…</button>
+      <div class="cfg-cv-ctx-sep"></div>
+      <button class="cfg-cv-ctx-item" @click="rosterCtxCopy()">⧉ 複製此圖示</button>
+      <button class="cfg-cv-ctx-item" @click="rosterCtxToggle()">{{ rosterCtxIsEnabled ? '⏸ 停用此圖示' : '▶ 啟用此圖示' }}</button>
+      <button class="cfg-cv-ctx-item" :disabled="rosterCtxIdx <= 0" @click="rosterCtxMove(-1)">↑ 上移一位</button>
+      <button class="cfg-cv-ctx-item" :disabled="rosterCtxIdx < 0 || rosterCtxIdx >= symbols.length - 1" @click="rosterCtxMove(1)">↓ 下移一位</button>
+      <div class="cfg-cv-ctx-sep"></div>
+      <button class="cfg-cv-ctx-item cfg-cv-ctx-danger" @click="rosterCtxDelete()">✕ 刪除此圖示</button>
     </div>
   </aside>
 
@@ -233,31 +242,52 @@
                         @click="setType(t)">{{ t }}</button>
               </div>
             </div>
-            <div v-if="roleNote" class="sym-role-note">{{ roleNote }}</div>
-            <!-- 架構檢閱 #6:Wild 行為分類(僅 Wild 顯示;純描述標籤,實際觸發條件仍在規則頁設定) -->
-            <div v-if="form.is_wild" class="sym-basic-idrow">
-              <span class="sym-lbl">Wild 行為</span>
-              <select class="input input-sm" v-model="form.wild_behavior" @change="onFieldEdit">
-                <option value="">標準（無特殊行為）</option>
-                <option value="EXPANDING">Expanding（擴滿整輪）</option>
-                <option value="WALKING">Walking（走位存續）</option>
-                <option value="STICKY">Sticky（黏著多局）</option>
-                <option value="MULTIPLIER">Multiplier（攜帶倍數）</option>
-              </select>
-            </div>
-            <!-- 名稱 + 編號（§2.3;標籤左·輸入置中）-->
-            <div class="sym-basic-idrow">
-              <span class="sym-lbl">名稱</span>
-              <div class="sym-name-wrap">
-                <input class="input input-sm input-center"
-                       :class="{err: nameErr}"
-                       v-model="form.name" @input="onFieldEdit" placeholder="symbol 名稱">
-                <div v-if="nameErr" class="field-err">名稱已重複</div>
+            <!-- 識別（v9.4 整合:圖示方框 + 名稱 + 編號 + 顏色 + 圖片操作 合併一塊）-->
+            <div class="sym-identity-row">
+              <div class="sym-swatch-preview sym-identity-icon"
+                   :class="{ 'has-img': !!form.image }"
+                   :style="form.image ? { backgroundImage: 'url(' + form.image + ')' } : swatchStyle(selected.id)"
+                   @click="openImgPopup" title="點擊設定圖片(上傳 / 貼上 / 貼網址)">
+                <span v-if="!form.image">{{ initialOf(selected) }}</span>
+                <button v-if="form.image" class="sym-img-clear" @click.stop="clearImage" title="移除圖片,改回色票">✕</button>
+                <div class="sym-identity-icon-hint">
+                  <span class="sym-identity-icon-hint-ico">📷</span>
+                </div>
               </div>
-              <span class="sym-lbl">編號</span>
-              <div class="input input-sm input-center sym-num-readonly"
-                   :title="'編號由系統依「啟用中符號的上到下順序」自動指派,停用的符號不佔號'">
-                {{ (selected && selected.enabled === false) ? '—' : (form.number || '00') }}
+              <div class="sym-identity-main">
+                <div class="sym-identity-namerow">
+                  <span class="sym-lbl">名稱</span>
+                  <div class="sym-name-wrap">
+                    <input class="input input-sm input-center"
+                           :class="{err: nameErr}"
+                           v-model="form.name" @input="onFieldEdit" placeholder="symbol 名稱">
+                    <div v-if="nameErr" class="field-err">名稱已重複</div>
+                  </div>
+                  <span class="sym-lbl">編號</span>
+                  <div class="input input-sm input-center sym-num-readonly"
+                       :title="'編號由系統依「啟用中符號的上到下順序」自動指派,停用的符號不佔號'">
+                    {{ (selected && selected.enabled === false) ? '—' : (form.number || '00') }}
+                  </div>
+                </div>
+                <div class="swatch-strip sym-identity-swatchrow">
+                  <div v-for="(c, i) in SWATCH_COLORS" :key="i"
+                       class="swatch-cell"
+                       :class="{selected: isCurrentSwatch(i) && !form.image}"
+                       :style="{background: c[0]}"
+                       :title="c[0]"
+                       @click="pickSwatch(i)"></div>
+                  <!-- #3:自訂色票 — 明確提示「自訂顏色」+ 滴管圖示 -->
+                  <label class="swatch-cell swatch-custom"
+                         :class="{selected: isCustomSwatch && !form.image}"
+                         :style="{ background: (isCustomSwatch && !form.image) ? currentBg : 'transparent' }"
+                         title="自訂顏色 — 點此開啟調色盤選任意色">
+                    <input type="color" :value="currentBg"
+                           @input="pickCustom($event.target.value)"
+                           class="sym-color-input">
+                    <span class="swatch-custom-ico">🎨</span>
+                  </label>
+                </div>
+                <div v-if="form.image" class="sym-img-status">{{ imageSourceLabel }}</div>
               </div>
             </div>
             <!-- 基準權重（§2.3 拉桿·標籤左）-->
@@ -272,65 +302,6 @@
                 <div class="weight-val">{{ form.weight }}</div>
               </div>
             </div>
-            <!-- 顏色 + 圖片（§2.3;沿用外觀/識別 markup）-->
-          <div class="sym-appearance-row">
-            <div class="sym-swatch-preview"
-                 :class="{ 'has-img': !!form.image }"
-                 :style="form.image ? { backgroundImage: 'url(' + form.image + ')' } : swatchStyle(selected.id)">
-              <span v-if="!form.image">{{ initialOf(selected) }}</span>
-              <button v-if="form.image" class="sym-img-clear" @click.stop="clearImage" title="移除圖片,改回色票">✕</button>
-            </div>
-            <div class="sym-appearance-ctrls">
-              <div class="swatch-strip" style="display:grid; grid-template-columns:repeat(7, 23px); gap:5px; flex:none;">
-                <div v-for="(c, i) in SWATCH_COLORS" :key="i"
-                     class="swatch-cell"
-                     :class="{selected: isCurrentSwatch(i) && !form.image}"
-                     :style="{background: c[0]}"
-                     :title="c[0]"
-                     @click="pickSwatch(i)"></div>
-                <!-- #3:自訂色票 — 明確提示「自訂顏色」+ 滴管圖示 -->
-                <label class="swatch-cell swatch-custom"
-                       :class="{selected: isCustomSwatch && !form.image}"
-                       :style="{ background: (isCustomSwatch && !form.image) ? currentBg : 'transparent' }"
-                       title="自訂顏色 — 點此開啟調色盤選任意色">
-                  <input type="color" :value="currentBg"
-                         @input="pickCustom($event.target.value)"
-                         class="sym-color-input">
-                  <span class="swatch-custom-ico">🎨</span>
-                </label>
-              </div>
-              <!-- v7.9 #4:圖片 — 上傳檔案 / 貼上剪貼簿 -->
-              <div class="sym-img-actions">
-                <button class="btn-pill sym-img-btn" @click="triggerImageUpload" title="上傳圖片檔(僅存於本機,不進 A.xlsx)">🖼 上傳圖片</button>
-                <button class="btn-pill sym-img-btn" @click="pasteImage" title="從剪貼簿貼上圖片(需瀏覽器授權)">📋 貼上圖片</button>
-                <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="onImageFile">
-              </div>
-              <input class="input input-sm sym-img-url" type="text" v-model="form.image" @input="onFieldEdit" placeholder="或貼圖片網址 https://…">
-              <div class="sym-img-hint">色票或圖片擇一;可上傳 / 貼上 / 貼網址。圖片僅存本機,不會匯出到 A.xlsx。</div>
-            </div>
-          </div>
-          <!-- 尺寸 / 攜帶值 捷徑鈕（§2.3 底部兩顆虛線 accent;點開=彈窗）-->
-          <div class="sym-basic-btns">
-            <button class="sym-basic-btn" @click="sizePopup = true" :title="'目前 ' + sizeSummary + '，點開設定'">
-              <span class="sym-basic-btn-t">尺寸設定</span>
-              <span class="sym-basic-btn-v cfg-mono">{{ sizeSummary }}</span>
-            </button>
-            <button class="sym-basic-btn" @click="carryPopup = true" title="倍數 / 彩金 攜帶值,點開設定">
-              <span class="sym-basic-btn-t">攜帶值設定</span>
-              <span class="sym-basic-btn-v">{{ hasMult ? (multSummary || '已設定') : '未設定' }}</span>
-            </button>
-          </div>
-          <!-- 進階:家族 + 代碼（§2.3 代碼隱藏;家族後續移至賠率卡 ③b）-->
-          <details class="sym-basic-adv">
-            <summary>進階：代碼 Symbol_ID</summary>
-            <div class="sym-adv-body">
-              <div class="field-label-sm">
-                Symbol_ID <span class="field-label-hint">A.xlsx 代碼,留空用名稱</span>
-              </div>
-              <input class="input input-sm cfg-mono input-w-id"
-                     v-model="form.symbol_id" @input="onFieldEdit" placeholder="WILD / H1 / L2">
-            </div>
-          </details>
           </div>
         </div>
 
@@ -338,28 +309,34 @@
         <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.pay }">
           <div class="sym-card-head" @click="toggleCard('pay')">
             <span class="sym-card-title">賠率</span>
-            <span v-if="cardOpen.pay" class="sym-card-sub">連線數 / 圖示數量 的賠付倍數</span>
+            <span v-if="cardOpen.pay" class="sym-card-sub">{{ payMode === 'count' ? '圖示數量' : '連線數' }} 的賠付倍數（依盤面結構自動判定）</span>
             <span v-else class="sym-card-summary">
               <span v-if="paySummary" class="sym-card-summary-chip cfg-mono">{{ paySummary }}</span>
               <span v-else class="sym-card-summary-muted">未設定賠付</span>
             </span>
-            <span v-if="cardOpen.pay" class="sym-paymode-toggle" @click.stop>
-              <button class="sym-paymode-btn" :class="{ active: payMode === 'line' }" @click.stop="setPayMode('line')">連線數</button>
-              <button class="sym-paymode-btn" :class="{ active: payMode === 'count' }" @click.stop="setPayMode('count')">圖示數量</button>
-              <span class="sym-info" data-tip="連線數＝連線長度；圖示數量＝出現顆數（依賠率模式）">ℹ</span>
-            </span>
             <span class="sym-card-collapse" :class="{ open: cardOpen.pay }" title="展開 / 收合">›</span>
           </div>
           <div class="sym-card-body" v-show="cardOpen.pay">
-          <!-- P0-2:最少連線(min_match)。僅連線/百搭有意義;預設 3,可覆寫 1/2 -->
-          <div v-if="payMode === 'line'" class="sym-minmatch-row"
-               style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-            <span class="cfg-key" style="white-space:nowrap;">最少連線 · min_match</span>
-            <button v-for="n in minMatchChoices" :key="'mm'+n"
-                    class="btn-pill" :class="{ on: form.min_match === n }"
-                    @click="setMinMatch(n)" style="min-width:34px;">{{ n }}</button>
-            <span class="sym-hint-inline">連達此數才成立（預設 3）</span>
+          <!-- 所屬群組(v9.5:移到卡片最上方,選好群組即可一鍵套用其賠率)-->
+          <div class="sym-paygroup">
+            <span class="sym-lbl">所屬群組<span class="sym-info" data-tip="同群成員可混連、以群組費率計；整條同一成員取自身較高者">ℹ</span></span>
+            <select class="input input-sm" v-model="form.group_id" @change="onFieldEdit">
+              <option value="">（無）</option>
+              <option v-for="gp in symbolGroups" :key="gp.group_id" :value="gp.group_id">
+                {{ gp.display_name || gp.group_id }}（{{ gp.group_id }}）
+              </option>
+            </select>
+            <button v-if="form.group_id" class="btn-pill add sym-paygroup-apply" @click="applyGroupPay"
+                    title="立即把群組設定的 3–6 連賠率套用到下方賠付表">套用群組賠率</button>
           </div>
+          <div v-if="form.group_id && !symbolGroups.some(g => g.group_id === form.group_id)"
+               class="sym-hint-inline" style="color:var(--accent); margin-top:4px;">
+            此群組「{{ form.group_id }}」尚未定義（可於「符號家族」面板新增，或改選其他）
+          </div>
+          <div v-else-if="form.group_id" class="sym-paygroup-peek">
+            同群成員可混連,以群組費率計;整條同一成員取自身較高者。
+          </div>
+          <div v-if="form.group_id" class="sym-paygroup-sep"></div>
           <div class="sym-pay-dynamic">
             <div v-for="(row, i) in form.pay_rows" :key="i" class="sym-pay-drow"
                  style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
@@ -386,33 +363,9 @@
                       style="white-space:nowrap;">🗑 刪除</button>
             </div>
             <div class="sym-pay-actions" style="margin-top:8px;">
-              <button class="btn-pill add sym-pay-add-btn" @click="openPayAdd"
-                      :disabled="form.pay_rows.length >= maxPayCount - 1">＋ 新增{{ payMode === 'count' ? '圖示數量' : '連線數' }}</button>
-            </div>
-            <!-- §2.4 新增對話框（inline·2px accent;單一/區間 + 重複重疊防呆·不阻擋）-->
-            <div v-if="payAddOpen" class="sym-payadd-dialog">
-              <div class="sym-payadd-head">
-                <span class="sym-payadd-title">＋ 新增{{ payMode === 'count' ? '圖示數量' : '連線數' }}</span>
-                <span v-if="payMode === 'count'" class="sym-payadd-kind">
-                  <button class="sym-payadd-kbtn" :class="{ active: payAddKind === 'single' }" @click="payAddKind = 'single'">單一</button>
-                  <button class="sym-payadd-kbtn" :class="{ active: payAddKind === 'range' }" @click="payAddKind = 'range'">區間</button>
-                </span>
-              </div>
-              <div class="sym-payadd-body">
-                <span class="sym-lbl">{{ payMode === 'count' ? '圖示數量' : '連線數' }}</span>
-                <input class="input input-sm input-center cfg-mono" type="number" min="2"
-                       v-model.number="payAddFrom" style="width:64px;">
-                <template v-if="payMode === 'count' && payAddKind === 'range'">
-                  <span style="color:var(--text-light);">–</span>
-                  <input class="input input-sm input-center cfg-mono" type="number" min="2"
-                         v-model.number="payAddTo" style="width:64px;">
-                </template>
-              </div>
-              <div v-if="payAddConflict" class="sym-payadd-warn">ℹ {{ payAddConflict }}</div>
-              <div class="sym-payadd-foot">
-                <button class="btn-pill" @click="cancelPayAdd">取消</button>
-                <button class="btn-pill add" @click="confirmPayAdd">確認</button>
-              </div>
+              <button class="btn-pill add sym-pay-add-btn" @click="addPayRow"
+                      :disabled="!canAddPayRow"
+                      title="直接新增一列(自動取最小未使用的連線數,例如尚無 2 連時會先補 2 連)">＋ 新增{{ payMode === 'count' ? '圖示數量' : '連線數' }}</button>
             </div>
             <!-- #7:錯誤/警告提示區(取代原靜態說明文字) -->
             <div v-if="payRowIssues.length"
@@ -422,30 +375,44 @@
               </div>
             </div>
           </div>
-
-          <!-- 所屬群組（§2.4;由基本卡進階移入。混合賠付定義見「符號家族」面板 / 群組檢視）-->
-          <div class="sym-paygroup-sep"></div>
-          <div class="sym-paygroup">
-            <span class="sym-lbl">所屬群組<span class="sym-info" data-tip="同群成員可混連、以群組費率計；整條同一成員取自身較高者">ℹ</span></span>
-            <select class="input input-sm" v-model="form.group_id" @change="onFieldEdit">
-              <option value="">（無）</option>
-              <option v-for="gp in symbolGroups" :key="gp.group_id" :value="gp.group_id">
-                {{ gp.display_name || gp.group_id }}（{{ gp.group_id }}）
-              </option>
-            </select>
-          </div>
-          <div v-if="form.group_id && !symbolGroups.some(g => g.group_id === form.group_id)"
-               class="sym-hint-inline" style="color:var(--accent); margin-top:4px;">
-            此群組「{{ form.group_id }}」尚未定義（可於「符號家族」面板新增，或改選其他）
-          </div>
-          <div v-else-if="form.group_id" class="sym-paygroup-peek">
-            同群成員可混連,以群組費率計;整條同一成員取自身較高者。
-          </div>
           </div><!-- /sym-card-body -->
         </div><!-- /賠付卡片 -->
         </div><!-- /sym-edit-col-left -->
 
         <div class="sym-edit-col sym-edit-col-right">
+
+        <!-- 進階設定(v9.4:尺寸設定 + 攜帶值設定 從基本設定卡抽出,獨立成卡放右欄最上方;預設收合,預設值 1×1 · 未攜帶值)-->
+        <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.size }">
+          <div class="sym-card-head" @click="toggleCard('size')">
+            <span class="sym-card-title">進階設定</span>
+            <span v-if="cardOpen.size" class="sym-card-sub">尺寸設定 · 攜帶值設定</span>
+            <span v-else class="sym-card-summary">
+              <span class="sym-card-summary-chip cfg-mono">{{ sizeSummary }}</span>
+              <span class="sym-card-summary-sep">·</span>
+              <span v-if="hasMult" class="sym-card-summary-chip">{{ multSummary || '已設定' }}</span>
+              <span v-else class="sym-card-summary-muted">未攜帶值</span>
+            </span>
+            <span class="sym-card-collapse" :class="{ open: cardOpen.size }" title="展開 / 收合">›</span>
+          </div>
+          <div class="sym-card-body" v-show="cardOpen.size">
+            <div class="sym-basic-btns">
+              <button class="sym-basic-btn" @click="sizePopup = true" :title="'目前 ' + sizeSummary + '，點開設定'">
+                <span class="sym-basic-btn-ico">⛶</span>
+                <span class="sym-basic-btn-text">
+                  <span class="sym-basic-btn-t">尺寸設定</span>
+                  <span class="sym-basic-btn-v cfg-mono">{{ sizeSummary }}</span>
+                </span>
+              </button>
+              <button class="sym-basic-btn" @click="carryPopup = true" title="倍數 / 彩金 攜帶值,點開設定">
+                <span class="sym-basic-btn-ico">💠</span>
+                <span class="sym-basic-btn-text">
+                  <span class="sym-basic-btn-t">攜帶值設定</span>
+                  <span class="sym-basic-btn-v">{{ hasMult ? (multSummary || '已設定') : '未設定' }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
 
         <!-- 出現限制 / 規則(v7.9.5:合併;出現限制=生成期約束,規則=唯讀引用)-->
         <div class="sym-card" :class="{ 'sym-card-closed': !cardOpen.limit }">
@@ -564,7 +531,7 @@
           <div class="sym-card-body" v-show="cardOpen.rules">
           <div class="sym-subsection-label">
             規則 / 事件
-            <button class="btn-pill" style="font-size:11px; padding:2px 8px; margin-left:auto;"
+            <button class="btn-pill" style="font-size:var(--fs-xs); padding:2px 8px; margin-left:auto;"
                     @click.stop="refreshSymbolRefs" title="重新讀取">⟳</button>
           </div>
           <div v-if="!symbolRefs.constraints.length && !symbolRefs.rules.length && !symbolRefs.discards.length"
@@ -597,7 +564,7 @@
             <button class="btn-pill add" :disabled="!selected" @click="addRelatedConstraint"
                     title="就地新增硬約束:跳約束分頁並預填此符號">＋ 新增約束</button>
           </div>
-          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">
+          <div style="font-size:var(--fs-xs); color:var(--text-light); margin-top:6px;">
             ※ 就地新增會開規則頁的同一套編輯器並預填此符號、寫入同一份規則庫;建立後返回本頁自動同步顯示（尺寸相關事件請由「尺寸設定」內的 ＋ 新增）。
           </div>
 
@@ -693,6 +660,39 @@
           </div><!-- /sym-popup-backdrop -->
           <!-- /攜帶值 popup -->
 
+        <!-- 圖片設定 popup（v9.4:整合 拖放/選檔 · 剪貼簿貼上 · 網址貼上 三種來源,由「上傳圖片」鈕開啟）-->
+          <div v-if="imgPopup" class="modal-backdrop sym-popup-backdrop" @click.self="imgPopup = false">
+            <div class="sym-popup sym-img-popup" role="dialog" aria-label="設定圖片">
+              <div class="sym-popup-head">
+                <span class="sym-popup-title">設定圖片</span>
+                <button class="sym-popup-x" @click="imgPopup = false" title="關閉">✕</button>
+              </div>
+              <div class="sym-popup-body">
+                <div class="sym-img-dropzone" :class="{ 'is-dragover': imgDragOver }"
+                     @click="triggerImageUpload"
+                     @dragover.prevent="imgDragOver = true"
+                     @dragleave.prevent="imgDragOver = false"
+                     @drop.prevent="onImgDrop">
+                  <span class="sym-img-dropzone-ico">🖼</span>
+                  <span class="sym-img-dropzone-text">拖放圖片到這裡,或點擊選擇檔案</span>
+                  <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="onImageFile">
+                </div>
+                <div class="sym-img-popup-orsep"><span>或</span></div>
+                <button class="btn-pill sym-img-btn sym-img-popup-pastebtn" @click="pasteImage"
+                        title="從剪貼簿貼上圖片(需瀏覽器授權)">📋 從剪貼簿貼上</button>
+                <div class="sym-img-popup-orsep"><span>或</span></div>
+                <div class="field-label-sm">圖片網址</div>
+                <div class="sym-img-popup-urlrow">
+                  <input class="input input-sm" type="text" v-model.trim="imgUrlDraft"
+                         @keyup.enter="confirmImgUrl" placeholder="https://…">
+                  <button class="btn-pill add" :disabled="!imgUrlDraft" @click="confirmImgUrl">套用</button>
+                </div>
+                <div class="sym-img-hint">色票或圖片擇一;圖片僅存本機,不會匯出到 A.xlsx。</div>
+              </div>
+            </div>
+          </div><!-- /sym-popup-backdrop -->
+          <!-- /圖片設定 popup -->
+
         <!-- 尺寸設定 popup（§2.7;③a-3ii:卡殼已移除,入口在基本設定卡,此為同層疊層）-->
           <div v-if="sizePopup" class="modal-backdrop sym-popup-backdrop" @click.self="sizePopup = false">
             <div class="sym-popup sym-size-popup" role="dialog" aria-label="尺寸設定">
@@ -713,17 +713,17 @@
               <div class="sym-mega-stepper-group">
                 <span class="field-label-sm">寬（Reel）</span>
                 <div class="cfg-stepper">
-                  <button class="cfg-stepper-btn" @click="bumpMega('w', -1)" :disabled="form.mega_w <= 1">−</button>
+                  <button class="cfg-stepper-btn" @click="bumpMega('w', -1)" :disabled="form.mega_w <= 1" title="寬度 −1">−</button>
                   <span class="cfg-stepper-val">{{ form.mega_w }}</span>
-                  <button class="cfg-stepper-btn" @click="bumpMega('w', 1)" :disabled="form.mega_w >= 10">+</button>
+                  <button class="cfg-stepper-btn" @click="bumpMega('w', 1)" :disabled="form.mega_w >= 10" title="寬度 +1">+</button>
                 </div>
               </div>
               <div class="sym-mega-stepper-group">
                 <span class="field-label-sm">高（列）</span>
                 <div class="cfg-stepper">
-                  <button class="cfg-stepper-btn" @click="bumpMega('h', -1)" :disabled="form.mega_h <= 1">−</button>
+                  <button class="cfg-stepper-btn" @click="bumpMega('h', -1)" :disabled="form.mega_h <= 1" title="高度 −1">−</button>
                   <span class="cfg-stepper-val">{{ form.mega_h }}</span>
-                  <button class="cfg-stepper-btn" @click="bumpMega('h', 1)" :disabled="form.mega_h >= 10">+</button>
+                  <button class="cfg-stepper-btn" @click="bumpMega('h', 1)" :disabled="form.mega_h >= 10" title="高度 +1">+</button>
                 </div>
               </div>
               <button class="btn-pill" @click="resetMega">↺ 還原 1×1</button>
@@ -798,19 +798,13 @@
 
       // 尺寸設定彈窗開關(§2.7;切換符號時關閉,見 loadForm)
       const sizePopup = ref(false);
-      const payMode = ref('line');         // §2.4 賠率模式:'line'連線數 / 'count'圖示數量(暫態,loadForm 衍生)
-      // §2.4 賠率模式衍生:非連線型玩法 / SCATTER·BONUS 型別 / 既有區間資料 → 圖示數量
-      function _deriveDefaultPayMode(s) {
+      // §2.4 v9.5:賠率模式改為完全由盤面結構衍生(不再提供手動切換) ——
+      //   非連線型玩法(CLUSTER/SCATTER)或本身是 SCATTER/BONUS 型符號 → 圖示數量;其餘(LINE/WAYS/MEGAWAYS)→ 連線數
+      const payMode = computed(() => {
         if (!spec.isLineLike) return 'count';
         if (form.type === 'SCATTER' || form.type === 'BONUS') return 'count';
-        if (Array.isArray(s.pay_rows) && s.pay_rows.some(r => r && Number(r.count_to) > 0)) return 'count';
         return 'line';
-      }
-      function setPayMode(m) { payMode.value = (m === 'count') ? 'count' : 'line'; }
-      const payAddOpen = ref(false);       // §2.4 賠率新增對話框開關
-      const payAddKind = ref('single');     // 'single' | 'range'(區間僅圖示數量)
-      const payAddFrom = ref(3);
-      const payAddTo   = ref(4);
+      });
       const carryPopup = ref(false);       // §2.8 攜帶值設定彈窗開關
       const carryTab   = ref('mult');       // 攜帶值彈窗分頁:'mult' | 'prize'
       // §2.2 G8:roster 列右鍵快捷選單(尺寸 / 攜帶值 / 複製 / 刪除)
@@ -836,6 +830,16 @@
       function _rosterCtxKey(ev) { if (ev.key === 'Escape') closeRosterCtx(); }
       function rosterCtxSize() { closeRosterCtx(); sizePopup.value = true; }
       function rosterCtxCarry() { closeRosterCtx(); carryPopup.value = true; }
+      // UI/UX 改版 P2:右鍵選單補上複製/停用/上移/下移/刪除,直接呼叫既有列 hover 按鈕的同一套函式
+      const rosterCtxIdx = computed(() => symbols.value.findIndex(x => x.id === rosterCtx.value.id));
+      const rosterCtxIsEnabled = computed(() => {
+        const s = symbols.value.find(x => x.id === rosterCtx.value.id);
+        return !s || s.enabled !== false;
+      });
+      function rosterCtxCopy() { const id = rosterCtx.value.id; closeRosterCtx(); if (id != null) copySymbol(id); }
+      function rosterCtxToggle() { const id = rosterCtx.value.id; closeRosterCtx(); if (id != null) toggleEnabled(id); }
+      function rosterCtxMove(dir) { const i = rosterCtxIdx.value; closeRosterCtx(); if (i >= 0) moveSymbol(i, dir); }
+      function rosterCtxDelete() { const id = rosterCtx.value.id; closeRosterCtx(); if (id != null) deleteSymbol(id); }
 
       // ════════════════════════════════════════════════════════
       //  v7.9 #6/#7 + v7.9.3:編輯面板卡片化 — 全部卡片可摺疊
@@ -892,6 +896,8 @@
         is_wild: false,
         is_scatter: false,
         image: null,   // v7.9 #4:符號圖片(dataURL);僅存前端 LS,不進 A.xlsx
+        image_source: '',   // v9.4:圖片來源('' 無/'upload' 本機檔案/'paste' 剪貼簿/'url' 網址);僅前端 LS,不進 A.xlsx
+        image_name: '',      // v9.4:上傳來源的檔名(供狀態列顯示);僅前端 LS,不進 A.xlsx
         wild_behavior: '',   // 架構檢閱 #6:Wild 行為分類('' 標準/EXPANDING/WALKING/STICKY/MULTIPLIER)
       });
 
@@ -979,8 +985,7 @@
         }
         // 擴充欄位(向下相容:舊資料缺欄位給預設)
         form.symbol_id  = s.symbol_id  != null ? s.symbol_id  : '';
-        form.type       = normalizeType(s.type);
-        payMode.value   = _deriveDefaultPayMode(s);   // §2.4 賠率模式預設(可於卡頭手動切)
+        form.type       = normalizeType(s.type);   // §2.4 賠率模式(payMode)由此 + spec.isLineLike 即時衍生,不再需要載入時另存
         form.pay_3x     = s.pay_3x     != null ? s.pay_3x     : 0;
         form.pay_4x     = s.pay_4x     != null ? s.pay_4x     : 0;
         form.pay_5x     = s.pay_5x     != null ? s.pay_5x     : 0;
@@ -1006,10 +1011,12 @@
         form.wild_behavior = (s.wild_behavior != null ? String(s.wild_behavior) : '');   // 架構檢閱 #6
         form.is_scatter = !!s.is_scatter;
         form.image      = (s.image != null && typeof s.image === 'string') ? s.image : null;  // v7.9 #4
+        form.image_source = (s.image_source != null ? String(s.image_source) : '');  // v9.4
+        form.image_name    = (s.image_name != null ? String(s.image_name) : '');       // v9.4
         // #10:有 mega 才預設展開,否則折疊成 1×1 badge
         sizePopup.value = false;   // 切換/載入符號時關閉尺寸彈窗
         carryPopup.value = false;  // 切換/載入符號時關閉攜帶值彈窗
-        payAddOpen.value = false;  // 切換/載入符號時關閉賠率新增對話框
+        imgPopup.value = false;    // 切換/載入符號時關閉圖片彈窗
       }
 
       const selected = computed(() => {
@@ -1177,6 +1184,8 @@
           is_wild: !!form.is_wild,
           is_scatter: !!form.is_scatter,
           image: (form.image != null && typeof form.image === 'string') ? form.image : null,  // v7.9 #4
+          image_source: form.image ? (form.image_source || '') : '',   // v9.4
+          image_name: form.image ? (form.image_name || '') : '',        // v9.4
           // 架構檢閱 #6:非 Wild 不留殘留分類(切換 type 後這欄應清空;避免匯出出現矛盾狀態)
           wild_behavior: form.is_wild ? (form.wild_behavior || '') : '',
         };
@@ -1190,13 +1199,6 @@
       function onFieldEdit() {
         if (writeTimer) clearTimeout(writeTimer);
         writeTimer = setTimeout(writeForm, 150);
-      }
-
-      // ── P0-2:最少連線(min_match)chips(1/2/3;必要時可擴到 5) ──
-      const minMatchChoices = [1, 2, 3];
-      function setMinMatch(n) {
-        form.min_match = Math.max(1, Number(n) || 3);
-        onFieldEdit();
       }
 
       // ── P0-3:符號家族(03d_Symbol_Groups)──
@@ -1279,6 +1281,27 @@
           delete gp.pay_by_mode[mode];
         }
       }
+      // v9.5:「套用群組賠率」—— 把所屬群組設定的 3–6 連賠率即時套進本符號的賠付表
+      //   只套用 ≤ 盤面輪數(maxPayCount)的連線,避免 5 輪盤面被硬塞 6 連列;pay_by_mode 為 per-mode
+      //   覆寫,pay_rows 無模式維度故不套用,僅供「符號家族」面板本身參考
+      function applyGroupPay() {
+        const gid = String(form.group_id || '').trim();
+        if (!gid) { emitStatus('err', '尚未選擇所屬群組'); return; }
+        const gp = symbolGroups.find(g => g.group_id === gid);
+        if (!gp) { emitStatus('err', '此群組尚未定義,請先於「符號家族」面板新增'); return; }
+        flushWrite();
+        const hi = maxPayCount.value;
+        [3, 4, 5, 6].forEach(n => {
+          if (n > hi) return;   // 超過盤面輪數的群組欄位略過
+          const pay = Number(gp['pay_' + n + 'x']) || 0;
+          const row = form.pay_rows.find(r => Number(r.count) === n && !(Number(r.count_to) > n));
+          if (row) row.pay = pay;
+          else form.pay_rows.push({ count: n, count_to: 0, pay });
+        });
+        _sortPayRows();
+        writeForm();
+        emitStatus('ok', '已套用群組「' + (gp.display_name || gp.group_id) + '」的賠率');
+      }
 
       // ── v6.1:動態賠付表 helpers ──
       //   優先用全站 SP.migratePayRows(載入順序晚於本檔,執行期已就緒);
@@ -1301,8 +1324,15 @@
       }
       // ── #5:賠付連線數上限(連線型=盤面輪數;群集/任意=20) ──
       const maxPayCount = computed(() => Math.max(2, Number(spec.maxLineLength) || 20));
+      // 尚有 2..上限 未使用的連線數才可新增(不可用 length 判斷,否則套用群組後會誤鎖)
+      const canAddPayRow = computed(() => {
+        const used = new Set((form.pay_rows || []).map(r => Number(r.count)));
+        const hi = maxPayCount.value;
+        for (let c = 2; c <= hi; c++) if (!used.has(c)) return true;
+        return false;
+      });
 
-      // ── #5:新增連線數(自動取「最小未使用值」,做去重防呆) ──
+      // ── #5:新增連線數(自動取「最小未使用值」,做去重防呆;無彈窗直接加列) ──
       function addPayRow() {
         const rows = form.pay_rows;
         const used = new Set(rows.map(r => Number(r.count)));
@@ -1311,6 +1341,7 @@
         while (c <= hi && used.has(c)) c++;
         if (c > hi) { emitStatus('err', `連線數已達上限(最多 ${hi} 連)`); return; }
         rows.push({ count: c, count_to: 0, pay: 0 });   // v8.3 A-1:count_to 0＝單點
+        _sortPayRows();
         onFieldEdit();
       }
       function removePayRow(i) {
@@ -1336,50 +1367,6 @@
           (Number(a.count) || 0) - (Number(b.count) || 0) ||
           (Number(a.count_to) || 0) - (Number(b.count_to) || 0));
       }
-      // ── §2.4:新增對話框（單一 / 區間 + 重複重疊防呆;warn 不阻擋）──
-      function openPayAdd() {
-        const used = new Set((form.pay_rows || []).map(r => Number(r.count)));
-        const hi = maxPayCount.value;
-        let c = (payMode.value === 'count') ? 5 : 3;
-        while (c <= hi && used.has(c)) c++;
-        if (c > hi) c = hi;
-        payAddKind.value = 'single';
-        payAddFrom.value = c;
-        payAddTo.value   = Math.min(hi, c + 1);
-        payAddOpen.value = true;
-      }
-      function cancelPayAdd() { payAddOpen.value = false; }
-      // 防呆:回傳衝突說明(重複 / 區間重疊);無衝突回 ''(純靜態·不阻擋)
-      const payAddConflict = computed(() => {
-        if (!payAddOpen.value) return '';
-        const from = Math.round(Number(payAddFrom.value) || 0);
-        const isRange = (payMode.value === 'count' && payAddKind.value === 'range');
-        const to = isRange ? Math.round(Number(payAddTo.value) || 0) : from;
-        if (from < 2) return '數值需 ≥ 2';
-        if (isRange && to < from) return '區間終點需 ≥ 起點';
-        const lo = Math.min(from, to), up = Math.max(from, to);
-        for (const r of (form.pay_rows || [])) {
-          const rlo = Number(r.count) || 0;
-          const rup = (Number(r.count_to) > rlo) ? Number(r.count_to) : rlo;
-          if (lo <= rup && rlo <= up) {   // 區間相交
-            const rtxt = (rup > rlo) ? (rlo + '–' + rup) : String(rlo);
-            return `與現有列 ${rtxt} 重複 / 重疊（仍可新增,建議調整）`;
-          }
-        }
-        return '';
-      });
-      function confirmPayAdd() {
-        const from = Math.round(Number(payAddFrom.value) || 0);
-        const isRange = (payMode.value === 'count' && payAddKind.value === 'range');
-        const to = isRange ? Math.round(Number(payAddTo.value) || 0) : 0;
-        if (from < 2) { emitStatus('err', '數值需 ≥ 2'); return; }
-        const up = (isRange && to > from) ? to : 0;
-        form.pay_rows.push({ count: from, count_to: up, pay: 0 });   // 不阻擋:即使重疊也插入
-        _sortPayRows();
-        payAddOpen.value = false;
-        onFieldEdit();
-      }
-
       // ── #7:賠付表錯誤 / 警告(重複連線、超過輪數、賠率遞減) ──
       const payRowIssues = computed(() => {
         const issues = [];
@@ -1422,15 +1409,7 @@
             issues.push(`⚠️ ${sorted[i].count} 連線賠率小於 ${sorted[i - 1].count} 連線`);
           }
         }
-        // P0-2 / D3:賠付最低 count < min_match(僅連線型;達 min_match 才成立)
-        if (spec.isLineLike && rows.length) {
-          const paid = rows.filter(r => Number(r.pay) > 0).map(r => Number(r.count));
-          const lowest = paid.length ? Math.min(...paid) : Infinity;
-          const mm = Math.max(1, Number(form.min_match) || 3);
-          if (isFinite(lowest) && lowest < mm) {
-            issues.push(`⚠️ 最低賠付為 ${lowest} 連,但最少連線設為 ${mm};${mm} 連以下的賠付列在判定下不成立`);
-          }
-        }
+        // v9.5:最少連線 UI 已移除(固定語意=3 連起自動管理;使用者可自行加 2 連),不再用 min_match 警告
         return issues;
       });
 
@@ -1583,15 +1562,13 @@
       function isSpecialType(t) { return !!t && t !== '一般得分'; }
       function pickTier(tier) {
         if (tier === 'normal') { specialExpanded.value = false; setType('一般得分'); }
-        else { specialExpanded.value = true; }   // 展開待選子類別;不強制改值
+        else {
+          specialExpanded.value = true;
+          if (!isSpecialType(form.type)) setType(SPECIAL_TYPES[0]);   // 點「特殊」即預設選第一個子類別(WILD)
+        }
       }
       // 切換符號時收合特殊展開(特殊型符號仍由 isSpecialType 使子類別可見)。
       watch(selectedId, () => { specialExpanded.value = false; });
-      const roleNote = computed(() => {
-        if (form.is_wild) return '✦ 此符號為 Wild —— 可替代其他符號';
-        if (form.is_scatter) return '★ 此符號為 Scatter —— 不受中獎線位置限制';
-        return '';
-      });
 
       // ── v7.9.3:卡片收合摘要 ──
       // 賠付表:目前有設定賠付(>0)的連線數,如 "3/4/5";皆未設定則回 ''
@@ -1967,7 +1944,12 @@
         });
       }
 
-      async function _applyImageFromFile(file) {
+      // v9.4:上傳/貼上/網址 三種來源共用一顆「上傳圖片」鈕開的彈窗;source 記錄來源供狀態列顯示
+      const imgPopup = ref(false);
+      const imgUrlDraft = ref('');
+      const imgDragOver = ref(false);
+
+      async function _applyImageFromFile(file, source, name) {
         if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
         if (!file || !/^image\//.test(file.type || '')) { emitStatus('err', '不是有效的圖片檔'); return; }
         try {
@@ -1978,7 +1960,10 @@
           }
           flushWrite();
           form.image = small;
+          form.image_source = source || 'upload';
+          form.image_name = name || '';
           writeForm();
+          imgPopup.value = false;
           emitStatus('ok', '已套用圖片(僅存本機,不匯出)');
         } catch (err) {
           emitStatus('err', '圖片處理失敗：' + err.message);
@@ -1991,14 +1976,19 @@
       }
       async function onImageFile(e) {
         const file = e.target.files?.[0];
-        if (file) await _applyImageFromFile(file);
+        if (file) await _applyImageFromFile(file, 'upload', file.name);
         e.target.value = '';
+      }
+      async function onImgDrop(e) {
+        imgDragOver.value = false;
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) await _applyImageFromFile(file, 'upload', file.name);
       }
 
       async function pasteImage() {
         if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
         if (!navigator.clipboard || !navigator.clipboard.read) {
-          emitStatus('err', '此瀏覽器不支援讀取剪貼簿,請改用「上傳圖片」或直接 Ctrl+V');
+          emitStatus('err', '此瀏覽器不支援讀取剪貼簿,請改用「拖放 / 選擇檔案」或直接 Ctrl+V');
           return;
         }
         try {
@@ -2007,7 +1997,7 @@
             const type = (it.types || []).find(t => t.startsWith('image/'));
             if (type) {
               const blob = await it.getType(type);
-              await _applyImageFromFile(new File([blob], 'pasted', { type }));
+              await _applyImageFromFile(new File([blob], 'pasted', { type }), 'paste');
               return;
             }
           }
@@ -2026,18 +2016,47 @@
         for (const it of items) {
           if (it.kind === 'file' && /^image\//.test(it.type)) {
             const file = it.getAsFile();
-            if (file) { e.preventDefault(); await _applyImageFromFile(file); return; }
+            if (file) { e.preventDefault(); await _applyImageFromFile(file, 'paste'); return; }
           }
         }
+      }
+
+      function openImgPopup() {
+        if (selectedId.value === null) { emitStatus('err', '請先選取一個 symbol'); return; }
+        imgUrlDraft.value = (form.image_source === 'url' && form.image) ? form.image : '';
+        imgDragOver.value = false;
+        imgPopup.value = true;
+      }
+      function confirmImgUrl() {
+        const url = (imgUrlDraft.value || '').trim();
+        if (!url || selectedId.value === null) return;
+        flushWrite();
+        form.image = url;
+        form.image_source = 'url';
+        form.image_name = '';
+        writeForm();
+        imgPopup.value = false;
+        emitStatus('ok', '已套用圖片網址(僅存本機,不匯出)');
       }
 
       function clearImage() {
         if (selectedId.value === null) return;
         flushWrite();
         form.image = null;
+        form.image_source = '';
+        form.image_name = '';
         writeForm();
         emitStatus('ok', '已移除圖片,改回色票顯示');
       }
+
+      // 狀態列:非純色票時顯示目前圖片來源(瀏覽器安全限制,本機檔案僅能取得檔名,無法取得完整路徑)
+      const imageSourceLabel = computed(() => {
+        if (!form.image) return '';
+        if (form.image_source === 'paste') return '📋 由剪貼簿貼上';
+        if (form.image_source === 'upload') return '📁 圖片路徑：' + (form.image_name || '(本機檔案)');
+        if (form.image_source === 'url') return '🔗 圖片連結：' + form.image;
+        return '已設定圖片';
+      });
 
       function initialOf(s) {
         if (!s) return '?';
@@ -2228,8 +2247,16 @@
       function onKeyDown(e) {
         // v6.2 #1:Undo/Redo 已移除;僅保留 Delete 刪除選取
         const inField = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
-        if (!inField && e.key === 'Delete' && selectedId.value !== null) {
+        if (inField) return;
+        // UI/UX 改版 P2:Delete/Backspace 刪除目前選取的 symbol
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId.value !== null) {
           e.preventDefault(); deleteSelected();
+          return;
+        }
+        // UI/UX 改版 P2:Ctrl/Cmd+D 複製目前選取的 symbol
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D') && selectedId.value !== null) {
+          e.preventDefault(); copySymbol(selectedId.value);
+          return;
         }
       }
 
@@ -2290,10 +2317,9 @@
         SWATCH_COLORS,
         SYMBOL_TYPES,
         symbols, swatchMap, reelCount,
-        spec, maxPayCount, payRowIssues,
-        minMatchChoices, setMinMatch,   // P0-2
+        spec, maxPayCount, canAddPayRow, payRowIssues,
         symbolGroups, groupsOpen, SYMGROUP_MATCH_MODES,   // P0-3
-        addSymbolGroup, removeSymbolGroup, groupMemberCount,   // P0-3
+        addSymbolGroup, removeSymbolGroup, groupMemberCount, applyGroupPay,   // P0-3
         groupModeNames, toggleGroupModePay,   // P0-3 進階
         symbolRefs, refreshSymbolRefs, addRelatedConstraint, ruleCondText, ruleEffectText, goRulesPage,
         ruleLine, rulesExpanded, toggleRuleExpand, addRelatedRule, addSizeRule,
@@ -2302,10 +2328,10 @@
         totalWeight,
         importInput,
         megaPreview,
-        sizePopup, payMode, setPayMode,
-        payAddOpen, payAddKind, payAddFrom, payAddTo, openPayAdd, cancelPayAdd, confirmPayAdd, payAddConflict,
-        carryPopup, carryTab, roleNote,
+        sizePopup, payMode,
+        carryPopup, carryTab,
         rosterCtx, openRosterCtx, closeRosterCtx, rosterCtxSize, rosterCtxCarry,
+        rosterCtxIdx, rosterCtxIsEnabled, rosterCtxCopy, rosterCtxToggle, rosterCtxMove, rosterCtxDelete,
         cardOpen, toggleCard,
         paySummary, limitSummary, sizeSummary, multSummary, rulesSummary,
         hasLimit, hasMult,
@@ -2315,6 +2341,7 @@
         pickSwatch, isCurrentSwatch, swatchStyle,
         currentBg, isCustomSwatch, pickCustom,
         imageInput, triggerImageUpload, onImageFile, pasteImage, clearImage,
+        imgPopup, imgUrlDraft, imgDragOver, openImgPopup, confirmImgUrl, onImgDrop, imageSourceLabel,
         initialOf, pctOf,
         onFieldEdit, setType, bumpMega, resetMega,
         SPECIAL_TYPES, specialExpanded, isSpecialType, pickTier,

@@ -46,28 +46,42 @@
     //   內含子分頁:模式(賠付橫幅 + 11_Mode_Config + 玩法)/ 盤面圖示規則 / 通用規則。
     //   01_Global(賠付類型/計分方向/起始模式)併入規則頁,bonus_games 入口關閉;
     //   兩者 markup 仍在(以 active 路由),但從導覽列隱藏(hidden)。
-    { id: 'rules',             sheet: '09 + 10 + 01 + 11',     name: '規則',         icon: '🧩', done: true, group: 'base' },
-    { id: 'layout',            sheet: '02_Layout',             name: '盤面結構',     icon: '🎰', done: true, group: 'base' },
+    { id: 'rules',             sheet: '09 + 10 + 01 + 11',     name: '規則',         icon: '🧩', done: true, group: 'base',
+      desc: '機制、模式切換與盤面圖示判定規則的建立入口' },
+    { id: 'layout',            sheet: '02_Layout',             name: '盤面結構',     icon: '🎰', done: true, group: 'base',
+      desc: '設定轉輪數、每輪格數與盤面尺寸' },
     { id: 'symbols',           sheet: '03_Symbols',            name: '符號清單',     icon: '🎨', done: true, group: 'base',
-      kind: 'fullpane' },
-    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '押注',        icon: '🎰', done: true, group: 'base' },
+      kind: 'fullpane', desc: '管理圖示、賠付倍數與符號屬性' },
+    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '押注',        icon: '🎰', done: true, group: 'base',
+      desc: '押注面額、加押 / 購買與比倍設定' },
     // v7.10:global 併入規則頁(模式子分頁的賠付橫幅 + 起始模式),從導覽列隱藏(markup/路由/匯出皆保留)
-    { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'base', hidden: true },
+    { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'base', hidden: true,
+      desc: '賠付類型、計分方向與起始模式' },
     // v8.0:bonus_games 分頁移除(bonus 併入 mode 玩法種類 mode_kind)
     // ── 賠付 ──
-    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule', hidden: true },   // 甲:改由規則頁 peer 分段進入
-    { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule' },
-    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule', hidden: true },   // v6.2 #0→甲:併入押注頁,分頁隱藏
-    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule', hidden: true },   // W1:改由權重頁「分佈」peer 進入
+    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule', hidden: true,   // 甲:改由規則頁 peer 分段進入
+      desc: '設定中獎線路徑與計分方式' },
+    { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule',
+      desc: '盤面產生時必須遵守的限制條件' },
+    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule', hidden: true,   // v6.2 #0→甲:併入押注頁,分頁隱藏
+      desc: '彩金等級與中獎機率設定' },
+    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule', hidden: true,   // W1:改由權重頁「分佈」peer 進入
+      desc: '中獎倍數的分佈區間設定' },
     // v8.6 / R5 E-16:比倍(Gamble)分頁(D5 拍板:賠付群組尾;TABS scope 豁免比照 v7.10)
-    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule', hidden: true },   // 甲:併入押注頁,分頁隱藏
+    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule', hidden: true,   // 甲:併入押注頁,分頁隱藏
+      desc: '比倍(Gamble)加倍玩法設定' },
     // ── 權重表 ──
-    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: '權重',         icon: '🎲', done: true, group: 'weight' },   // W1:權重頁 parent(輪帶/分佈 peer host)
-    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight', hidden: true },   // W1:改由權重頁「輪帶」peer 進入
-    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight', hidden: true },   // W1:改由權重頁「分佈」peer 進入
+    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: '權重',         icon: '🎲', done: true, group: 'weight',   // W1:權重頁 parent(輪帶/分佈 peer host)
+      desc: '輪帶與符號出現機率設定' },
+    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight', hidden: true,   // W1:改由權重頁「輪帶」peer 進入
+      desc: '實際輪帶符號排列順序' },
+    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight', hidden: true,   // W1:改由權重頁「分佈」peer 進入
+      desc: '不同盤面格數的出現機率' },
     // v4.0 / #14:連爆權重(08)已移除 UI 分頁(資料也清掉);A.xlsx 仍會輸出空的 08 sheet 以維持 13 分頁結構
-    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
-    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true },  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true,  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+      desc: '中獎倍數加成規則' },
+    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true,  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+      desc: '金幣符號的面額設定' },
   ];
 
   // 依 group 切分(渲染用),保持 TABS 內各 group 內部的原順序
@@ -3260,6 +3274,44 @@
   const LAYOUT_SUBREEL_GAP = 5;
   const LAYOUT_LABEL_HEIGHT = 16;
 
+  // ══════════════════════════════════════════════════════════
+  //  UI/UX 改版 P2:右鍵選單共用 helper
+  //  在此之前 cvCtx / paylineCtx / rosterCtx 各自複製貼上同一套
+  //  「開啟定位 + pointerdown 外部關閉 + Escape 關閉 + 邊界防溢出」邏輯,
+  //  新增的選單(如 ruleCtx)一律改用這個工廠函式,不再第 N 次複製貼上。
+  //  用法:
+  //    const ruleCtx = H.makeContextMenu('.rule-ctx');
+  //    ruleCtx.open(ev, { idx });   // 開啟(ev 提供 clientX/clientY 定位)
+  //    ruleCtx.close();             // 關閉
+  //    ruleCtx.state.open / .x / .y / .data  // 綁到 template 的 reactive 狀態
+  // ══════════════════════════════════════════════════════════
+  function makeContextMenu(popoverSelector) {
+    const state = Vue.reactive({ open: false, x: 0, y: 0, data: null });
+    function _outside(ev) {
+      const el = document.querySelector(popoverSelector);
+      if (el && el.contains(ev.target)) return;
+      close();
+    }
+    function _key(ev) { if (ev.key === 'Escape') close(); }
+    function open(ev, data) {
+      state.data = data !== undefined ? data : null;
+      state.x = ev.clientX; state.y = ev.clientY; state.open = true;
+      Vue.nextTick(() => {
+        const el = document.querySelector(popoverSelector); if (!el) return;
+        const p = el.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, PAD = 8;
+        if (state.x + p.width > vw - PAD) state.x = Math.max(PAD, vw - p.width - PAD);
+        if (state.y + p.height > vh - PAD) state.y = Math.max(PAD, vh - p.height - PAD);
+      });
+      document.addEventListener('pointerdown', _outside, true);
+      document.addEventListener('keydown', _key, true);
+    }
+    function close() {
+      state.open = false;
+      document.removeEventListener('pointerdown', _outside, true);
+      document.removeEventListener('keydown', _key, true);
+    }
+    return { state, open, close };
+  }
 
   // ══════════════════════════════════════════════════════════
   //  Expose all top-level helpers/constants
@@ -3267,6 +3319,7 @@
   //  then: H.loadGlobal(), H.TAB_GROUPS, H.PRESET_LIBRARY, ...
   // ══════════════════════════════════════════════════════════
   SP.ConfigEditor.Helpers = {
+    makeContextMenu,
     TAB_GROUPS, TABS, TABS_BY_GROUP, PAY_TYPES,
     WAYS_DIRS, DEFAULT_GLOBAL, LS_GLOBAL_KEY, LS_MODES_KEY,
     LS_BASELINE_KEY, BASELINE_KEYS, captureBaselineSnapshot, saveBaseline,

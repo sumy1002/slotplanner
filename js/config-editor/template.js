@@ -17,6 +17,17 @@
   window.SlotPlanner.ConfigEditor.TEMPLATE = `
 <div class="cfg-page" :class="{ 'cfg-dev-mode': devMode }">
 
+  <!-- UI/UX 改版 P3:首次進入編輯器的一次性提示條,帶出「按 ? 看所有快捷鍵」(降低學習成本;關閉後用 localStorage 記住,不再重複出現) -->
+  <div v-if="!shortcutsHintDismissed" class="cfg-shortcuts-hint">
+    <span class="cfg-shortcuts-hint-icon">💡</span>
+    <span class="cfg-shortcuts-hint-text">
+      新手上手小提示:許多欄位/清單支援<b>右鍵選單</b>快速操作,按
+      <button class="cfg-shortcuts-hint-key" @click="openShortcutsHelpFromHint">Shift + ?</button>
+      可隨時看完整的快捷鍵與右鍵選單一覽。
+    </span>
+    <button class="cfg-shortcuts-hint-close" @click="dismissShortcutsHint" title="不再顯示">✕</button>
+  </div>
+
   <!-- ── 頂部資料來源指示器 ── -->
   <div class="cfg-source-bar">
     <!-- 行動版漢堡鈕:點按開啟分頁列(桌面/平板由 CSS 隱藏)-->
@@ -69,6 +80,15 @@
         <span class="cfg-search-btn-kbd">⌘K</span>
       </button>
 
+      <!-- UI/UX 改版 P2:快捷鍵一覽按鈕(降低學習成本,不用死記右鍵/快捷鍵) -->
+      <button class="cfg-search-btn cfg-shortcuts-btn"
+              @click="openShortcutsHelp"
+              title="快捷鍵與右鍵選單一覽(Shift + ?)">
+        <span class="cfg-search-btn-icon">⌨</span>
+        <span class="cfg-search-btn-text">快捷鍵</span>
+        <span class="cfg-search-btn-kbd">?</span>
+      </button>
+
     <!-- ── #2 健康度徽章 ── -->
     <span class="cfg-health-host">
       <button class="cfg-health-badge"
@@ -118,9 +138,9 @@
                    v-model.number="cellPop.draft">
             <div class="cfg-cellpop-quick">
               <button v-if="cellPop.base !== null" class="cfg-matrix-btn" @click="cellPop.draft = cellPop.base" title="還原為該欄基準">= 基準</button>
-              <button class="cfg-matrix-btn" @click="cellPop.draft = (Number(cellPop.draft) || 0) * 2">×2</button>
-              <button class="cfg-matrix-btn" @click="cellPop.draft = Math.round((Number(cellPop.draft) || 0) / 2)">÷2</button>
-              <button class="cfg-matrix-btn" @click="cellPop.draft = 0">歸 0</button>
+              <button class="cfg-matrix-btn" @click="cellPop.draft = (Number(cellPop.draft) || 0) * 2" title="此格數值 ×2">×2</button>
+              <button class="cfg-matrix-btn" @click="cellPop.draft = Math.round((Number(cellPop.draft) || 0) / 2)" title="此格數值 ÷2">÷2</button>
+              <button class="cfg-matrix-btn" @click="cellPop.draft = 0" title="此格數值歸 0">歸 0</button>
               <button v-if="cellPop.kind === 'reel'" class="cfg-matrix-btn" @click="gotoReelException(cellPop.mode, cellPop.rid, cellPop.sid)" title="捲動至矩陣中的這一格">跳至該格 ↦</button>
             </div>
           </div>
@@ -404,11 +424,10 @@
              :class="{ active: (active === t.id && !(t.id === 'rules')) || (t.id === 'rules' && (active === 'rules' || active === 'paylines')) || (t.id === 'reel_weights' && (active === 'reel_strips' || active === 'grid_size_weights' || active === 'distribution_bins')), 'cfg-tab-rules-parent': t.id === 'rules',
                        'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
              @click="t.id === 'rules' ? onRulesParentClick() : (active = t.id, cfgTabRailCollapsed = true)"
-             :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + ' · ' + t.sheet)">
+             :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + (t.desc ? ' · ' + t.desc : ''))">
           <span class="cfg-tab-icon">{{ t.icon }}</span>
           <div class="cfg-tab-text">
             <div class="cfg-tab-name">{{ t.name }}<span v-if="tabNotApplicable(t.id)" class="cfg-tab-na-lock" title="目前模式不適用">🔒</span><span v-if="t.id === 'rules'" class="cfg-tab-rules-caret">{{ rulesNavExpanded ? '▾' : '▸' }}</span></div>
-            <div class="cfg-tab-sheet">{{ t.sheet }}</div>
           </div>
           <!-- v3.4 / B5:tab 上的問題徽章(err 紅 / warn 黃,優先 err)-->
           <span v-if="issuesByTab.find(g2 => g2.tab.id === t.id && g2.issues.some(i => i.severity === 'error'))"
@@ -431,11 +450,10 @@
         <div class="cfg-tab"
              :class="{ active: active === 'docgen' }"
              @click="active = 'docgen'; cfgTabRailCollapsed = true"
-             :title="'文件生成 · Excel / MD'">
+             :title="'文件生成 · 把設定匯出成 Excel 或 Markdown 文件'">
           <span class="cfg-tab-icon">📋</span>
           <div class="cfg-tab-text">
             <div class="cfg-tab-name">文件生成</div>
-            <div class="cfg-tab-sheet">Excel / MD</div>
           </div>
         </div>
       </div>
@@ -946,15 +964,15 @@
                     <span class="cfg-mqb-label">列數</span>
                     <input class="input input-sm input-center cfg-mqb-value" type="number" min="1" max="9" v-model.number="groupRowsValue">
                     <button class="cfg-matrix-btn" @click="groupSetRows(groupRowsValue)">設為此值</button>
-                    <button class="cfg-matrix-btn" @click="groupAdjustRows(1)">+1</button>
-                    <button class="cfg-matrix-btn" @click="groupAdjustRows(-1)">−1</button>
+                    <button class="cfg-matrix-btn" @click="groupAdjustRows(1)" title="所選 Reel 列數 +1">+1</button>
+                    <button class="cfg-matrix-btn" @click="groupAdjustRows(-1)" title="所選 Reel 列數 −1">−1</button>
                   </div>
                   <div class="cfg-layout-group-bar-row">
                     <span class="cfg-mqb-label">偏移</span>
                     <input class="input input-sm input-center cfg-mqb-value" type="number" min="-9" max="9" v-model.number="groupOffsetValue">
                     <button class="cfg-matrix-btn" @click="groupSetOffset(groupOffsetValue)">設為此值</button>
-                    <button class="cfg-matrix-btn" @click="groupAdjustOffset(1)">+1</button>
-                    <button class="cfg-matrix-btn" @click="groupAdjustOffset(-1)">−1</button>
+                    <button class="cfg-matrix-btn" @click="groupAdjustOffset(1)" title="所選 Reel 偏移 +1">+1</button>
+                    <button class="cfg-matrix-btn" @click="groupAdjustOffset(-1)" title="所選 Reel 偏移 −1">−1</button>
                   </div>
                   <div class="cfg-layout-group-bar-row">
                     <button class="cfg-matrix-btn" @click="groupToggleSubreel()">切換整組副 Reel</button>
@@ -1752,7 +1770,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="r in sortedReels('reel', reelActiveMode)" :key="r.reel_id">
+                    <tr v-for="r in sortedReels('reel', reelActiveMode)" :key="r.reel_id"
+                        @contextmenu.prevent="openRowMenu('reel', reelActiveMode, r.reel_id)">
                       <td class="cfg-matrix-rowhead cfg-matrix-head-sel" @click="selectWholeRow('reel', reelActiveMode, r.reel_id)" title="點擊選取整列">R{{ r.reel_id }}</td>
                       <td v-for="sid in visibleReelSyms(reelActiveMode)" :key="sid"
                           v-memo="[
@@ -2357,7 +2376,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="r in sortedReels('grid', gridActiveMode)" :key="r.reel_id">
+                    <tr v-for="r in sortedReels('grid', gridActiveMode)" :key="r.reel_id"
+                        @contextmenu.prevent="openRowMenu('grid', gridActiveMode, r.reel_id)">
                       <td class="cfg-matrix-rowhead">R{{ r.reel_id }}</td>
                       <td v-for="sz in gridW(gridActiveMode).grid_sizes" :key="sz"
                           v-memo="[
@@ -2724,9 +2744,9 @@
                 <div class="cfg-payline-gen-row">
                   <div class="cfg-payline-gen-label">線數</div>
                   <div class="cfg-payline-gen-stepper">
-                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.max(10, (Number(paylineGenCount)||10) - 1)">−</button>
+                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.max(10, (Number(paylineGenCount)||10) - 1)" title="線數 −1">−</button>
                     <input type="number" min="10" max="50" v-model.number="paylineGenCount" class="cfg-payline-gen-num" />
-                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.min(50, (Number(paylineGenCount)||10) + 1)">+</button>
+                    <button class="cfg-stepper-btn" @click="paylineGenCount = Math.min(50, (Number(paylineGenCount)||10) + 1)" title="線數 +1">+</button>
                   </div>
                   <div class="cfg-payline-gen-avail">上限 {{ paylineGenAvailable }}</div>
                 </div>
@@ -3498,7 +3518,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="r in sortedReels('combo', comboActiveModeBar)" :key="r.reel_id">
+                    <tr v-for="r in sortedReels('combo', comboActiveModeBar)" :key="r.reel_id"
+                        @contextmenu.prevent="openRowMenu('combo', comboActiveModeBar, r.reel_id, comboActiveStep[comboActiveModeBar])">
                       <td class="cfg-matrix-rowhead">R{{ r.reel_id }}</td>
                       <td v-for="sid in comboW(comboActiveModeBar).symbol_ids" :key="sid"
                           v-memo="[
@@ -3854,6 +3875,7 @@
                        :title="humanizeRule(it.obj)"
                        draggable="true"
                        @click="selectRuleFromList(grp.key, 'puzzle', it.idx)"
+                       @contextmenu.prevent="openRuleCtx(it.idx, $event)"
                        @dragstart="onRuleDragStart(it.idx, $event)"
                        @dragover="onRuleDragOver(it.idx, $event)"
                        @dragleave="onRuleDragLeave(it.idx)"
@@ -3963,6 +3985,14 @@
                 <input type="checkbox" v-model="rulesAutoPriority">
                 <span title="拖曳重排拼圖規則後,自動依新順序設定 priority(從 100 開始遞減)">拖曳時自動重設 priority</span>
               </label>
+            </div>
+
+            <!-- UI/UX 改版 P2:規則列右鍵選單(複用 cfg-cv-ctx 樣式)-->
+            <div class="cfg-cv-ctx rule-ctx" v-if="ruleCtx.open" :style="{ left: ruleCtx.x + 'px', top: ruleCtx.y + 'px' }">
+              <button class="cfg-cv-ctx-item" @click="ruleCtxDuplicate()">⎘ 複製此規則</button>
+              <button class="cfg-cv-ctx-item" @click="ruleCtxToggleEnabled()">{{ rules[ruleCtx.data] && rules[ruleCtx.data].enabled === false ? '▶ 啟用此規則' : '⏸ 停用此規則' }}</button>
+              <div class="cfg-cv-ctx-sep"></div>
+              <button class="cfg-cv-ctx-item cfg-cv-ctx-danger" @click="ruleCtxDelete()">✕ 刪除此規則</button>
             </div>
           </div>
 
@@ -4303,10 +4333,10 @@
               <button class="cfg-puzzle-pin-btn cfg-cond-footer-pin"
                       :class="{ active: pinnedTest && pinnedTest.kind === 'rule' && pinnedTest.id === rules[selectedRuleIdx].rule_id }"
                       @click="pinTest('rule', rules[selectedRuleIdx].rule_id, rules[selectedRuleIdx].rule_id)"
-                      title="把這條規則釘到右下角的 Test Inspector,即時看條件評估結果">
+                      title="把這條規則釘到右下角的測試檢查器,即時看條件評估結果">
                 <span>🧪</span>
                 <span v-if="pinnedTest && pinnedTest.kind === 'rule' && pinnedTest.id === rules[selectedRuleIdx].rule_id">已釘住</span>
-                <span v-else>釘到 inspector</span>
+                <span v-else>釘到測試檢查器</span>
               </button>
             </div>
           </div>
@@ -4822,10 +4852,10 @@
                             :class="{ active: pinnedTest && pinnedTest.kind === 'discard' && pinnedTest.id === discards[selectedDiscardIdx].discard_id }"
                             @click="pinTest('discard', discards[selectedDiscardIdx].discard_id, discards[selectedDiscardIdx].discard_id)"
                             :disabled="!discards[selectedDiscardIdx].discard_id"
-                            title="把這條棄牌規則釘到右下角的 Test Inspector,即時看條件評估結果">
+                            title="把這條棄牌規則釘到右下角的測試檢查器,即時看條件評估結果">
                       <span>🧪</span>
                       <span v-if="pinnedTest && pinnedTest.kind === 'discard' && pinnedTest.id === discards[selectedDiscardIdx].discard_id">已釘住</span>
-                      <span v-else>釘到 inspector</span>
+                      <span v-else>釘到測試檢查器</span>
                     </button>
                   </div>
                 </div>
@@ -5423,10 +5453,10 @@
                               :class="{ active: pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode }"
                               @click="pinTest('mode', m.mode, m.mode)"
                               :disabled="!m.mode"
-                              title="把這個模式的 trigger 條件釘到右下角的 Test Inspector,即時看評估結果">
+                              title="把這個模式的 trigger 條件釘到右下角的測試檢查器,即時看評估結果">
                         <span>🧪</span>
-                        <span v-if="pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode">已釘住 — 看右下 inspector</span>
-                        <span v-else>釘到 Test Inspector</span>
+                        <span v-if="pinnedTest && pinnedTest.kind === 'mode' && pinnedTest.id === m.mode">已釘住 — 看右下測試檢查器</span>
+                        <span v-else>釘到測試檢查器</span>
                       </button>
                     </div>
                   </div>
@@ -5504,7 +5534,7 @@
                       觸發給付 <span class="cfg-key">trigger_pays</span>
                       <span class="cfg-hint" style="margin-left:6px;">scatter 數達標即付(非連線賠付),例:4/5/6 SCATTER → 5×/20×/100×</span>
                     </div>
-                    <div v-if="(m.trigger_pays || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無觸發給付。</div>
+                    <div v-if="(m.trigger_pays || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無觸發給付,按下方「+ 新增觸發給付」開始。</div>
                     <div v-for="(tp, ti) in m.trigger_pays" :key="'tp'+ti" class="cfg-mode-tp-row cfg-reveal-zone">
                       <div class="cfg-mode-tp-cell">
                         <span class="cfg-mode-tp-lbl">scatter 數</span>
@@ -5536,7 +5566,7 @@
                       <div class="cfg-hint">觸發時由玩家在同組模式中選一個進入;留空 = 一般模式。同組需至少 2 個模式。</div>
                     </div>
                     <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">Hold&Win Respin(可選) <span class="cfg-key">respin_base</span></label>
+                      <label class="cfg-label">鎖點重轉(可選) <span class="cfg-key">Hold&Win Respin / respin_base</span></label>
                       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span class="cfg-bonus-ilabel">初始局數</span>
                         <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.respin_base">
@@ -5692,7 +5722,7 @@
                         {{ m.mode_kind === 'WHEEL' ? '輪盤分段' : m.mode_kind === 'PICK' ? '獎項池' : '收集獎勵' }}
                         <span v-if="modeExpected(m) != null && modeExpected(m) > 0" class="cfg-bonus-ev">期望 ×{{ modeExpected(m).toFixed(2) }}</span>
                       </div>
-                      <div v-if="(m.items || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無獎項。</div>
+                      <div v-if="(m.items || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無獎項,按下方「+ 新增獎項」開始。</div>
                       <div v-for="(it, ii) in m.items" :key="'mi'+ii" class="cfg-bonus-item-row cfg-reveal-zone">
                         <input class="input input-w-id" type="text" v-model.trim="it.label" placeholder="標籤">
                         <div class="cfg-bonus-icell">
@@ -5922,7 +5952,7 @@
                 <div class="cfg-gc-frow">
                   <label class="cfg-gc-fl">符號</label>
                   <div class="cfg-gc-chips">
-                    <span v-for="(s, si) in gcDlg.symbols" :key="si" class="cfg-gc-symchip">{{ s }}<button @click="gcRemoveSym(si)">×</button></span>
+                    <span v-for="(s, si) in gcDlg.symbols" :key="si" class="cfg-gc-symchip">{{ s }}<button @click="gcRemoveSym(si)" title="移除此符號">×</button></span>
                     <select class="cfg-gc-sel" style="width:110px" v-model="gcDlg.symPick" @change="gcAddSym()">
                       <option value="">＋ 加符號</option>
                       <option v-for="s in symbolList" :key="s.symbol_id" :value="s.symbol_id">{{ s.symbol_id }}</option>
@@ -5941,7 +5971,7 @@
                 <div class="cfg-gc-frow">
                   <label class="cfg-gc-fl">符號</label>
                   <div class="cfg-gc-chips">
-                    <span v-for="(s, si) in gcDlg.symbols" :key="si" class="cfg-gc-symchip">{{ s }}<button @click="gcRemoveSym(si)">×</button></span>
+                    <span v-for="(s, si) in gcDlg.symbols" :key="si" class="cfg-gc-symchip">{{ s }}<button @click="gcRemoveSym(si)" title="移除此符號">×</button></span>
                     <select class="cfg-gc-sel" style="width:110px" v-model="gcDlg.symPick" @change="gcAddSym()">
                       <option value="">＋ 加符號</option>
                       <option v-for="s in symbolList" :key="s.symbol_id" :value="s.symbol_id">{{ s.symbol_id }}</option>
@@ -6148,7 +6178,7 @@
 
         <div class="cfg-section cfg-section-card" :class="{ 'is-empty': !betConfig.ante_bet_enabled, 'is-closed': betConfig.ante_bet_enabled && !betCardOpen.ante, 'is-locked': !betConfig.ante_bet_enabled }">
           <div class="cfg-section-title cfg-section-title-switch cfg-card-head" @click="toggleBetCard('ante')">
-            <span class="cfg-section-title-text">Extra Bet <span class="cfg-key">加押</span></span>
+            <span class="cfg-section-title-text">加押 <span class="cfg-key">Extra Bet</span></span>
             <span v-if="betConfig.ante_bet_enabled && !betCardOpen.ante" class="cfg-card-summary">
               <span class="cfg-card-summary-chip cfg-mono">{{ anteBetSummary }}</span>
             </span>
@@ -6199,7 +6229,7 @@
 
         <div class="cfg-section cfg-section-card" :class="{ 'is-empty': !betConfig.buy_feature_enabled, 'is-closed': betConfig.buy_feature_enabled && !betCardOpen.buy, 'is-locked': !betConfig.buy_feature_enabled }">
           <div class="cfg-section-title cfg-section-title-switch cfg-card-head" @click="toggleBetCard('buy')">
-            <span class="cfg-section-title-text">Buy Feature <span class="cfg-key">購買</span></span>
+            <span class="cfg-section-title-text">購買 <span class="cfg-key">Buy Feature</span></span>
             <span v-if="betConfig.buy_feature_enabled && !betCardOpen.buy" class="cfg-card-summary">
               <span class="cfg-card-summary-chip">{{ buyFeatureSummary }}</span>
             </span>
@@ -6216,7 +6246,7 @@
           <template v-if="betConfig.buy_feature_enabled">
             <div class="cfg-hint">購買功能：玩家可支付一定倍數直接進入指定模式，需在此定義各模式的購買成本與 RTP 目標。</div>
             <div v-if="betConfig.buy_features.length === 0" class="cfg-hint" style="margin-bottom:8px;">
-              尚未設定購買項目；點下方「新增 Buy Feature」開始定義各模式的購買成本與 RTP 目標。
+              尚未設定購買項目；點下方「新增購買項目」開始定義各模式的購買成本與 RTP 目標。
             </div>
 
             <div class="cfg-bf-list">
@@ -6268,7 +6298,7 @@
 
             <button class="cfg-mode-add-btn" @click="addBuyFeature">
               <span style="font-size:16px">+</span>
-              <span>新增 Buy Feature</span>
+              <span>新增購買項目</span>
             </button>
 
             <!-- v8.6 / R5 E-15:Feature Drop 折抵(BTG 式;規格描述) -->
@@ -6276,7 +6306,7 @@
               <label class="chk">
                 <input type="checkbox" v-model="betConfig.feature_drop_enabled">
                 <span class="box"></span>
-                <span>Feature Drop 折抵 <span class="cfg-key">feature_drop</span></span>
+                <span>贏分折抵 <span class="cfg-key">Feature Drop / feature_drop</span></span>
               </label>
               <div class="cfg-hint">累積贏分折抵購買成本（BTG 式）；細節描述於下欄。</div>
               <input v-if="betConfig.feature_drop_enabled" class="input" type="text" style="margin-top:6px;"
@@ -6570,7 +6600,7 @@
           </div>
           <div class="cfg-field" style="margin-top:8px;">
             <label class="cfg-label">級距清單</label>
-            <div v-if="jackpotCfg.tiers.length === 0" class="cfg-hint" style="margin:4px 0;">尚無級距。</div>
+            <div v-if="jackpotCfg.tiers.length === 0" class="cfg-hint" style="margin:4px 0;">尚無級距,按下方「＋ 新增級距」開始(如 MINI／MINOR／MAJOR／GRAND)。</div>
             <div v-for="(t, ti) in jackpotCfg.tiers" :key="'jpt'+ti" class="cfg-bonus-item-row cfg-reveal-zone">
               <input class="input input-w-id" type="text" v-model.trim="t.tier" placeholder="層級">
               <input class="input input-w-id" type="text" v-model.trim="t.label" placeholder="名稱（GRAND…）">
@@ -6594,7 +6624,7 @@
               跨局/跨消除持續累積的進度條(如 Scatter 收集、金幣計量)。填充來源命中一次累積 Fill_Amount,
               到 Capacity 即視為集滿(0 = 無上限,純計數不觸發集滿動作)。純描述,本工具不模擬累積時機,執行交下游。
             </div>
-            <div v-if="meters.length === 0" class="cfg-hint" style="margin:4px 0;">尚無收集條。</div>
+            <div v-if="meters.length === 0" class="cfg-hint" style="margin:4px 0;">尚無收集條,按下方「新增收集條」開始(如 Scatter 收集、金幣計量)。</div>
             <div v-for="(mt, mi) in meters" :key="mt.meter_id || mi" class="cfg-field cfg-field-compact cfg-reveal-zone" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
               <span class="cfg-key" style="min-width:52px;">{{ mt.meter_id }}</span>
               <input class="input input-sm" type="text" v-model.trim="mt.label" placeholder="顯示名(如:糖果收集條)" style="width:160px;">
@@ -6857,6 +6887,51 @@
     </div>
   </div>
 
+  <!-- UI/UX 改版 P2:快捷鍵與右鍵選單一覽(降低學習成本;按 Shift+? 或點頂列「快捷鍵」開啟) -->
+  <div v-if="shortcutsHelpOpen" class="cfg-search-overlay" @click.self="closeShortcutsHelp">
+    <div class="cfg-shortcuts-modal">
+      <div class="cfg-shortcuts-header">
+        <span class="cfg-shortcuts-header-icon">⌨</span>
+        <span class="cfg-shortcuts-header-title">快捷鍵與右鍵選單一覽</span>
+        <button class="cfg-diff-close" @click="closeShortcutsHelp" title="關閉">✕</button>
+      </div>
+      <div class="cfg-shortcuts-body">
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">全站</div>
+          <div class="cfg-shortcuts-row"><span>開啟全編輯器搜尋 / 快速動作</span><span class="cfg-shortcuts-keys"><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>
+          <div class="cfg-shortcuts-row"><span>開啟 / 關閉本說明</span><span class="cfg-shortcuts-keys"><kbd>Shift</kbd>+<kbd>?</kbd></span></div>
+          <div class="cfg-shortcuts-row"><span>關閉目前開啟的選單 / 彈窗 / 抽屜</span><span class="cfg-shortcuts-keys"><kbd>Esc</kbd></span></div>
+        </div>
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">規則頁</div>
+          <div class="cfg-shortcuts-row"><span>右鍵規則列:複製 / 停用 / 刪除</span><span class="cfg-shortcuts-keys">滑鼠右鍵</span></div>
+          <div class="cfg-shortcuts-row"><span>刪除目前選取的規則</span><span class="cfg-shortcuts-keys"><kbd>Delete</kbd> / <kbd>Backspace</kbd></span></div>
+          <div class="cfg-shortcuts-row"><span>複製目前選取的規則</span><span class="cfg-shortcuts-keys"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+        </div>
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">符號清單頁</div>
+          <div class="cfg-shortcuts-row"><span>右鍵圖示:複製 / 停用 / 上移 / 下移 / 刪除</span><span class="cfg-shortcuts-keys">滑鼠右鍵</span></div>
+          <div class="cfg-shortcuts-row"><span>刪除目前選取的圖示</span><span class="cfg-shortcuts-keys"><kbd>Delete</kbd> / <kbd>Backspace</kbd></span></div>
+          <div class="cfg-shortcuts-row"><span>複製目前選取的圖示</span><span class="cfg-shortcuts-keys"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+        </div>
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">權重表(Reel / 格數 / 爆分連段)</div>
+          <div class="cfg-shortcuts-row"><span>右鍵列上任一格:開啟「整列操作」(填值 / ×2÷2 / 正規化 / 複製到所有 Reel / 歸 0)</span><span class="cfg-shortcuts-keys">滑鼠右鍵</span></div>
+          <div class="cfg-shortcuts-row"><span>復原 / 重做批次操作</span><span class="cfg-shortcuts-keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></span></div>
+        </div>
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">盤面結構頁</div>
+          <div class="cfg-shortcuts-row"><span>右鍵畫布格子:依主輪格 / 副盤 / 空白顯示對應選單</span><span class="cfg-shortcuts-keys">滑鼠右鍵</span></div>
+          <div class="cfg-shortcuts-row"><span>切換上一輪 / 下一輪</span><span class="cfg-shortcuts-keys"><kbd>←</kbd> / <kbd>→</kbd></span></div>
+        </div>
+        <div class="cfg-shortcuts-group">
+          <div class="cfg-shortcuts-group-title">中獎線頁</div>
+          <div class="cfg-shortcuts-row"><span>右鍵中獎線列:編輯 / 刪除</span><span class="cfg-shortcuts-keys">滑鼠右鍵</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── #16 範本 diff modal ── -->
   <div v-if="diffOpen" class="cfg-diff-overlay" @click.self="closeDiffModal">
     <div class="cfg-diff-modal">
@@ -6971,7 +7046,7 @@
     <!-- header(永遠顯示,點擊收合)-->
     <div class="cfg-inspector-header" @click="inspectorOpen = !inspectorOpen">
       <span class="cfg-inspector-header-icon">🧪</span>
-      <span class="cfg-inspector-header-title">Test Inspector</span>
+      <span class="cfg-inspector-header-title">測試檢查器 <span class="cfg-key">Test Inspector</span></span>
       <template v-if="inspectorOpen && pinnedTest">
         <span class="cfg-inspector-pinned-chip">
           {{ pinnedKindLabel(pinnedTest.kind) }} · <code>{{ pinnedTest.label }}</code>
@@ -6996,7 +7071,7 @@
            }">
         <template v-if="evalPinned().nopin">
           <span class="cfg-inspector-result-icon">📌</span>
-          <span class="cfg-inspector-result-label">點任一規則「釘到 Test Inspector」即可開始測試</span>
+          <span class="cfg-inspector-result-label">點任一規則「釘到測試檢查器」即可開始測試</span>
         </template>
         <template v-else-if="evalPinned().empty">
           <span class="cfg-inspector-result-icon">∅</span>

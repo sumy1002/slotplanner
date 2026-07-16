@@ -3322,7 +3322,7 @@
         <div><span class="docgen-sum-k">模式</span><span class="docgen-sum-v">{{ cfg.modes.map(m => m.mode).filter(Boolean).join(' / ') || '—' }}</span></div>
         <div><span class="docgen-sum-k">圖示</span><span class="docgen-sum-v">一般 {{ cfg.normalSyms.length }}・特殊 {{ cfg.specialSyms.length }}</span></div>
       </div>
-      <div v-if="meta.inherit_config === false" style="font-size:11px; color:var(--text-light); margin-top:6px;">
+      <div v-if="meta.inherit_config === false" style="font-size:var(--fs-xs); color:var(--text-light); margin-top:6px;">
         連動已關閉:模式描述／JP 等不再自動帶入,只用你手填的內容;上方基本資訊仍跟隨全域設定。
       </div>
     </div>

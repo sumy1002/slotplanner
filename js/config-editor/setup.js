@@ -6796,6 +6796,9 @@
             return { level: 'start', label: '1. 先到 03 建立符號',
                      action: () => { active.value = 'symbols'; } };
           }
+          // UI/UX 改版 P3:比照 NotebookLM「動態引導按鈕」— 依序抓「全 0」與「合計偏離 100」
+          // 兩種可一鍵修正的狀態,呼叫既有的「整列填 100」/「正規化至 100」動作,不用手動微調每格。
+          let offRow = null;
           for (const r of layout) {
             let tot = 0;
             for (const sid of e.symbol_ids) tot += Number(e.weights[`${r.reel_id}-${sid}`]) || 0;
@@ -6804,6 +6807,11 @@
               return { level: 'warn', label: `⚠ R${rid} 權重全 0(無法生成),一鍵均勻填 100`,
                        action: () => reelFillRowUniform(m, rid, 100) };
             }
+            if (offRow === null && Math.abs(tot - 100) > 5) offRow = { rid: r.reel_id, tot };
+          }
+          if (offRow) {
+            return { level: 'warn', label: `⚠ R${offRow.rid} 合計 ${offRow.tot},一鍵等比補足至 100`,
+                     action: () => reelNormalizeRow(m, offRow.rid, 100) };
           }
           return _guideIssueWarn('reel_weights')
               || { level: 'ok', label: '✨ 權重表就緒', action: null };
@@ -6844,6 +6852,20 @@
         // ── 05 格數(有模式設為可變時適用;鎖卡 = idle)──
         grid_size_weights() {
           if (!modes.some(m => m.rows_variable)) return null;   // §5.2 Stage C:改逐模式
+          const m = gridActiveMode.value;
+          if (m) {
+            const e = gridW(m);
+            // UI/UX 改版 P3:同 04 權重,合計偏離 100 時主動提供一鍵等比補足
+            for (const r of layout) {
+              let tot = 0;
+              for (const sz of (e.grid_sizes || [])) tot += Number(e.weights[`${r.reel_id}-${sz}`]) || 0;
+              if (tot !== 0 && Math.abs(tot - 100) > 5) {
+                const rid = r.reel_id;
+                return { level: 'warn', label: `⚠ R${rid} 合計 ${tot},一鍵等比補足至 100`,
+                         action: () => gridNormalizeRow(m, rid, 100) };
+              }
+            }
+          }
           return _guideIssueWarn('grid_size_weights')
               || { level: 'ok', label: '✨ 格數權重就緒', action: null };
         },
@@ -8234,6 +8256,20 @@
         selectedRuleIdx.value = Math.min(selectedRuleIdx.value, Math.max(0, rules.length - 1));
         emit('status', { type: 'ok', msg: `已刪除規則「${rid}」` });
       }
+
+      // ── UI/UX 改版 P2:規則列右鍵選單(複用 H.makeContextMenu 共用 helper;複製/停用/刪除呼叫既有函式) ──
+      const _ruleCtxMenu = H.makeContextMenu('.rule-ctx');
+      const ruleCtx = _ruleCtxMenu.state;   // template 用 ruleCtx.open / .x / .y / .data(存 rule idx)
+      function openRuleCtx(idx, ev) { _ruleCtxMenu.open(ev, idx); }
+      function closeRuleCtx() { _ruleCtxMenu.close(); }
+      function ruleCtxDuplicate() { const i = ruleCtx.data; closeRuleCtx(); if (i >= 0) duplicateRule(i); }
+      function ruleCtxToggleEnabled() {
+        const i = ruleCtx.data; closeRuleCtx();
+        const r = rules[i]; if (!r) return;
+        r.enabled = (r.enabled === false);
+        emit('status', { type: 'ok', msg: r.enabled ? `已啟用規則「${r.rule_id}」` : `已停用規則「${r.rule_id}」(資料保留)` });
+      }
+      function ruleCtxDelete() { const i = ruleCtx.data; closeRuleCtx(); if (i >= 0) removeRule(i); }
       // 規則 ID 改名時,搬移 UI 暫存
       function renameRuleBuilderState(oldId, newId) {
         if (!oldId || !newId || oldId === newId) return;
@@ -10502,6 +10538,21 @@
       function closeSearch() {
         searchOpen.value = false;
       }
+      // ── UI/UX 改版 P2:快捷鍵一覽浮層(降低學習成本,不用死記右鍵/快捷鍵)──
+      const shortcutsHelpOpen = ref(false);
+      function openShortcutsHelp() { shortcutsHelpOpen.value = true; }
+      function closeShortcutsHelp() { shortcutsHelpOpen.value = false; }
+      // ── UI/UX 改版 P3:首次進入編輯器的一次性提示條,帶出「按 ? 看所有快捷鍵」(比照 04 跨模式提示的 dismiss 記憶模式)──
+      const LS_SHORTCUTS_HINT_KEY = 'slotplanner.ui.shortcutsHintDismissed.v1';
+      const shortcutsHintDismissed = ref(localStorage.getItem(LS_SHORTCUTS_HINT_KEY) === '1');
+      function dismissShortcutsHint() {
+        shortcutsHintDismissed.value = true;
+        try { localStorage.setItem(LS_SHORTCUTS_HINT_KEY, '1'); } catch(_){}
+      }
+      function openShortcutsHelpFromHint() {
+        dismissShortcutsHint();
+        openShortcutsHelp();
+      }
       function executeSearchResult(item) {
         if (!item) return;
         closeSearch();
@@ -10542,6 +10593,18 @@
           if (searchOpen.value) closeSearch();
           else openSearch();
         }
+        // UI/UX 改版 P2:Shift+? 開關「快捷鍵一覽」浮層(不在輸入框內才攔)
+        if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey) {
+          const inField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target.tagName);
+          if (!inField && !searchOpen.value) {
+            ev.preventDefault();
+            shortcutsHelpOpen.value = !shortcutsHelpOpen.value;
+          }
+        }
+        // Esc:統一關閉快捷鍵一覽浮層(其餘各自的 popover/選單已各自綁定 Escape)
+        if (ev.key === 'Escape' && shortcutsHelpOpen.value) {
+          shortcutsHelpOpen.value = false;
+        }
         // v3.5 / #7:Ctrl+Z 復原矩陣批次操作(只在權重 tab 生效,且不在輸入框內)
         if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z') && !ev.shiftKey) {
           const inField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target.tagName);
@@ -10570,6 +10633,20 @@
             ev.preventDefault();
             if (ev.key === 'ArrowLeft')  activeReelIdx.value = Math.max(0, activeReelIdx.value - 1);
             if (ev.key === 'ArrowRight') activeReelIdx.value = Math.min(layout.length - 1, activeReelIdx.value + 1);
+          }
+        }
+        // ── UI/UX 改版 P2:規則頁 Delete/Backspace 刪除選取列、Ctrl+D 複製選取列 ──
+        // (不在 input/textarea/select 內才攔,且僅在選取拼圖規則、非搜尋/選單開啟時生效)
+        if (active.value === 'rules' && selectedKind.value === 'puzzle' && !searchOpen.value) {
+          const inField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target.tagName);
+          if (!inField && rules[selectedRuleIdx.value]) {
+            if (ev.key === 'Delete' || ev.key === 'Backspace') {
+              ev.preventDefault();
+              removeRule(selectedRuleIdx.value);
+            } else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'd' || ev.key === 'D')) {
+              ev.preventDefault();
+              duplicateRule(selectedRuleIdx.value);
+            }
           }
         }
       }
@@ -12380,6 +12457,9 @@
         // ── #15 Ctrl+K 搜尋 ──
         searchOpen, searchQuery, searchSelectedIdx, searchResults,
         openSearch, closeSearch, executeSearchResult, onSearchKeydown,
+        // UI/UX 改版 P2:快捷鍵一覽浮層(Shift+?)
+        shortcutsHelpOpen, openShortcutsHelp, closeShortcutsHelp,
+        shortcutsHintDismissed, dismissShortcutsHint, openShortcutsHelpFromHint,
         gridWeights, gridWeightsDebugJson,
         gridW, gridSizesStr, setGridSizesStr, applyModeRangeToGridSizes, modeRowRangeLabel,
         gridTotalForRow, gridFillRowUniform, sortGridSizes,
@@ -12395,6 +12475,8 @@
         addRule, removeRule,
         // v3.3:複製 + 白話翻譯
         duplicateRule, duplicateDiscard,
+        // UI/UX 改版 P2:規則列右鍵選單
+        ruleCtx, openRuleCtx, closeRuleCtx, ruleCtxDuplicate, ruleCtxToggleEnabled, ruleCtxDelete,
         humanizeCondition, humanizeAction, humanizeRule, humanizeDiscard,
         // v3.3 A4:layout 範本
         LAYOUT_PRESETS, layoutPresetMenuOpen, toggleLayoutPresetMenu, applyLayoutPreset,

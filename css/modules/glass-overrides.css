@@ -566,7 +566,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 }
 
 /* v4.0 / #2:符號欄「編輯符號清單」連結間距 */
-.cfg-matrix-symbols-edit-link { margin-left: 10px; font-size: 11px; }
+.cfg-matrix-symbols-edit-link { margin-left: 10px; font-size: var(--fs-xs); }
 
 /* ════════════════════════════════════════════════════════════
    v4.0 / #16:中獎線全域方向選擇器(左欄工具列)+ #15 列表 note
@@ -578,13 +578,13 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   margin-left: auto;
 }
 .cfg-payline-global-dir-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-light);
 }
 .cfg-payline-global-dir-chip {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 3px 8px;
   border-radius: var(--r-pill);
   cursor: pointer;
@@ -675,7 +675,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   box-shadow: var(--focus-ring);
 }
 .cfg-layout-reel-chip-grip {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: -2px;
   color: var(--text-light);
   cursor: grab;
@@ -687,10 +687,10 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   font-size: 13px;
   color: var(--text);
 }
-.cfg-layout-reel-chip-sub-dot { color: rgba(220,140,80,0.95); font-size: 9px; }
+.cfg-layout-reel-chip-sub-dot { color: rgba(220,140,80,0.95); font-size: var(--fs-xs); }
 .cfg-layout-reel-chip-rows {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
 }
@@ -766,7 +766,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-stage.is-pan:active { cursor: grabbing; }
 .cfg-cv-brush .cfg-cv-sw { width: 16px; height: 16px; margin: 0; }
 .cfg-cv-tool-ic { font-size: 16px; line-height: 1; }
-.cfg-cv-tool-lb { font-size: 11px; line-height: 1; }
+.cfg-cv-tool-lb { font-size: var(--fs-xs); line-height: 1; }
 .cfg-cv-rail-div { width: 100%; height: 1px; background: var(--glass-edge); margin: 2px 0; }
 .cfg-cv-actions { display: flex; align-items: center; gap: 8px; padding: 8px 2px 2px; }
 .cfg-cv-fx { flex: 1; }
@@ -783,7 +783,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 .cfg-cv-board { display: flex; flex-direction: column; gap: 4px; flex: none; width: max-content; height: max-content; margin: auto; }
 /* R 欄標籤列:與 .cfg-cv-grid 同欄寬同 gap,黏頂端(垂直捲動時固定、水平捲動時跟著盤面欄浮動) */
 .cfg-cv-collabels { display: grid; gap: 4px; flex: none; width: max-content; height: 18px; position: sticky; top: 0; z-index: 2; }
-.cfg-cv-collabel { display: flex; align-items: flex-end; justify-content: center; font-size: 10px; line-height: 1; font-weight: 600; color: var(--text-muted); user-select: none; }
+.cfg-cv-collabel { display: flex; align-items: flex-end; justify-content: center; font-size: var(--fs-xs); line-height: 1; font-weight: 600; color: var(--text-muted); user-select: none; }
 .cfg-cv-collabel.has-r { color: var(--accent-text); }
 .cfg-cv-cell { position: relative; border-radius: 3px; border: 0.5px solid var(--glass-edge); background: transparent; cursor: pointer; box-sizing: border-box; }
 .cfg-cv-cell-main { background: var(--accent); border: 1px solid var(--accent-hex); }
@@ -810,13 +810,13 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
 }
 .cfg-cv-cell-invalid::before {
   content: "!"; position: absolute; top: 1px; left: 3px;
-  color: #dc2626; font-size: 10px; font-weight: 800; line-height: 1; pointer-events: none;
+  color: #dc2626; font-size: var(--fs-xs); font-weight: 800; line-height: 1; pointer-events: none;
 }
 /* v7.x:畫布狀態列(已同步/尚未套用) */
 .cfg-cv-state { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cfg-cv-state.dirty { color: #b45309; font-weight: 600; }
 .cfg-cv-state.invalid { color: #dc2626; font-weight: 700; }
-.cfg-cv-railhint { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.cfg-cv-railhint { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
 /* v7.x:畫布有未套用編輯時,鎖住左側「幾何」編輯面(避免和畫布草稿打架);套用/捨棄後解鎖 */
 .cfg-is-cvdirty { opacity: 0.5; pointer-events: none; filter: grayscale(0.15); transition: opacity var(--t-fast); }
 .cfg-cv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text); }
@@ -1152,8 +1152,10 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   /* B. 外觀/識別:編號/名稱/Symbol_ID 三欄(桌面 820 已降兩欄)→ 手機單欄堆疊 */
   #app .sym-id-grid { grid-template-columns: 1fr; gap: 10px; }
   #app .sym-id-grid .input { min-height: var(--touch-min); }
-  /* swatch-preview(60px) + swatch-strip 並排:窄屏縮間距、strip 不被壓爆 */
-  #app .sym-appearance-row { gap: 10px; }
+  /* v9.4:識別列(圖示方框 + 名稱/編號/顏色/上傳)窄屏改直排堆疊,避免圖示方框把內容擠爆 */
+  #app .sym-identity-row { flex-direction: column; align-items: stretch; }
+  #app .sym-identity-icon { align-self: center; }
+  #app .sym-identity-namerow .sym-name-wrap { flex: 1 1 auto; }
   #app .swatch-strip { min-width: 0; }
 
   /* F. 出現限制:輪/副輪 checkbox 群 與 出現上限 兩欄 → 單欄堆疊 */
@@ -1167,6 +1169,6 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   #app .sym-mega-preview { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   #app .sym-mega-svg { max-width: 100%; height: auto !important; }
 
-  /* A. 清單列上/下移箭頭(inline font-size:9px/padding:1px 4px)太小 → 放大命中區 */
+  /* A. 清單列上/下移箭頭(inline font-size: var(--fs-xs)/padding:1px 4px)太小 → 放大命中區 */
   #app .sym-reorder button { padding: 4px 8px !important; font-size: 12px !important; min-height: 28px; }
 }

@@ -73,7 +73,7 @@
   color: var(--text);
 }
 .output-info-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 2px;
 }
@@ -105,7 +105,7 @@
 }
 .btn-filter-icon { font-size: 15px; }
 .filter-badge {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   background: var(--glass-2);
   border: 1px solid var(--glass-edge);
@@ -163,7 +163,7 @@
 .fm-header-left  { display: flex; align-items: center; gap: 10px; }
 .fm-title        { font-size: 14px; font-weight: 700; color: var(--accent-text); }
 .fm-badge {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 2px 9px;
   border-radius: var(--r-pill);
   background: var(--glass-2);
@@ -223,7 +223,7 @@
   flex-shrink: 0;
 }
 .fm-cols-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-right: 4px;
   white-space: nowrap;
@@ -280,7 +280,7 @@
 .fm-tab:hover  { color: var(--text); }
 .fm-tab.active { color: var(--accent-text); border-bottom-color: var(--accent-hex); }
 .fm-tab-cnt {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 5px;
   border-radius: var(--r-pill);
   background: var(--glass-2);
@@ -327,13 +327,13 @@
   flex-shrink: 0;
 }
 .fm-pane-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .fm-pane-label b { color: var(--text); font-weight: 700; }
 .fm-pane-acts  { display: flex; gap: 4px; }
 .fm-txbtn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   background: none;
   border: none;
@@ -378,7 +378,7 @@
   text-overflow: ellipsis;
 }
 .fm-item-cnt {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-light);
   flex-shrink: 0;
@@ -416,7 +416,7 @@
   color: var(--text-light);
 }
 .fm-sub-val {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-light);
   white-space: nowrap;
@@ -487,7 +487,7 @@
 }
 .fm-left-readonly .fm-item.readonly:hover { background: transparent; }
 .fm-readonly-mark {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   flex-shrink: 0;
   width: 13px;
@@ -527,7 +527,7 @@
   .drop { padding: 18px 12px; }
   .drop .icon { font-size: 32px; }
   .drop .main { font-size: 13px; }
-  .drop .sub  { font-size: 11px; }
+  .drop .sub  { font-size: var(--fs-xs); }
 
   .btn-filter { height: 38px; padding: 0 12px; font-size: 12px; }
   .btn-primary.big { padding: 10px 20px; font-size: 13px; }
@@ -569,9 +569,9 @@
   .filter-modal { width: 100%; max-height: 96vh; max-height: 96dvh; }
   .fm-cols-strip { padding: 8px 12px; gap: 4px; }
   .fm-cols-label { display: none; }
-  .col-chip { padding: 2px 8px; font-size: 11px; }
+  .col-chip { padding: 2px 8px; font-size: var(--fs-xs); }
   .fm-tabs { padding: 0 10px; }
-  .fm-tab  { padding: 7px 9px; font-size: 11px; }
+  .fm-tab  { padding: 7px 9px; font-size: var(--fs-xs); }
   .fm-header { padding: 10px 12px; }
   .fm-footer { padding: 8px 12px; flex-direction: column; gap: 8px; align-items: stretch; }
   .fm-footer-btns { justify-content: flex-end; }
@@ -588,10 +588,10 @@
 /* 極小手機 ≤ 480：再緊一階 */
 @media (max-width: 480px) {
   .btn-filter > span:nth-child(2) { display: none; }
-  .filter-badge { font-size: 10px; padding: 1px 5px; }
+  .filter-badge { font-size: var(--fs-xs); padding: 1px 5px; }
   .drag-overlay-icon { font-size: 38px; }
   .drag-overlay-text { font-size: 13px; }
-  .mnav-lab { font-size: 9px; }
+  .mnav-lab { font-size: var(--fs-xs); }
 }
 
 /* 拖曳遮罩：補強樣式，避免覆蓋其他元素 */
@@ -619,7 +619,7 @@
   width: 16px;
   height: 16px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
@@ -629,7 +629,7 @@
 }
 .fm-drag-handle:hover { color: var(--accent-text); }
 .fm-drag-handle:active { cursor: grabbing; }
-.fm-drag-handle.small { width: 14px; font-size: 10px; }
+.fm-drag-handle.small { width: 14px; font-size: var(--fs-xs); }
 
 /* 拖曳中的列 */
 .fm-item.dragging,
@@ -730,7 +730,7 @@
   border: 1px solid var(--glass-edge);
   background: transparent;
   color: var(--text-light);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -819,7 +819,7 @@
   margin-bottom: 4px;
 }
 .reel-mega-n {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   min-width: 30px;
 }
@@ -844,7 +844,7 @@
 }
 .reel-mega-w {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   min-width: 28px;
   text-align: right;
@@ -852,7 +852,7 @@
 
 /* ── Symbol 筆刷列表 ── */
 .reel-brush-hint {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-left: 4px;
   margin-bottom: 2px;
@@ -880,7 +880,7 @@
   border-radius: 6px;
   border: 1.5px solid var(--card-brd);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700;
+  font-size: var(--fs-xs); font-weight: 700;
   flex-shrink: 0;
 }
 .eraser-swatch {
@@ -890,7 +890,7 @@
 }
 .reel-sym-name {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -899,13 +899,13 @@
 }
 .reel-sym-pct {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   flex-shrink: 0;
 }
 .reel-sym-eraser .reel-sym-name { color: var(--danger-text); }
 .reel-sym-empty {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   padding: 8px 4px;
   text-align: center;
@@ -1028,7 +1028,7 @@
 }
 
 .reel-cell-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-align: center;
   line-height: 1.2;
@@ -1038,7 +1038,7 @@
 .reel-cell-idx {
   position: absolute;
   top: 2px; left: 4px;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: rgba(120,100,160,0.28);
   font-family: 'JetBrains Mono', monospace;
   pointer-events: none;
@@ -1061,7 +1061,7 @@
 }
 .reel-stat-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: right;
   margin-top: 2px;
@@ -1181,7 +1181,7 @@
   line-height: 1.3;
 }
 .cfg-tab-sheet {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-muted);
   line-height: 1.2;
@@ -1213,16 +1213,16 @@
   background: var(--glass-2);
   border: 0.5px solid var(--glass-edge);
   border-radius: var(--r-md);
-  padding: 14px 16px;
-  margin-bottom: 12px;
+  padding: var(--space-5) var(--space-6);   /* UI/UX 改版 P1:14/16px → 16/24px,外鬆內緊 */
+  margin-bottom: var(--space-6);              /* 原 12px → 24px,卡片間距拉開一階 */
   box-shadow: var(--shadow-sm);
 }
 .cfg-section-title {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
   border-bottom: 0.5px solid var(--glass-edge);
   display: flex;
   align-items: center;
@@ -1290,11 +1290,11 @@
 .cfg-card-summary {
   display: inline-flex; align-items: center; gap: 6px;
   margin-left: 10px;
-  font-size: 11.5px; color: var(--text-light);
+  font-size: var(--fs-xs); color: var(--text-light);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .cfg-card-summary-chip {
-  font-size: 11px; font-weight: 700;
+  font-size: var(--fs-xs); font-weight: 700;
   color: var(--accent-text);
   background: var(--accent);
   border: 0.5px solid var(--accent-brd);
@@ -1323,21 +1323,42 @@
 .cfg-betconfig-form { max-width: 960px; }
 
 .cfg-field {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-5);   /* UI/UX 改版 P1:14px → 16px */
 }
 .cfg-field:last-child { margin-bottom: 0; }
+
+/* ════════════════════════════════════════════════════════
+   UI/UX 改版 P1:欄位排版工具 class
+   取代 template 內大量 style="display:flex; gap:8px" 行內樣式,
+   讓欄位間距統一走 --space token,之後只需改一處。
+   ════════════════════════════════════════════════════════ */
+.cfg-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+.cfg-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .cfg-grid-2, .cfg-grid-3 { grid-template-columns: 1fr; }
+}
 
 .cfg-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 5px;
+  margin-bottom: var(--space-2);
 }
 .cfg-key {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
   color: var(--text-faint);
@@ -1347,7 +1368,7 @@
   padding: 1px 6px;
 }
 .cfg-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-faint);
   margin-top: 4px;
   line-height: 1.45;
@@ -1409,7 +1430,7 @@
   filter: drop-shadow(0 0 4px var(--ok-dot));
 }
 .cfg-debug summary {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   cursor: pointer;
@@ -1421,7 +1442,7 @@
   margin: 10px 0 4px;
   padding: 10px 12px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--text);
   background: var(--glass-2);
@@ -1449,7 +1470,7 @@
   opacity: 0.65;
 }
 .cfg-todo-sheet {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-muted);
   letter-spacing: 0.08em;
@@ -1528,7 +1549,7 @@
 /* ── 警告文字 ── */
 .cfg-warn {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--danger-text);
   background: var(--danger);
   border: 1px solid var(--danger-brd);
@@ -1543,7 +1564,7 @@
 .cfg-mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .cfg-hint code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
   padding: 0 5px;
@@ -1582,7 +1603,7 @@
 }
 .cfg-mode-name-label {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   letter-spacing: 0.04em;
@@ -1715,13 +1736,13 @@
   flex-wrap: wrap;
 }
 .cfg-layout-preview-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.04em;
 }
 .cfg-layout-preview-info {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-layout-svg-wrap {
@@ -1751,7 +1772,7 @@
 }
 .cfg-layout-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   fill: var(--accent-hex);
   letter-spacing: 0.04em;
@@ -1766,7 +1787,7 @@
   border-radius: var(--r-input);
 }
 .cfg-bins-preview-meta {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-bottom: 14px;
 }
@@ -1801,7 +1822,7 @@
 .cfg-bins-tick-label {
   margin-top: 2px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text);
   background: var(--glass-3);
   padding: 1px 4px;
@@ -1836,7 +1857,7 @@
 
 /* ── 較窄版 chip(放符號清單/模式 scope 用,免得太擠)── */
 .cfg-chip-sm {
-  font-size: 11px !important;
+  font-size: var(--fs-xs) !important;
   padding: 5px 10px !important;
 }
 
@@ -1912,7 +1933,7 @@
 .cfg-payline-num {
   fill: #fff;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   pointer-events: none;
 }
@@ -1924,7 +1945,7 @@
 
 /* ── 矩陣卡 metadata(顯示 Max 等)── */
 .cfg-matrix-meta {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-left: auto;
   padding-right: 6px;
@@ -1948,7 +1969,7 @@
 .cfg-matrix {
   border-collapse: separate;
   border-spacing: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   width: 100%;
   min-width: max-content;
 }
@@ -1962,7 +1983,7 @@
 
 .cfg-matrix thead th {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   background: var(--glass-2);
@@ -1974,12 +1995,12 @@
 .cfg-matrix-corner {
   background: rgb(var(--tint-1) / 0.25) !important;
   color: var(--text-light) !important;
-  font-size: 9.5px !important;
+  font-size: var(--fs-xs) !important;
 }
 
 .cfg-matrix-rowhead {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   background: var(--glass-2);
@@ -2013,7 +2034,7 @@
 
 .cfg-matrix-total {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   background: var(--glass-2);
@@ -2025,7 +2046,7 @@
 /* v9.0 / 硬核工作站:Reel-First Micro-viz — 每列一條迷你分佈柱狀圖,
    取代純心算比較,一眼讀出這條 Reel 的權重是集中還是分散 */
 .cfg-matrix-spark-head {
-  font-size: 9.5px !important;
+  font-size: var(--fs-xs) !important;
   color: var(--text-faint) !important;
   background: var(--glass-2);
 }
@@ -2066,7 +2087,7 @@
 }
 .cfg-matrix-btn {
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 4px 8px;
   margin: 0 2px;
@@ -2155,13 +2176,13 @@
   background: rgba(255,200,150,0.18);
   border: 1px dashed rgba(220,140,80,0.45);
   border-radius: var(--r-input);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   line-height: 1.6;
   color: var(--text);
 }
 .cfg-form-hint-banner code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   background: var(--glass-2);
   padding: 0 5px;
   border-radius: 4px;
@@ -2181,7 +2202,7 @@
   gap: 5px;
   padding: 4px 12px;
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -2336,7 +2357,7 @@
 .cfg-puzzle-piece-value    { flex: 1 1 120px; min-width: 80px; }
 
 .cfg-puzzle-piece-label {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-light);
@@ -2439,7 +2460,7 @@
   background: rgb(var(--tint-1) / 0.12);
   border: 1px solid rgb(var(--tint-2) / 0.30);
   border-radius: var(--r-input);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -2451,7 +2472,7 @@
 }
 .cfg-puzzle-dsl-code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   background: var(--glass-2);
   padding: 2px 7px;
@@ -2509,7 +2530,7 @@
 .cfg-puzzle-test-toggle:hover { background: var(--glass-3); }
 .cfg-puzzle-test-caret {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 
@@ -2518,7 +2539,7 @@
   border-top: 1px dashed var(--glass-brd);
 }
 .cfg-puzzle-test-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-bottom: 10px;
   line-height: 1.5;
@@ -2580,7 +2601,7 @@
   padding: 6px 10px;
 }
 .cfg-puzzle-test-trace summary {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   cursor: pointer;
@@ -2595,7 +2616,7 @@
   gap: 8px;
   padding: 4px 6px;
   margin-top: 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   border-radius: 6px;
   background: var(--glass-3);
   border: 1px solid var(--glass-brd);
@@ -2604,7 +2625,7 @@
 .cfg-puzzle-test-trace-row.is-false { border-left: 3px solid var(--danger-text); }
 .cfg-puzzle-test-trace-idx {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   width: 18px;
   flex-shrink: 0;
@@ -2612,7 +2633,7 @@
 .cfg-puzzle-test-trace-expr,
 .cfg-puzzle-test-trace-lhs {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--glass-2);
   padding: 1px 6px;
   border-radius: 4px;
@@ -2700,12 +2721,12 @@
   line-height: 1.2;
 }
 .cfg-action-chip-name {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
 }
 .cfg-action-chip-type {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-muted);
   letter-spacing: 0.03em;
@@ -2714,7 +2735,7 @@
 .cfg-action-chip.active .cfg-action-chip-type { color: var(--warn-text); }
 
 .cfg-action-desc {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-2);
   border: 1px dashed var(--glass-brd);
@@ -2752,7 +2773,7 @@
   gap: 10px;
 }
 .cfg-action-count {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -2792,7 +2813,7 @@
   background: var(--accent);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   font-variant-numeric: tabular-nums;
@@ -2826,7 +2847,7 @@
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-input);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   transition: background 0.12s, border-color 0.12s, color 0.12s;
   padding: 0;
@@ -2909,7 +2930,7 @@
   border: 1px dashed var(--glass-brd);
   border-radius: var(--r-pill);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
@@ -3072,7 +3093,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   text-transform: uppercase;
@@ -3083,7 +3104,7 @@
 .cfg-preset-group-icon { font-size: 14px; }
 .cfg-preset-group-count {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
   background: var(--glass-2);
@@ -3134,7 +3155,7 @@
   border: 1.5px solid var(--accent-brd);
   border-radius: var(--r-btn);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   font-family: inherit;
@@ -3147,7 +3168,7 @@
 .cfg-preset-card-btn:active { transform: translate(1px, 1px); }
 
 .cfg-preset-card-desc {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.55;
 }
@@ -3165,7 +3186,7 @@
 .cfg-preset-meta-act {
   display: inline-block;
   padding: 1px 7px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-family: 'JetBrains Mono', monospace;
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -3185,7 +3206,7 @@
 }
 .cfg-preset-meta-sep {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 
 .cfg-preset-card-tags {
@@ -3194,7 +3215,7 @@
   gap: 3px;
 }
 .cfg-preset-tag {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: transparent;
   border: 1px dashed var(--glass-brd);
@@ -3239,7 +3260,7 @@
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-input);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   transition: background 0.12s, color 0.12s, transform 0.4s;
 }
@@ -3261,7 +3282,7 @@
   background: rgb(var(--tint-1) / 0.22);
   border: 1px solid var(--accent-brd);
   border-radius: var(--r-pill);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   font-family: 'JetBrains Mono', monospace;
@@ -3289,14 +3310,14 @@
   flex-wrap: wrap;
 }
 .cfg-matrix-sort-label {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-weight: 600;
   margin-right: 2px;
 }
 .cfg-matrix-sort-btn {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 4px 9px;
   background: var(--glass-2);
@@ -3323,14 +3344,14 @@
   position: relative;
 }
 .section-subtitle {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--text-light);
   margin-left: 6px;
   letter-spacing: 0.01em;
 }
 .field-label-hint {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--text-light);
   margin-left: 4px;
@@ -3358,7 +3379,7 @@
 }
 .sym-type-chip {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 4px 9px;
   background: var(--glass-2);
@@ -3404,7 +3425,7 @@
 }
 .sym-pay-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   text-align: center;
@@ -3421,14 +3442,8 @@
 
 /* 角色 / 類型(#9:移到最前,放大 chips + 推導註記)*/
 .sym-type-chips-lg .sym-type-chip {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 6px 14px;
-}
-.sym-role-note {
-  margin-top: 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--accent-text);
 }
 
 /* 圖示尺寸 / Mega(#10:預設折疊 1×1,點擊才展開)*/
@@ -3519,7 +3534,7 @@
 }
 .cfg-tpl-hint {
   flex: 1;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-tpl-close {
@@ -3529,7 +3544,7 @@
   width: 24px;
   height: 24px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   cursor: pointer;
   transition: background 0.12s;
@@ -3598,12 +3613,12 @@
   color: var(--text);
 }
 .cfg-tpl-desc {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-style: italic;
 }
 .cfg-tpl-meta {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
   display: flex;
@@ -3621,7 +3636,7 @@
 }
 .cfg-tpl-action {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 5px 10px;
   background: var(--glass-2);
@@ -3653,7 +3668,7 @@
 .cfg-tpl-empty {
   text-align: center;
   padding: 24px 12px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-1);
   border: 1px dashed var(--glass-brd);
@@ -3723,7 +3738,7 @@
   text-anchor: middle;
 }
 .sym-mega-preview-info {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   display: flex;
   align-items: center;
@@ -3781,14 +3796,14 @@
   padding: 6px 10px;
 }
 .cfg-tpl-sort {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 6px 10px;
   min-width: 130px;
   font-family: inherit;
   cursor: pointer;
 }
 .cfg-tpl-filter-count {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
   white-space: nowrap;
@@ -3796,7 +3811,7 @@
 .cfg-tpl-no-match {
   padding: 20px 12px;
   text-align: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-1);
   border: 1px dashed var(--glass-brd);
@@ -3833,7 +3848,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   background: var(--glass-1);
   border-top: 1px dashed var(--glass-brd);
   cursor: help;
@@ -3851,7 +3866,7 @@
   flex-shrink: 0;
 }
 .pyodide-label {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 
@@ -3905,14 +3920,14 @@
   flex-shrink: 0;
 }
 .cfg-split-list-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 .cfg-split-list-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
   margin-top: 1px;
@@ -3996,7 +4011,7 @@
   min-width: 48px;
 }
 .cfg-split-item-sub {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   flex: 1;
   min-width: 0;
@@ -4006,7 +4021,7 @@
   line-height: 1.3;
 }
 .cfg-split-item-badge {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 1px 5px;
   border-radius: var(--r-pill);
@@ -4117,7 +4132,7 @@
   border-bottom: 1px solid var(--glass-brd);
 }
 .cfg-layout-split-preview-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.04em;
@@ -4127,7 +4142,7 @@
   justify-content: space-between;
 }
 .cfg-layout-split-preview-info {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .cfg-layout-split-cards {
@@ -4271,11 +4286,11 @@
   font-weight: 700;
 }
 .cfg-section-runtime-icon {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1;
 }
 .cfg-section-runtime-sub {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-light);
   font-style: italic;
@@ -4339,7 +4354,7 @@
   flex-wrap: wrap;
 }
 .cfg-sticky-mode-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--text-light);
@@ -4348,7 +4363,7 @@
   min-width: 28px;
 }
 .cfg-sticky-meta {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-left: auto;
 }
@@ -4456,7 +4471,7 @@
 }
 .cfg-mode-trigger-preview {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--accent-text);
   flex: 1;
@@ -4466,7 +4481,7 @@
   white-space: nowrap;
 }
 .cfg-mode-trigger-empty {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--text-muted);
   font-style: italic;
@@ -4506,7 +4521,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px 4px;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.10em;
   color: var(--text-light);
@@ -4516,7 +4531,7 @@
   margin-bottom: 3px;
 }
 .cfg-tab-group-icon {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   opacity: 0.85;
 }
 .cfg-tab-group-label {
@@ -4529,7 +4544,7 @@
   min-width: 16px;
   height: 14px;
   padding: 0 5px;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   font-family: 'JetBrains Mono', monospace;
   color: #fff;
@@ -4557,7 +4572,7 @@
   height: 28px;
   padding: 0 11px 0 9px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   background: var(--glass-2);
@@ -4616,7 +4631,7 @@
 .cfg-section-summary::-webkit-details-marker { display: none; }
 .cfg-section-summary::before {
   content: '▶';
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   transition: transform 0.18s;
   flex-shrink: 0;
@@ -4645,7 +4660,7 @@
   flex: 1;
   min-width: 0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4673,7 +4688,7 @@
   height: 26px;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   background: var(--glass-2);
@@ -4716,7 +4731,7 @@
 /* popover 內 title */
 .cfg-matrix-menu-title {
   padding: 6px 10px 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--text-light);
   letter-spacing: 0.06em;
@@ -4738,7 +4753,7 @@
   flex: 1;
   height: 24px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   background: transparent;
@@ -4763,7 +4778,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.04em;
@@ -4845,7 +4860,7 @@
   white-space: nowrap;
 }
 .cfg-mmi-chev {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   flex-shrink: 0;
 }
@@ -4875,7 +4890,7 @@
   height: 28px;
   padding: 0 11px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
@@ -5000,7 +5015,7 @@
   margin-bottom: 4px;
 }
 .cfg-health-empty-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 
@@ -5029,7 +5044,7 @@
 .cfg-health-tab-name {
   flex: 1;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
 }
@@ -5040,7 +5055,7 @@
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-light);
@@ -5049,7 +5064,7 @@
 }
 .cfg-health-goto {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: rgb(var(--tint-1) / 0.15);
@@ -5098,7 +5113,7 @@
 }
 .cfg-health-item-detail {
   margin-top: 3px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.4;
   font-family: 'JetBrains Mono', monospace;
@@ -5132,7 +5147,7 @@
   height: 28px;
   padding: 0 11px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
@@ -5225,7 +5240,7 @@
   background: rgb(var(--tint-1) / 0.06);
   border-bottom: 1px dashed var(--divider);
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .cfg-changes-baseline-label {
   font-weight: 700;
@@ -5238,14 +5253,14 @@
   min-width: 0;
   color: var(--accent-text);
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cfg-changes-baseline-reset {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   background: transparent;
@@ -5287,7 +5302,7 @@
   margin-bottom: 4px;
 }
 .cfg-changes-empty-sub {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 
@@ -5311,7 +5326,7 @@
 .cfg-changes-tab-name {
   flex: 1;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
 }
@@ -5322,7 +5337,7 @@
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-light);
@@ -5331,7 +5346,7 @@
 }
 .cfg-changes-goto {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: rgb(var(--tint-1) / 0.15);
@@ -5384,7 +5399,7 @@
 }
 .cfg-changes-item-detail {
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
   line-height: 1.4;
@@ -5418,7 +5433,7 @@
   height: 28px;
   padding: 0 12px;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: rgb(var(--tint-1) / 0.12);
@@ -5500,14 +5515,14 @@
   background: var(--accent-hex);
   color: #fff;
   border-radius: var(--r-pill);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.01em;
   overflow: hidden;
 }
 .cfg-inspector-pinned-chip code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--glass-1);
   padding: 0 4px;
   border-radius: 3px;
@@ -5521,7 +5536,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   background: var(--glass-1);
   border-radius: 50%;
   cursor: pointer;
@@ -5535,7 +5550,7 @@
   flex: 1;
   min-width: 0;
   color: var(--text-light);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-style: italic;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5608,7 +5623,7 @@
   gap: 4px;
 }
 .cfg-inspector-trace-title {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--text-light);
   letter-spacing: 0.10em;
@@ -5621,7 +5636,7 @@
   gap: 5px;
   align-items: center;
   padding: 4px 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   border-radius: 5px;
   background: var(--glass-2);
   border: 1px solid rgb(var(--tint-muted) / 0.06);
@@ -5636,14 +5651,14 @@
 }
 .cfg-inspector-trace-idx {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   text-align: right;
 }
 .cfg-inspector-trace-expr {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5651,11 +5666,11 @@
 }
 .cfg-inspector-trace-arrow {
   color: var(--text-light);
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 .cfg-inspector-trace-vals {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5688,7 +5703,7 @@
   border-radius: 7px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   text-align: left;
@@ -5701,7 +5716,7 @@
   flex: 1;
   min-width: 0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-light);
   overflow: hidden;
@@ -5710,7 +5725,7 @@
 }
 .cfg-inspector-ctx-caret {
   color: var(--text-light);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 .cfg-inspector-ctx-grid {
@@ -5728,14 +5743,14 @@
   gap: 3px;
 }
 .cfg-inspector-ctx-field label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .cfg-inspector-ctx-field input {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 5px 8px;
   height: auto;
 }
@@ -5776,7 +5791,7 @@
   height: 26px;
   padding: 0 11px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   background: var(--glass-2);
@@ -5798,7 +5813,7 @@
 .cfg-paylines-svg-hint {
   flex: 1;
   min-width: 0;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-style: italic;
   font-family: 'JetBrains Mono', monospace;
@@ -5810,7 +5825,7 @@
   height: 26px;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--danger-text, #c0392b);
   background: var(--danger);
@@ -5847,7 +5862,7 @@
 /* cell 內顯示的序號 */
 .cfg-payline-cell-num {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   fill: #fff;
   user-select: none;
@@ -5880,7 +5895,7 @@
   height: 28px;
   padding: 0 12px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   background: var(--glass-2);
@@ -5894,10 +5909,10 @@
   color: var(--accent-text);
   border-color: var(--accent-brd);
 }
-.cfg-search-btn-icon { font-size: 11px; }
+.cfg-search-btn-icon { font-size: var(--fs-xs); }
 .cfg-search-btn-kbd {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 1px 5px;
   background: rgb(var(--tint-muted) / 0.08);
@@ -5974,7 +5989,7 @@
 }
 .cfg-search-kbd {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 2px 7px;
   background: rgb(var(--tint-muted) / 0.10);
@@ -6030,7 +6045,7 @@
   white-space: nowrap;
 }
 .cfg-search-item-subtitle {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 1px;
   overflow: hidden;
@@ -6043,7 +6058,7 @@
   color: rgba(255,255,255,0.85);
 }
 .cfg-search-item-cat {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 3px 8px;
   background: rgb(var(--tint-muted) / 0.08);
@@ -6076,7 +6091,7 @@
   padding: 8px 18px;
   background: rgb(var(--tint-1) / 0.06);
   border-top: 1px solid var(--divider);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-search-footer kbd {
@@ -6084,7 +6099,7 @@
   padding: 1px 5px;
   margin-right: 3px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   background: rgb(var(--tint-muted) / 0.10);
   border: 1px solid rgb(var(--tint-muted) / 0.15);
   border-radius: 3px;
@@ -6100,6 +6115,124 @@
 }
 
 /* ============================================================
+   UI/UX 改版 P2 — 快捷鍵一覽浮層(複用 .cfg-search-overlay 遮罩)
+   ============================================================ */
+.cfg-shortcuts-modal {
+  width: 640px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 20vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-5);
+  border: 1px solid var(--glass-brd);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgb(var(--tint-deep) / 0.36);
+  overflow: hidden;
+}
+.cfg-shortcuts-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+.cfg-shortcuts-header-icon { font-size: 18px; }
+.cfg-shortcuts-header-title { font-size: var(--fs-md); font-weight: 700; color: var(--text); flex: 1; }
+.cfg-shortcuts-body {
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.cfg-shortcuts-group-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-hex);
+  margin-bottom: var(--space-3);
+}
+.cfg-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-2) 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  border-bottom: 1px solid var(--divider);
+}
+.cfg-shortcuts-row:last-child { border-bottom: none; }
+.cfg-shortcuts-keys {
+  flex-shrink: 0;
+  color: var(--text-light);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.cfg-shortcuts-keys kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-xs);
+  background: rgb(var(--tint-muted) / 0.10);
+  border: 1px solid rgb(var(--tint-muted) / 0.15);
+  border-radius: 4px;
+  color: var(--text);
+}
+:root[data-theme="dark"] .cfg-shortcuts-row { border-bottom-color: rgba(255,255,255,0.08); }
+
+/* ── UI/UX 改版 P3:首次進入編輯器的一次性提示條(比照 04 跨模式提示 .cfg-grid-hint-banner 樣式)── */
+.cfg-shortcuts-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  margin: 0 0 8px;
+  background: linear-gradient(90deg, rgb(var(--tint-accent) / 0.12) 0%, rgb(var(--tint-accent) / 0.04) 100%);
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-card);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.cfg-shortcuts-hint-icon { font-size: 16px; flex-shrink: 0; }
+.cfg-shortcuts-hint-text { flex: 1; line-height: 1.5; }
+.cfg-shortcuts-hint-key {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 8px;
+  background: var(--accent-hex);
+  border: none;
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, transform 0.08s;
+}
+.cfg-shortcuts-hint-key:hover { background: rgb(var(--tint-2)); }
+.cfg-shortcuts-hint-key:active { transform: scale(0.97); }
+.cfg-shortcuts-hint-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 50%;
+  transition: background 0.12s;
+}
+.cfg-shortcuts-hint-close:hover { background: rgba(0,0,0,0.06); }
+:root[data-theme="dark"] .cfg-shortcuts-hint {
+  background: linear-gradient(90deg, rgb(var(--tint-accent) / 0.18) 0%, rgb(var(--tint-accent) / 0.06) 100%);
+}
+:root[data-theme="dark"] .cfg-shortcuts-hint-close:hover { background: rgba(255,255,255,0.08); }
+
+/* ============================================================
    ConfigPage UX v10 — #6 範本面板重排 + #8 副 Reel toggle 升級
    ============================================================ */
 
@@ -6111,7 +6244,7 @@
   height: 30px;
   padding: 0 12px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: #fff;
   background: var(--accent-hex);
@@ -6158,7 +6291,7 @@
 }
 .cfg-tpl-empty-cta:hover { background: #5a2a12; }
 .cfg-tpl-empty-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 4px;
   font-style: italic;
@@ -6174,7 +6307,7 @@
   margin-left: auto;
   margin-right: 8px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   background: var(--glass-2);
@@ -6204,7 +6337,7 @@
   width: 14px;
   height: 14px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   background: var(--glass-1);
   border-radius: 50%;
@@ -6239,13 +6372,13 @@
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px dashed rgb(var(--tint-1) / 0.36);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--accent-text);
   letter-spacing: 0.04em;
 }
 .cfg-reel-subreel-hint {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   font-style: italic;
   color: var(--text-light);
@@ -6329,7 +6462,7 @@
   .cfg-source-text { display: none; }
   .cfg-source-text-short {
     display: inline;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text);
     padding: 2px 6px;
@@ -6340,7 +6473,7 @@
   .cfg-btn-text-full { display: none; }
   .cfg-btn-text-short {
     display: inline;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
   .cfg-btn-icon { font-size: 13px; }
   /* 群組分隔線在超窄時拿掉(否則太擠)*/
@@ -6375,7 +6508,7 @@
   background: var(--glass-1);
 }
 .cfg-rules-filter-bar .cfg-chip {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   padding: 3px 9px;
   font-weight: 600;
 }
@@ -6407,7 +6540,7 @@
   gap: 6px;
   padding: 6px 12px 4px;
   margin-top: 4px;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.10em;
   text-transform: uppercase;
@@ -6419,13 +6552,13 @@
   margin-top: 0;
 }
 .cfg-rules-group-icon {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   opacity: 0.85;
 }
 .cfg-rules-group-count {
   margin-left: auto;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -6459,7 +6592,7 @@
 }
 .cfg-rules-add-arrow {
   margin-left: auto;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   opacity: 0.7;
 }
 .cfg-rules-add-menu {
@@ -6514,7 +6647,7 @@
 .cfg-rules-add-menu-sub {
   grid-row: 2;
   grid-column: 2 / 4;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.3;
 }
@@ -6543,7 +6676,7 @@
   padding: 0 8px;
   margin-left: 10px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   border-radius: var(--r-pill);
@@ -6608,7 +6741,7 @@
   height: 26px;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   background: var(--glass-2);
@@ -6711,13 +6844,13 @@
 }
 .cfg-payline-v2-item-id {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
 }
 .cfg-payline-v2-item-dir {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   padding: 1px 5px;
@@ -6725,7 +6858,7 @@
   border-radius: var(--r-pill);
 }
 .cfg-payline-v2-item-sub {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6741,7 +6874,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   border-radius: 50%;
   flex-shrink: 0;
@@ -6792,7 +6925,7 @@
 }
 .cfg-payline-add-caret {
   margin-left: auto;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   opacity: 0.7;
 }
 
@@ -6818,7 +6951,7 @@
 }
 .cfg-payline-add-menu-title {
   padding: 6px 10px 4px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.06em;
@@ -6862,12 +6995,12 @@
   min-width: 0;
 }
 .cfg-payline-add-menu-name {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
 }
 .cfg-payline-add-menu-note {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.3;
 }
@@ -6911,7 +7044,7 @@
 }
 .cfg-paylines-v2-progress {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 3px 10px;
   border-radius: var(--r-pill);
@@ -6942,7 +7075,7 @@
   min-width: 0;
 }
 .cfg-paylines-v2-field label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.04em;
@@ -6954,14 +7087,14 @@
   min-width: 180px;
   max-width: 360px;
   height: 30px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .cfg-paylines-v2-notes-input {
   flex: 1 1 auto;
   min-width: 100px;
   max-width: 180px;
   height: 30px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .cfg-paylines-v2-field-notes {
   flex: 1 1 auto;
@@ -6974,7 +7107,7 @@
 .cfg-paylines-v2-chip {
   height: 26px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 /* 右段:動作按鈕群 */
@@ -6993,7 +7126,7 @@
   height: 26px;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   background: var(--glass-2);
@@ -7056,7 +7189,7 @@
   min-width: 0;
 }
 .cfg-paylines-v2-status-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-style: italic;
   opacity: 0.78;
   font-family: 'JetBrains Mono', monospace;
@@ -7165,7 +7298,7 @@
   gap: 5px;
   padding: 3px 9px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   background: var(--glass-2);
@@ -7389,7 +7522,7 @@
   opacity: 0.45;
   transition: opacity 0.15s;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   letter-spacing: -2px;
   user-select: none;
@@ -7425,7 +7558,7 @@
 }
 .cfg-layout-preset-label {
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
   letter-spacing: 0.02em;
@@ -7447,7 +7580,7 @@
   border-radius: var(--r-pill);
   cursor: pointer;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text);
   transition: all 0.15s;
@@ -7464,7 +7597,7 @@
 }
 .cfg-layout-preset-hint {
   flex-basis: 100%;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 2px;
   font-style: italic;
@@ -7569,13 +7702,13 @@
 }
 .cfg-constraint-v2-item-id {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--accent-text);
 }
 .cfg-constraint-v2-item-type {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 1px 6px;
   border-radius: var(--r-pill);
@@ -7596,7 +7729,7 @@
   color: var(--ok-text);
 }
 .cfg-constraint-v2-item-sub {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.3;
 }
@@ -7617,7 +7750,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   border-radius: 50%;
   flex-shrink: 0;
@@ -7683,14 +7816,14 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.02em;
 }
 .cfg-constraints-v2-section-hint {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
@@ -7734,7 +7867,7 @@
 }
 .cfg-constraints-v2-ctype-name {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.02em;
@@ -7743,7 +7876,7 @@
   color: var(--accent-text);
 }
 .cfg-constraints-v2-ctype-desc {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 2px;
   line-height: 1.3;
@@ -7822,7 +7955,7 @@
   margin-top: 4px;
 }
 .cfg-constraints-v2-rawinput summary {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   cursor: pointer;
   padding: 4px 0;
@@ -7849,10 +7982,10 @@
 .cfg-matrix-colhead-name {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .cfg-matrix-colhead-sum {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
@@ -7871,7 +8004,7 @@
   padding: 0;
   border: 1px solid transparent;
   background: transparent;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   cursor: pointer;
@@ -7936,7 +8069,7 @@
   box-shadow: var(--shadow-sm);
 }
 .cfg-matrix-sel-count {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: #2c6dc4;
   flex-shrink: 0;
@@ -7955,7 +8088,7 @@
 }
 .cfg-matrix-sel-hint {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-style: italic;
   color: var(--text-light);
   font-family: 'JetBrains Mono', monospace;
@@ -7998,7 +8131,7 @@
 }
 .cfg-tab-na-lock {
   margin-left: 5px;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   vertical-align: middle;
   opacity: 0.8;
 }
@@ -8027,7 +8160,7 @@
 
 /* #16:中獎線方向唯讀顯示 */
 .cfg-payline-dir-readonly {
-  font-size: 11px; font-weight: 700;
+  font-size: var(--fs-xs); font-weight: 700;
   color: var(--accent-text);
   background: var(--glass-2);
   border: 0.5px solid var(--glass-edge);
@@ -8050,11 +8183,11 @@
   border-radius: var(--r-md);
 }
 .cfg-mqb-group { display: flex; align-items: center; gap: 6px; }
-.cfg-mqb-label { font-size: 11px; font-weight: 700; color: var(--text-light); }
+.cfg-mqb-label { font-size: var(--fs-xs); font-weight: 700; color: var(--text-light); }
 .cfg-mqb-value { width: 74px; }
 .cfg-mqb-sep { width: 1px; align-self: stretch; background: var(--divider); margin: 0 2px; }
 .cfg-mqb-spacer { flex: 1 1 auto; }
-.cfg-mqb-hint { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.cfg-mqb-hint { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
 
 /* 可點選的欄/列頭:游標 + hover 提示 */
 .cfg-matrix-head-sel { cursor: pointer; transition: color var(--t-fast), background var(--t-fast); }
@@ -8114,7 +8247,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   gap: 6px;
   margin-left: 16px;
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-1);
   border: 0.5px dashed var(--glass-edge);
@@ -8175,7 +8308,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .data-tab.is-soon { opacity: 0.78; cursor: pointer; }
 .data-tab.is-soon:hover { opacity: 1; }
 .data-tab-soon {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 1px 7px;
   border-radius: var(--r-pill);
@@ -8288,7 +8421,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   height: 28px;
   padding: 0 12px;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: var(--accent);
@@ -8382,12 +8515,12 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: rgb(var(--tint-accent)/0.10);
   border: 1px solid rgb(var(--tint-accent)/0.28);
   color: var(--text);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
 }
 .cfg-subreel-dual-note code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   padding: 1px 4px;
   border-radius: 4px;
   background: rgb(var(--tint-accent)/0.16);
@@ -8426,7 +8559,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   gap: 6px;
 }
 .cfg-panel-group-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: 0.03em;
@@ -8460,10 +8593,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-panel-chip-id { font-weight: 700; font-size: 12px; }
 .cfg-panel-chip-size {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   opacity: 0.85;
 }
-.cfg-panel-chip-join { font-size: 11px; margin-left: auto; }
+.cfg-panel-chip-join { font-size: var(--fs-xs); margin-left: auto; }
 .cfg-panel-chip-del {
   margin-left: auto;
   border: none;
@@ -8556,7 +8689,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   gap: 8px;
 }
 .cfg-layout-sub-badge {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--r-pill);
@@ -8578,7 +8711,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-sm);
 }
 .cfg-layout-v2-section-label {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--text-light);
   letter-spacing: 0.08em;
@@ -8586,7 +8719,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin-bottom: 8px;
 }
 .cfg-layout-v2-nav-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.7;
   padding: 8px 10px;
@@ -8599,7 +8732,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   padding: 0 5px;
   margin: 0 2px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
   border-radius: 4px;
@@ -8657,7 +8790,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   gap: 14px;
   flex-wrap: wrap;
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-layout-v2-legend-item {
@@ -8691,18 +8824,18 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-xs);
 }
 .cfg-layout-v2-tip-title {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--text-light);
   letter-spacing: 0.06em;
   margin-bottom: 4px;
 }
 .cfg-layout-v2-tip-item {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   line-height: 1.7;
 }
-.cfg-layout-preset-chip-label { font-size: 11px; font-weight: 600; }
+.cfg-layout-preset-chip-label { font-size: var(--fs-xs); font-weight: 600; }
 
 /* 窄視窗:三欄改縱向堆疊,預覽永遠看得到 */
 @media (max-width: 1100px) {
@@ -8823,7 +8956,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-diff-slot.filled { border-style: solid; }
 .cfg-diff-slot-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--text-light);
@@ -8833,7 +8966,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-diff-slot-arrow { align-self: center; font-size: 16px; color: var(--text-light); }
 .cfg-diff-pick-hint {
   padding: 4px 18px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   flex-shrink: 0;
 }
@@ -8872,11 +9005,11 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cfg-diff-pick-meta { font-size: 10.5px; color: var(--text-light); margin-top: 2px; }
+.cfg-diff-pick-meta { font-size: var(--fs-xs); color: var(--text-light); margin-top: 2px; }
 .cfg-diff-pick-badge {
   width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800;
+  font-size: var(--fs-xs); font-weight: 800;
   color: #fff;
   border-radius: var(--r-pill);
   background: var(--accent-hex);
@@ -8896,7 +9029,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   flex-wrap: wrap;
 }
 .cfg-diff-back {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   background: var(--glass-2);
@@ -8942,7 +9075,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-diff-pair-swap:hover { background: var(--accent); }
 .cfg-diff-total {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   color: var(--accent-text);
   white-space: nowrap;
@@ -8963,7 +9096,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-diff-empty-emoji { font-size: 30px; }
 .cfg-diff-empty-text { font-size: 13px; font-weight: 700; color: var(--text); }
-.cfg-diff-empty-sub { font-size: 11px; }
+.cfg-diff-empty-sub { font-size: var(--fs-xs); }
 .cfg-diff-tab-group { margin-bottom: 14px; }
 .cfg-diff-tab-header {
   display: flex;
@@ -8972,13 +9105,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin-bottom: 6px;
 }
 .cfg-diff-tab-name {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--accent-text);
 }
 .cfg-diff-tab-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: #fff;
   background: var(--accent-hex);
@@ -9016,7 +9149,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-diff-item-text { flex: 1; min-width: 0; }
 .cfg-diff-item-msg { font-size: 12px; color: var(--text); line-height: 1.5; }
 .cfg-diff-item-detail {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin-top: 2px;
   font-family: 'JetBrains Mono', monospace;
@@ -9033,7 +9166,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-diff-footer-hint {
   flex: 1;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-diff-action-btn {
@@ -9113,7 +9246,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   cursor: pointer;
   user-select: none;
@@ -9122,7 +9255,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* 範本卡上的 diff 入口鈕(中性玻璃 idle + accent hover,遵三態契約) */
 .cfg-tpl-diffbtn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 4px 10px;
   color: var(--text-light);
@@ -9165,13 +9298,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin-bottom: 8px;
 }
 .cfg-aux-weights-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-light);
 }
 .cfg-aux-weights-hint code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 0 4px;
   background: var(--glass-2);
   border: 1px solid var(--glass-brd);
@@ -9190,7 +9323,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-aux-src-badge {
   display: inline-block;
   margin-left: 6px;
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 1px 7px;
   border-radius: var(--r-pill);
@@ -9204,7 +9337,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-color: rgba(184,124,16,0.50);
   color: var(--warn-text);
 }
-.cfg-aux-ops-head { font-size: 10px; color: var(--text-light); }
+.cfg-aux-ops-head { font-size: var(--fs-xs); color: var(--text-light); }
 .cfg-aux-ops {
   white-space: nowrap;
   padding: 2px 6px;
@@ -9258,7 +9391,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: inline-block;
   margin-left: 6px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   line-height: 1.6;
   color: #fff;
@@ -9310,7 +9443,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .bcmp-slot-a.loaded { border-color: #c95810; }
 .bcmp-slot-b.loaded { border-color: #0f6e56; }
 .bcmp-slot-tag {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.5px;
   margin-bottom: 6px; color: var(--text-light);
 }
 .bcmp-slot-a .bcmp-slot-tag { color: #c95810; }
@@ -9379,7 +9512,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .bcmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bcmp-table th {
   text-align: right; padding: 6px 10px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.3px;
   color: var(--text-light);
   border-bottom: 1px solid var(--glass-brd);
   white-space: nowrap;
@@ -9391,7 +9524,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .bcmp-table td { padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,0.04); }
 .bcmp-table tbody tr:last-child td { border-bottom: none; }
 .bcmp-td-label { color: var(--text); }
-.bcmp-unit { margin-left: 4px; font-size: 11px; color: var(--text-light); }
+.bcmp-unit { margin-left: 4px; font-size: var(--fs-xs); color: var(--text-light); }
 .bcmp-td-num, .bcmp-td-delta {
   text-align: right; font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px; color: var(--text);
@@ -9404,7 +9537,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .bcmp-row-missing { opacity: 0.65; }
 .bcmp-missing-tag {
   margin-left: 6px; padding: 0 6px;
-  font-size: 10px; font-weight: 600;
+  font-size: var(--fs-xs); font-weight: 600;
   color: var(--warn-text);
   background: rgba(184,124,16,0.10);
   border: 1px solid rgba(184,124,16,0.30);
@@ -9566,7 +9699,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-mode-summary:hover { background: var(--glass-2); }
 .cfg-mode-summary-caret {
   flex: 0 0 12px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-mode-summary-name {
@@ -9577,7 +9710,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-mode-summary-name.err { color: var(--danger-text); }
 .cfg-mode-summary-badge.start {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--r-pill);
@@ -9586,7 +9719,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   white-space: nowrap;
 }
 .cfg-mode-summary-meta {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   white-space: nowrap;
 }
@@ -9594,7 +9727,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   flex: 1;
   min-width: 0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   white-space: nowrap;
   overflow: hidden;
@@ -9608,19 +9741,56 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-mode-card.is-collapsed { box-shadow: none; }
 
-/* ── C:符號頁外觀/識別壓縮(v5.0-a)── */
-.sym-appearance-row {
+/* ── C:符號頁外觀/識別(v9.4:圖示方框 + 名稱/編號 + 顏色 + 圖片操作 整合一塊,取代 v9.1 置中版)── */
+.sym-identity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+/* 圖示方框放大一階,承擔整塊識別區的視覺焦點;v9.5:直接可點,hover 顯示相機提示,開圖片設定彈窗 */
+.sym-identity-icon {
+  width: 72px; height: 72px; font-size: 20px; border-radius: var(--r-md); flex-shrink: 0;
+  cursor: pointer;
+}
+.sym-identity-icon-hint {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgb(0 0 0 / 0.45);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  pointer-events: none;
+}
+.sym-identity-icon:hover .sym-identity-icon-hint { opacity: 1; }
+.sym-identity-icon-hint-ico { font-size: 22px; color: #fff; }
+.sym-identity-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sym-identity-namerow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  min-width: 0;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+/* 名稱輸入框不再撐滿整行,收斂到合理寬度 */
+.sym-identity-namerow .sym-name-wrap { flex: 0 1 150px; min-width: 80px; }
+.sym-identity-namerow .sym-name-wrap .input { width: 100%; }
+.sym-identity-swatchrow { margin: 0; }
+.sym-img-status {
+  font-size: var(--fs-xs);
+  color: var(--text-light);
+  overflow-wrap: anywhere;
+}
+/* v9.1:移除寫死 7 欄的 inline grid — 7 色 + 1 自訂色共 8 顆,靠 flex-wrap 自然排列同一行,不再單獨孤兒換行 */
 .swatch-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  flex: 1;
   min-width: 0;
 }
 .swatch-strip .swatch-cell { width: 23px; height: 23px; }
@@ -9731,13 +9901,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* ── H:docgen JP 自動帶入 ── */
 .docgen-sec-h .docgen-jp-sync {
   margin-left: 10px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 3px 10px;
   vertical-align: middle;
   white-space: nowrap;
 }
 .docgen-hint-line {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   margin: 4px 0 8px;
   word-break: keep-all;
@@ -9822,7 +9992,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   white-space: nowrap;
 }
 .sym-pay-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   word-break: keep-all;
 }
@@ -9893,7 +10063,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   white-space: nowrap;
 }
 .cfg-mult-ev {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: rgb(var(--tint-2) / 0.30);
@@ -9952,7 +10122,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-top: 1px dashed var(--glass-brd);
 }
 .cfg-coin-weights-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   margin-bottom: 6px;
@@ -9974,7 +10144,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-coin-wcell .cfg-label { white-space: nowrap; }
 .cfg-coin-wpct {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .cfg-coin-ev {
@@ -9983,11 +10153,11 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   background: rgb(var(--tint-2) / 0.18);
   border-radius: var(--r-card);
 }
-.cfg-coin-ev-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.cfg-coin-ev-title { font-size: var(--fs-xs); font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .cfg-coin-ev-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .cfg-coin-ev-chip {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: var(--glass-2);
@@ -10022,12 +10192,12 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-rtp-badge:hover { transform: translateY(-1px); }
 .cfg-rtp-badge-label {
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.04em;
   color: var(--text-light);
 }
 .cfg-rtp-badge-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
-.cfg-rtp-badge-delta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; }
+.cfg-rtp-badge-delta { font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); font-weight: 600; }
 .cfg-rtp-badge.cfg-rtp-ok   { border-color: rgba(15,110,86,0.5);  background: rgba(15,110,86,0.10); }
 .cfg-rtp-badge.cfg-rtp-ok   .cfg-rtp-badge-delta { color: #0f6e56; }
 .cfg-rtp-badge.cfg-rtp-low  { border-color: var(--danger-brd);  background: var(--danger); }
@@ -10069,7 +10239,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-rtp-panel-na { font-size: 12.5px; color: var(--text-light); }
 .cfg-rtp-panel-note {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--warn-text);
   word-break: keep-all;
 }
@@ -10080,10 +10250,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   align-items: center;
   gap: 6px;
 }
-.cfg-rtp-panel-lines-label { font-size: 11px; color: var(--text-light); white-space: nowrap; }
+.cfg-rtp-panel-lines-label { font-size: var(--fs-xs); color: var(--text-light); white-space: nowrap; }
 .cfg-rtp-line-chip {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
   border-radius: var(--r-pill);
   background: var(--glass-2);
@@ -10144,7 +10314,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .bcmp-target-refresh:hover { background: var(--glass-3); }
 
 .bcmp-th-t { color: var(--text); text-align: center; }
-.bcmp-td-target { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; white-space: nowrap; }
+.bcmp-td-target { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); white-space: nowrap; }
 .bcmp-td-target-na { color: var(--text-light); }
 
 /* 達標色:命中 cell 背景 + pill */
@@ -10158,7 +10328,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   padding: 0 5px;
   border-radius: var(--r-pill);
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-align: center;
 }
 .bcmp-hit-pill.bcmp-hit-ok   { background: #0f6e56; color: #fff; }
@@ -10208,7 +10378,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin-bottom: 6px;
 }
 .cfg-strip-rid { font-weight: 700; font-size: 13px; color: var(--accent-text); white-space: nowrap; }
-.cfg-strip-len { font-size: 11px; color: var(--text-light); white-space: nowrap; }
+.cfg-strip-len { font-size: var(--fs-xs); color: var(--text-light); white-space: nowrap; }
 .cfg-strip-len.err { color: var(--danger-text); font-weight: 700; }
 .cfg-strip-actions { margin-left: auto; display: flex; gap: 6px; }
 .cfg-strip-text {
@@ -10226,7 +10396,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-strip-dist-chip {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 7px;
   border-radius: var(--r-pill);
   background: var(--glass-2);
@@ -10252,7 +10422,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-bonus-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
 .cfg-bonus-type-badge {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 3px 10px;
   border-radius: var(--r-pill);
@@ -10282,7 +10452,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   white-space: nowrap;
 }
 .cfg-bonus-ev {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: rgb(var(--tint-2) / 0.30);
@@ -10297,10 +10467,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   padding: 5px 0;
 }
 .cfg-bonus-icell { display: flex; flex-direction: column; gap: 3px; }
-.cfg-bonus-ilabel { font-size: 10px; color: var(--text-light); white-space: nowrap; }
+.cfg-bonus-ilabel { font-size: var(--fs-xs); color: var(--text-light); white-space: nowrap; }
 .cfg-bonus-ipct {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
   min-width: 46px;
@@ -10310,7 +10480,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
   color: var(--text-light);
 }
@@ -10441,7 +10611,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   animation: paylineMenuPop 0.14s ease-out;
 }
 .cfg-payline-gen-warn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--warn-hex, #b8860b);
   background: var(--warn-bg);
@@ -10459,7 +10629,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-payline-gen-label {
   flex-shrink: 0;
   width: 32px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-light);
 }
@@ -10488,7 +10658,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 .cfg-payline-gen-avail {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   white-space: nowrap;
 }
@@ -10519,7 +10689,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-btn);
   color: var(--text-light);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
@@ -10538,7 +10708,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ① 不等高盤面資訊提示(中性藍,有別於 .cfg-payline-gen-warn 的琥珀色) */
 .cfg-payline-gen-note {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--accent-hex, #5a3db0);
   background: rgba(90, 61, 176, 0.08);
@@ -10550,7 +10720,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ② 觸發輪指定輪警示 */
 .cfg-trigger-reel-warn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.55;
   color: var(--warn-hex, #b8860b);
   background: var(--warn-bg);
@@ -10562,7 +10732,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ③ 符號頁:倍數 / 彩金 區 */
 .sym-mult-title { display: flex; align-items: center; gap: 8px; }
-.sym-mult-refresh { margin-left: auto; font-size: 11px; }
+.sym-mult-refresh { margin-left: auto; font-size: var(--fs-xs); }
 
 .sym-mult-grp { margin-top: 6px; }
 .sym-mult-sublabel {
@@ -10607,7 +10777,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 .sym-prize-mode > span { white-space: nowrap; }
@@ -10672,6 +10842,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   }
   /* 收合態徽章/小點不顯示(窄條塞不下) */
   .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-group-dirty-count { display: none; }
+  /* v9.x 修正:issue-badge(⚠/!)用 margin-left:auto 佔寬,收合窄條時仍存在
+     會把 justify-content:center 的圖示往左推,導致該分頁圖示與其他分頁不對齊(視覺位移)。
+     窄條收合時先隱藏,hover 展開浮層再還原。 */
+  .cfg-tabs:not(.cfg-rail-pinned) .cfg-tab-issue-badge { display: none; }
 
   /* hover → 浮層展開到 220px(仍 absolute、不影響流) */
   .cfg-tabs:not(.cfg-rail-pinned):hover {
@@ -10706,6 +10880,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
     display: flex;
   }
   .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-dirty-count { display: inline-flex; }
+  .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-issue-badge { display: inline-flex; }
 
   /* hover 浮層出現時,內容區蓋一層淡暗遮罩(僅視覺,不吃事件) */
   .cfg-body::after {
@@ -10790,7 +10965,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* ── 分頁列:規則母項 caret + 子項縮排 ── */
 .cfg-tab-rules-caret {
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 /* #app 前綴提升特異度,確保縮排勝過 .cfg-tab 基礎 padding(承守則 #101)*/
@@ -10807,7 +10982,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   min-width: 18px;
   padding: 1px 6px;
   margin-left: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-align: center;
   border-radius: 9px;
   background: rgb(var(--tint-2) / 0.16);
@@ -10816,7 +10991,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .cfg-mode-bonus-shared {
   margin: 4px 0 8px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: var(--glass-1);
   border-radius: var(--r-sm, 6px);
@@ -10843,7 +11018,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   gap: 2px;
 }
 .cfg-mode-tp-lbl {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 @media (max-width: 767px) {
@@ -10954,7 +11129,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   align-items: center;
   gap: 4px;
   padding: 2px 9px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -10964,8 +11139,8 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-exc-chip:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 #app .cfg-exc-chip b { color: var(--accent); font-weight: 700; }
-#app .cfg-exc-chip s { opacity: .55; font-size: 10px; }
-#app .cfg-exc-none { font-size: 11.5px; color: var(--ink-3); }
+#app .cfg-exc-chip s { opacity: .55; font-size: var(--fs-xs); }
+#app .cfg-exc-none { font-size: var(--fs-xs); color: var(--ink-3); }
 
 /* 偏差格:左上角 accent 三角標(與熱力圖/選取態並存) */
 #app .cfg-matrix td.cfg-matrix-cell-wrap.is-deviant { position: relative; }
@@ -11002,7 +11177,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-card);
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 #app .cfg-strip-cmp-row {
   display: grid;
@@ -11074,8 +11249,8 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-warn          { font-size: var(--fs-hint); }
 /* v9.0:key 徽章 / 說明字屬「雜訊」,刻意反向收斂(不跟隨批2-A 全體放大),
    讓眼睛在讀卡片時 0.1 秒內自動略過,只抓核心數據與標題 */
-#app .cfg-key  { font-size: 10px; }
-#app .cfg-hint { font-size: 10.5px; }
+#app .cfg-key  { font-size: var(--fs-xs); }
+#app .cfg-hint { font-size: var(--fs-xs); }
 #app .input             { font-size: var(--fs-body); }
 #app .input-sm          { font-size: var(--fs-label); }
 #app .cfg-chip          { font-size: var(--fs-label); }
@@ -11246,13 +11421,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#app .cfg-cond-pill-edit { font-size: 11px; opacity: .55; flex: 0 0 auto; }
+#app .cfg-cond-pill-edit { font-size: var(--fs-xs); opacity: .55; flex: 0 0 auto; }
 
 /* AND/OR 小連接符(點擊切換;OR 以警示色系區分) */
 #app .cfg-cond-connector {
   flex: 0 0 auto;
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: .04em;
   border-radius: 999px;
@@ -11403,7 +11578,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-cond-group-tag {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-light);
   letter-spacing: .04em;
@@ -11435,7 +11610,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-cond-footer-lbl {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
 }
 #app .cfg-cond-footer-code {
@@ -11444,7 +11619,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-light);
   background: transparent;
 }
@@ -11470,7 +11645,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-split-id-hint {
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-muted, var(--text-light));
 }
 
@@ -11862,7 +12037,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 /* 類別晶片 — 得分族=中性;特殊類(.hi)=accent */
 #app .sym-item-chip {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   line-height: 1.7;
   padding: 0 6px;
@@ -11922,7 +12097,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   flex-direction: column;
   gap: 6px;
 }
-#app .sym-roster-title { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+#app .sym-roster-title { font-size: var(--fs-xs); font-weight: 500; color: var(--text-secondary); }
 #app .sym-search {
   width: 100%;
   box-sizing: border-box;
@@ -11944,7 +12119,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   width: 100%;
   box-sizing: border-box;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   padding: 7px 9px;
   border: 1px dashed var(--border-pro);
@@ -11968,28 +12143,35 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
    圖示頁 基本設定卡 — 兩段式類別（子批③a-1）
    一般得分 / 特殊 → 展開 WILD/SCATTER/BONUS/其他
    ═══════════════════════════════════════════════════════════════ */
-#app .sym-cat-tier { display: flex; flex-direction: column; gap: 6px; }
+#app .sym-cat-tier { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 #app .sym-cat-row { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+/* v9.2:修正 var(--border)/var(--surface-1) 兩個未定義的變數(專案 token 是 --glass-edge / --glass-1),
+   之前邊框等於 currentColor、底色等於 transparent,視覺上完全看不出這是一個容器,
+   改用實際 token,並取「特殊」chip 選中時同一色系的淡底 + 淡邊,讓子類別看起來是從「特殊」展開出來的 */
 #app .sym-subcats {
   display: inline-flex;
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
-  padding: 7px 8px;
-  border: .5px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-1);
+  padding: 8px 10px;
+  border: 1px solid var(--accent-brd);
+  border-radius: var(--r-sm);
+  background: rgb(var(--tint-2) / 0.08);
 }
 
 /* ═══════════════════════════════════════════════════════════════
    圖示頁 彈窗殼（子批③a-2;尺寸/攜帶值共用。複用 .modal-backdrop 背景）
+   v9.3:修正 --surface-0 / --border-strong / --border / --text-primary / --text-secondary /
+   --surface-2 這批全專案都沒定義過的變數(誤植,實際 token 是 --glass-2 / --glass-edge / --text / --text-light / --glass-3),
+   之前彈窗殼背景等於 transparent、邊框幾乎看不見,只有內部個別元件(如 Mega 預覽)因為用對 token 而顯示正常,
+   導致外殼像整塊消失、內容穿透背景。
    ═══════════════════════════════════════════════════════════════ */
 #app .sym-popup {
   width: 460px;
   max-width: 100%;
   max-height: 88vh;
-  background: var(--surface-0);
-  border: 1px solid var(--border-strong);
+  background: var(--glass-2);
+  border: 1px solid var(--glass-edge);
   border-radius: 14px;
   box-shadow: var(--shadow-popover, 0 8px 40px rgba(0,0,0,0.2));
   display: flex;
@@ -12001,14 +12183,14 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: .5px solid var(--border);
+  border-bottom: .5px solid var(--glass-edge);
   flex-shrink: 0;
 }
-#app .sym-popup-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+#app .sym-popup-title { font-size: 13px; font-weight: 500; color: var(--text); }
 #app .sym-popup-x {
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-light);
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
@@ -12016,7 +12198,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   height: 26px;
   border-radius: 6px;
 }
-#app .sym-popup-x:hover { background: var(--surface-2); color: var(--text-primary); }
+#app .sym-popup-x:hover { background: var(--glass-3); color: var(--text); }
 #app .sym-popup-body { padding: 14px 16px; overflow-y: auto; }
 /* 行動版:底部抽屜 */
 @media (max-width: 767px) {
@@ -12056,13 +12238,13 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .sym-carry-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: .5px solid var(--border);
+  border-bottom: .5px solid var(--glass-edge);
   margin-bottom: 12px;
 }
 #app .sym-carry-tab {
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-light);
   font-size: 12px;
   font-weight: 500;
   padding: 7px 16px;
@@ -12070,7 +12252,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-bottom: 2px solid transparent;
   margin-bottom: -0.5px;
 }
-#app .sym-carry-tab:hover { color: var(--text-primary); }
+#app .sym-carry-tab:hover { color: var(--text); }
 #app .sym-carry-tab.active {
   color: var(--accent-text);
   border-bottom-color: var(--accent);
@@ -12078,25 +12260,20 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 .sym-carry-tabpane { padding-top: 2px; }
 
 /* ═══ 圖示頁 ③a-3i:基本設定卡整併（§2.3）═══ */
-/* 名稱 + 編號:標籤左 4 欄（標籤|輸入|標籤|唯讀）*/
-#app .sym-basic-idrow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px 10px;
-  margin-bottom: 10px;
-}
 #app .sym-name-wrap { min-width: 0; }
 #app .sym-name-wrap .input { width: 100%; }
 /* 共用左側標籤（固定寬·不換行）*/
-#app .sym-lbl { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
-/* 編號唯讀格（原 inline style 收斂為類名）*/
+#app .sym-lbl { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+/* 編號唯讀格(v9.4:補 flex 置中,原本純靠 line-height 撐高在 div 上無效,數字會貼頂部) */
 #app .sym-num-readonly {
-  background: var(--surface-2, rgba(0,0,0,0.04));
+  background: var(--glass-3);
   cursor: default;
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-/* 底部兩顆捷徑鈕（虛線 accent;點開彈窗）*/
+/* 底部兩顆捷徑鈕（v9.1:改實框卡片風 + 小圖示,與上傳/貼上圖片等工具列鈕同一視覺語言;點開彈窗;v9.4 移入獨立「進階設定」卡）*/
 #app .sym-basic-btns {
   display: flex;
   gap: 10px;
@@ -12105,35 +12282,24 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .sym-basic-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
-  border: 1px dashed var(--accent);
-  border-radius: 8px;
-  background: transparent;
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  background: var(--glass-3);
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
-#app .sym-basic-btn:hover { background: var(--glass-2); }
+#app .sym-basic-btn:hover { background: var(--glass-2); border-color: var(--accent-brd); }
+#app .sym-basic-btn-ico { font-size: 15px; flex-shrink: 0; color: var(--accent-text); }
+#app .sym-basic-btn-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 #app .sym-basic-btn-t { font-size: 12px; font-weight: 500; color: var(--accent-text); }
-#app .sym-basic-btn-v { font-size: 11px; color: var(--text-light); font-family: inherit; }
-/* 進階折疊（家族 / 代碼;§2.3 代碼隱藏）*/
-#app .sym-basic-adv { margin-top: 8px; }
-#app .sym-basic-adv > summary {
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px 0;
-  list-style: none;
-  user-select: none;
-}
-#app .sym-basic-adv > summary::-webkit-details-marker { display: none; }
-#app .sym-basic-adv > summary::before { content: '▸ '; }
-#app .sym-basic-adv[open] > summary::before { content: '▾ '; }
-#app .sym-adv-body { padding: 8px 0 4px; }
+#app .sym-basic-btn-v { font-size: var(--fs-xs); color: var(--text-light); font-family: inherit; }
 
-/* ═══ 圖示頁 ③a-3iii:§2.3 基本卡精修（標籤左 + 圖片網址）═══ */
+/* ═══ 圖示頁 ③a-3iii:§2.3 基本卡精修（標籤左）═══ */
 /* 基準權重:標籤左 */
 #app .sym-weight-inline {
   display: grid;
@@ -12141,91 +12307,61 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   align-items: center;
   column-gap: 10px;
 }
-/* 編號唯讀格最小寬（4 欄 grid 內不塌）*/
-#app .sym-num-readonly { min-width: 52px; }
-/* 圖片網址輸入（§2.3 [貼上][圖片網址][選檔]）*/
-#app .sym-img-url {
-  width: 100%;
-  margin-top: 6px;
-  text-align: left;
-  font-size: 11px;
-}
+/* 編號唯讀格固定寬(覆寫 .input 的 width:100%,否則在 flex 列裡會撐爆換行)*/
+#app .sym-num-readonly { width: 44px; min-width: 44px; height: 32px; flex-shrink: 0; }
 
-/* ═══ 圖示頁 ③b-1:賠率卡 所屬群組（§2.4;由基本卡進階移入）═══ */
-#app .sym-paygroup-sep { height: 1px; background: var(--border); margin: 12px 0; }
-#app .sym-paygroup {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: 10px;
-}
-#app .sym-paygroup-peek { font-size: 11px; color: var(--text-light); margin-top: 5px; }
-
-/* ═══ 圖示頁 ③b-2:賠率模式切換（連線數 / 圖示數量;segmented）═══ */
-#app .sym-paymode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--accent-brd);
-  border-radius: var(--r-pill, 999px);
-  overflow: hidden;
-  margin-left: auto;
-  margin-right: 8px;
-}
-#app .sym-paymode-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 12px;
-  cursor: pointer;
-}
-#app .sym-paymode-btn:hover { color: var(--accent-text); }
-#app .sym-paymode-btn.active { background: var(--accent); color: var(--accent-text); }
-
-/* ═══ 圖示頁 ③b-3:賠率新增對話框（inline·2px accent;單一/區間 + 防呆）═══ */
-#app .sym-payadd-dialog {
-  margin-top: 8px;
-  border: 2px solid var(--accent-brd);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--surface-1);
+/* ═══ 圖示頁 ③a-3iv(v9.4):圖片設定 popup — 拖放/選檔 + 剪貼簿貼上 + 網址,三種來源合一 ═══ */
+#app .sym-img-dropzone {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 14px;
+  border: 1px dashed var(--accent-brd);
+  border-radius: var(--r-md);
+  background: var(--glass-1);
+  color: var(--text-light);
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
 }
-#app .sym-payadd-head {
+#app .sym-img-dropzone:hover,
+#app .sym-img-dropzone.is-dragover {
+  background: var(--glass-3);
+  border-color: var(--accent-text);
+}
+#app .sym-img-dropzone-ico { font-size: 26px; line-height: 1; }
+#app .sym-img-dropzone-text { font-size: 12px; }
+#app .sym-img-popup-orsep {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  margin: 12px 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
-#app .sym-payadd-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
-#app .sym-payadd-kind {
-  display: inline-flex;
-  border: 1px solid var(--accent-brd);
-  border-radius: 999px;
-  overflow: hidden;
+#app .sym-img-popup-orsep::before,
+#app .sym-img-popup-orsep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--glass-edge);
 }
-#app .sym-payadd-kbtn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  padding: 2px 10px;
-  cursor: pointer;
+#app .sym-img-popup-pastebtn { width: 100%; justify-content: center; }
+#app .sym-img-popup-urlrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+#app .sym-img-popup-urlrow .input { flex: 1; min-width: 0; }
+
+/* ═══ 圖示頁 ③b-1:賠率卡 所屬群組（v9.5:移到卡片最上方 + 一鍵「套用群組賠率」)═══ */
+#app .sym-paygroup-sep { height: 1px; background: var(--glass-edge); margin: 12px 0; }
+#app .sym-paygroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-#app .sym-payadd-kbtn.active { background: var(--accent); color: var(--accent-text); }
-#app .sym-payadd-body { display: flex; align-items: center; gap: 8px; }
-/* 防呆提醒:琥珀（對齊 §2.4 + payRowIssues）*/
-#app .sym-payadd-warn {
-  font-size: 11px;
-  color: var(--warn-text);
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-brd);
-  border-radius: 6px;
-  padding: 4px 9px;
-}
-#app .sym-payadd-foot { display: flex; justify-content: flex-end; gap: 8px; }
+#app .sym-paygroup select { flex: 1; min-width: 120px; }
+#app .sym-paygroup-apply { white-space: nowrap; }
+#app .sym-paygroup-peek { font-size: var(--fs-xs); color: var(--text-light); margin-top: 5px; }
 
 /* ═══ 圖示頁 ③c:出現模式 chips（全模式 vs 特定;§2.5）═══ */
 #app .sym-appear-modes {
@@ -12235,7 +12371,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin: 4px 0;
 }
 #app .sym-mode-chip {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 4px 12px;
   border: 1px solid var(--glass-brd);
   border-radius: var(--r-pill, 999px);
@@ -12258,7 +12394,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .sym-rule-rid {
   flex: none;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   border: 1px dashed var(--glass-brd);
   border-radius: 5px;
@@ -12370,7 +12506,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-cv-ctx-head {
   padding: 5px 8px 6px;
   color: var(--text-secondary, #6b7280);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   border-bottom: 1px solid var(--divider, #eceef5);
   margin-bottom: 4px;
 }
@@ -12387,8 +12523,12 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   white-space: nowrap;
 }
 #app .cfg-cv-ctx-item:hover { background: var(--accent, #eef0fe); color: var(--accent-hex, #4338ca); }
+#app .cfg-cv-ctx-item:disabled { opacity: 0.38; cursor: not-allowed; }
+#app .cfg-cv-ctx-item:disabled:hover { background: transparent; color: var(--text, #222); }
 #app .cfg-cv-ctx-danger { color: var(--danger-text, #b4463c); }
 #app .cfg-cv-ctx-danger:hover { background: var(--danger-bg, #fbe9e7); color: var(--danger-text, #b4463c); }
+/* UI/UX 改版 P2:選單項分組用的細分隔線 */
+#app .cfg-cv-ctx-sep { height: 1px; background: var(--divider, #eceef5); margin: 4px 2px; }
 
 /* ============================================================
    盤面 P3d:副盤拖曳預覽 —— 目標格(dragok=可放/dragbad=碰撞)
@@ -12425,7 +12565,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-md, 10px);
   box-shadow: var(--shadow-md, 0 8px 26px rgba(0,0,0,.16));
   color: var(--text, #222);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   line-height: 1.55;
   text-align: left;
   white-space: normal;
@@ -12478,7 +12618,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-subreel-svg { width: 84px; height: 54px; display: block; color: var(--text-secondary, #6b7280); }
 #app .cfg-subreel-svg .mm { fill: transparent; stroke: currentColor; stroke-width: 1.5; }
 #app .cfg-subreel-svg .ss { fill: var(--accent, #eef0fe); stroke: var(--accent-hex, #4338ca); stroke-width: 1.5; }
-#app .cfg-subreel-tip-desc { font-size: 11px; line-height: 1.5; color: var(--text, #222); text-align: center; }
+#app .cfg-subreel-tip-desc { font-size: var(--fs-xs); line-height: 1.5; color: var(--text, #222); text-align: center; }
 
 /* ══════════════════════════════════════════════════════════
    §5 圖示頁非直覺欄位 ℹ 提示（常駐、無總開關;CSS-only tooltip）
@@ -12488,7 +12628,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   display: inline-flex; align-items: center; justify-content: center;
   width: 13px; height: 13px; margin-left: 5px;
   border-radius: 50%; flex: none;
-  font-size: 9.5px; font-weight: 500; font-style: normal; line-height: 1;
+  font-size: var(--fs-xs); font-weight: 500; font-style: normal; line-height: 1;
   color: var(--text-secondary, #6b7280);
   background: var(--glass-2, #eef0f4);
   border: 0.5px solid var(--card-brd, #d6d8fb);
@@ -12511,7 +12651,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   border-radius: var(--r-md, 10px);
   box-shadow: var(--shadow-md, 0 8px 26px rgba(0,0,0,.16));
   color: var(--text, #222);
-  font-size: 11px; font-weight: 400; line-height: 1.55;
+  font-size: var(--fs-xs); font-weight: 400; line-height: 1.55;
   text-align: left; white-space: normal;
   opacity: 0; pointer-events: none;
   transition: opacity .14s ease, transform .14s ease;
@@ -12524,7 +12664,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
    ══════════════════════════════════════════════════════════ */
 #app .sym-rule-badge {
   flex: none;
-  font-size: 10px; font-weight: 500; line-height: 1;
+  font-size: var(--fs-xs); font-weight: 500; line-height: 1;
   color: #16a34a;
   background: rgba(22,163,74,0.12);
   border: 0.5px solid rgba(22,163,74,0.38);
@@ -12569,7 +12709,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-rule-origin-badge {
   flex: none;
-  font-size: 10px; font-weight: 600; line-height: 1;
+  font-size: var(--fs-xs); font-weight: 600; line-height: 1;
   color: var(--accent-text, #4338ca);
   background: var(--accent, rgba(79,70,229,0.10));
   border: 0.5px solid var(--accent-brd, #d6d8fb);
@@ -12599,7 +12739,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 }
 #app .cfg-jp-symlink {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 600; color: var(--accent-text, #4338ca);
+  font-size: var(--fs-xs); font-weight: 600; color: var(--accent-text, #4338ca);
   background: var(--accent, rgba(79,70,229,0.08));
   border: 0.5px solid var(--accent-brd, #d6d8fb);
   border-radius: 999px; padding: 2px 8px;
@@ -12642,7 +12782,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   margin-bottom: 10px;
 }
 #app .cfg-rule-peer {
-  font-size: 11px; font-weight: 700; line-height: 1.2;
+  font-size: var(--fs-xs); font-weight: 700; line-height: 1.2;
   color: var(--text-light, #6b7280);
   background: transparent; border: 1px solid transparent;
   border-radius: var(--r-sm, 7px);
@@ -12707,7 +12847,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-gc-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .14s; }
 #app .cfg-gc-sw.on { background: var(--accent-text, #4f46e5); border-color: var(--accent-text, #4f46e5); }
 #app .cfg-gc-sw.on::after { left: 16px; }
-#app .cfg-gc-ctype { font-size: 11px; font-weight: 600; color: var(--accent-text, #4338ca); background: var(--accent, #eef0fe); border-radius: 5px; padding: 2px 8px; flex: none; }
+#app .cfg-gc-ctype { font-size: var(--fs-xs); font-weight: 600; color: var(--accent-text, #4338ca); background: var(--accent, #eef0fe); border-radius: 5px; padding: 2px 8px; flex: none; }
 #app .cfg-gc-text { font-size: 13px; color: var(--text, #1a1a1a); }
 #app .cfg-gc-row.is-off .cfg-gc-text, #app .cfg-gc-row.is-off .cfg-gc-ctype { color: var(--text-light, #9ca3af); background: transparent; }
 #app .cfg-gc-act { border: none; background: transparent; cursor: pointer; color: var(--text-light, #6b7280); font-size: 14px; padding: 3px 6px; border-radius: 5px; flex: none; }
@@ -12736,7 +12876,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-gc-exbox { flex: 1; border: 0.5px solid var(--card-brd, #d6d8fb); border-radius: 10px; padding: 10px 12px; background: var(--surface-1, #fafafe); }
 #app .cfg-gc-exconn { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
 #app .cfg-gc-excap { font-size: 12px; color: var(--text-light, #6b7280); }
-#app .cfg-gc-seg-sm button { padding: 3px 10px; font-size: 11px; }
+#app .cfg-gc-seg-sm button { padding: 3px 10px; font-size: var(--fs-xs); }
 #app .cfg-gc-exleaf { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
 #app .cfg-gc-exgrp { border: 1px dashed var(--card-brd, #c7cad6); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: var(--glass-2, rgba(0,0,0,0.02)); }
 #app .cfg-gc-exgrp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -12748,15 +12888,15 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-gc-exprev { margin-top: 12px; padding: 9px 12px; border-radius: 8px; background: var(--accent, #eef0fe); color: var(--accent-text, #4338ca); font-size: 12px; }
 
 /* §4.11:關聯條件衝突 amber dot */
-#app .cfg-gc-warndot { color: #f59e0b; font-size: 10px; flex: none; }
+#app .cfg-gc-warndot { color: #f59e0b; font-size: var(--fs-xs); flex: none; }
 
 /* §4.10:棄牌條件 modal 輸入(靠左)+ 原因 badge */
 #app .cfg-dc-input { flex: 1; text-align: left; border: 1px solid var(--card-brd, #d6d8fb); border-radius: var(--r-sm, 7px); padding: 6px 10px; font-size: 13px; background: var(--surface-1, #fff); color: var(--text, #1a1a1a); }
-#app .cfg-dc-reason { font-size: 11px; color: var(--text-light, #6b7280); background: var(--glass-2, rgba(0,0,0,0.04)); border-radius: 5px; padding: 2px 8px; flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#app .cfg-dc-reason { font-size: var(--fs-xs); color: var(--text-light, #6b7280); background: var(--glass-2, rgba(0,0,0,0.04)); border-radius: 5px; padding: 2px 8px; flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* §5.1:中獎方式卡(盤面頁遷入)host + 全域 tag */
 #app .cfg-paymethod-host { flex-shrink: 0; margin-bottom: 12px; }
-#app .cfg-paymethod-tag { font-size: 11px; color: var(--text-light, #6b7280); background: var(--glass-2, rgba(0,0,0,0.05)); border-radius: 5px; padding: 1px 7px; margin-left: 8px; font-weight: 400; }
+#app .cfg-paymethod-tag { font-size: var(--fs-xs); color: var(--text-light, #6b7280); background: var(--glass-2, rgba(0,0,0,0.05)); border-radius: 5px; padding: 1px 7px; margin-left: 8px; font-weight: 400; }
 
 /* §5.2 Stage B:盤面幾何卡(逐模式列數) */
 #app .cfg-gg-mode { padding: 10px 0; border-bottom: 1px solid var(--divider, rgba(0,0,0,0.08)); }
@@ -12771,7 +12911,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-gg-reeltable { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 #app .cfg-gg-reelrow { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text, #1a1a1a); }
 #app .cfg-gg-reellabel { min-width: 34px; font-weight: 500; }
-#app .cfg-gg-reelcap { font-size: 11px; color: var(--text-light, #6b7280); }
+#app .cfg-gg-reelcap { font-size: var(--fs-xs); color: var(--text-light, #6b7280); }
 #app .cfg-gg-cap { margin-top: 8px; }
 
 /* §4.10b:棄牌開關 + 停用列淡化 */
@@ -12792,20 +12932,20 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* §2.5 依模式分別設定(圖示頁出現設定卡) */
 #app .sym-appear-permode { margin-top: 10px; }
-#app .sym-permode-toggle { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:500; color:var(--text-pro,#4f46e5); border:1px dashed var(--border-pro,rgba(79,70,229,.45)); border-radius:8px; padding:6px 12px; background:transparent; cursor:pointer; }
+#app .sym-permode-toggle { display:inline-flex; align-items:center; gap:6px; font-size: var(--fs-xs); font-weight:500; color:var(--text-pro,#4f46e5); border:1px dashed var(--border-pro,rgba(79,70,229,.45)); border-radius:8px; padding:6px 12px; background:transparent; cursor:pointer; }
 #app .sym-permode-toggle.active { background:var(--bg-pro,rgba(79,70,229,.10)); }
 #app .sym-permode-gear { font-size:13px; }
 #app .sym-permode-body { margin-top:8px; background:var(--surface-1,rgba(127,127,127,.05)); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
 #app .sym-permode-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:4px 0; }
-#app .sym-permode-name { font-size:11.5px; font-weight:500; min-width:72px; }
+#app .sym-permode-name { font-size: var(--fs-xs); font-weight:500; min-width:72px; }
 #app .sym-permode-reels { display:inline-flex; gap:8px; flex-wrap:wrap; }
-#app .sym-permode-max { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-secondary); }
+#app .sym-permode-max { display:inline-flex; align-items:center; gap:5px; font-size: var(--fs-xs); color:var(--text-secondary); }
 
 /* ── #5 設定檔比對(config-compare-page)── */
 #app .cfgcmp { display:flex; flex-direction:column; gap:14px; max-width:760px; }
 #app .cfgcmp-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
 #app .cfgcmp-title { font-size:15px; font-weight:700; color:var(--text); }
-#app .cfgcmp-sub { font-size:11px; font-weight:400; color:var(--text-light); }
+#app .cfgcmp-sub { font-size: var(--fs-xs); font-weight:400; color:var(--text-light); }
 /* 拖放區 */
 #app .cfgcmp-drop { border:1.5px dashed var(--accent-brd); border-radius:12px; padding:22px 16px; text-align:center; background:var(--accent); transition:border-color .15s, background .15s; }
 #app .cfgcmp-drop.over { border-color:var(--accent-text); background:var(--accent); filter:brightness(.98); }
@@ -12818,7 +12958,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfgcmp-file.current { background:var(--accent); }
 #app .cfgcmp-file-ic { font-size:14px; }
 #app .cfgcmp-file-name { font-size:13px; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#app .cfgcmp-badge { font-size:11px; color:var(--text-secondary,var(--text-light)); background:var(--accent-brd); border-radius:20px; padding:2px 9px; }
+#app .cfgcmp-badge { font-size: var(--fs-xs); color:var(--text-secondary,var(--text-light)); background:var(--accent-brd); border-radius:20px; padding:2px 9px; }
 #app .cfgcmp-x { font-size:14px; color:var(--text-muted); background:transparent; border:none; cursor:pointer; opacity:0; transition:opacity .12s; padding:2px 6px; }
 #app .cfgcmp-file:hover .cfgcmp-x { opacity:1; }
 /* A/B 選擇 + 比對 */
@@ -12850,7 +12990,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ── #4 全案預檢:健康度 popover 內 segmented 篩選 ── */
 #app .cfg-health-filter { display:flex; gap:4px; padding:4px 0 10px; flex-wrap:wrap; }
-#app .cfg-health-filter-btn { font-size:11.5px; font-weight:400; color:var(--text-light); background:var(--surface-1,rgba(127,127,127,.06)); border:1px solid transparent; border-radius:20px; padding:3px 11px; cursor:pointer; transition:background .12s, color .12s, border-color .12s; }
+#app .cfg-health-filter-btn { font-size: var(--fs-xs); font-weight:400; color:var(--text-light); background:var(--surface-1,rgba(127,127,127,.06)); border:1px solid transparent; border-radius:20px; padding:3px 11px; cursor:pointer; transition:background .12s, color .12s, border-color .12s; }
 #app .cfg-health-filter-btn b { font-weight:700; }
 #app .cfg-health-filter-btn.active { color:var(--accent-text); background:var(--accent); border-color:var(--accent-brd); }
 #app .cfg-health-filter-btn.active.pf-error { color:var(--text-danger); background:var(--bg-danger); border-color:transparent; }
@@ -12880,12 +13020,12 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ── #3 逐輪進場/滾動方式 + 方向(整輪面板 §7.2)── */
 #app .cfg-re-group { }
-#app .cfg-re-tag { font-size:9px; padding:1px 7px; border-radius:999px; background:var(--accent-bg,var(--ab,rgba(122,60,32,.12))); color:var(--accent,var(--af,#7a3c20)); margin-left:6px; font-weight:400; vertical-align:middle; }
+#app .cfg-re-tag { font-size: var(--fs-xs); padding:1px 7px; border-radius:999px; background:var(--accent-bg,var(--ab,rgba(122,60,32,.12))); color:var(--accent,var(--af,#7a3c20)); margin-left:6px; font-weight:400; vertical-align:middle; }
 #app .cfg-re-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
-#app .cfg-re-chip { font-size:11px; padding:5px 11px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text-secondary,var(--text)); cursor:pointer; transition:background .12s,border-color .12s; }
+#app .cfg-re-chip { font-size: var(--fs-xs); padding:5px 11px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text-secondary,var(--text)); cursor:pointer; transition:background .12s,border-color .12s; }
 #app .cfg-re-chip:hover { border-color:var(--accent-brd,var(--abd,#7a3c20)); }
 #app .cfg-re-chip.active { background:var(--accent-bg,var(--ab,rgba(122,60,32,.12))); border-color:var(--accent-brd,var(--abd,#7a3c20)); color:var(--accent-text,var(--af,#7a3c20)); font-weight:500; }
-#app .cfg-re-copy { display:inline-flex; align-items:center; gap:5px; margin-top:10px; font-size:11px; padding:5px 10px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text-secondary,var(--text)); cursor:pointer; }
+#app .cfg-re-copy { display:inline-flex; align-items:center; gap:5px; margin-top:10px; font-size: var(--fs-xs); padding:5px 10px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text-secondary,var(--text)); cursor:pointer; }
 #app .cfg-re-copy:hover { border-color:var(--accent-brd,var(--abd,#7a3c20)); color:var(--accent-text,var(--af,#7a3c20)); }
 
 /* ── #2 機制篩選（Board v2 §11;檢視）── */
@@ -12894,4 +13034,4 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-cv-mechfilter { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary,var(--text)); }
 #app .cfg-cv-mechfilter-ic { color:#EF9F27; }
 #app .cfg-cv-mechfilter-sel { font-size:12px; padding:4px 7px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text); cursor:pointer; }
-#app .cfg-cv-mechfilter-info { font-size:11px; color:#EF9F27; font-weight:500; }
+#app .cfg-cv-mechfilter-info { font-size: var(--fs-xs); color:#EF9F27; font-weight:500; }

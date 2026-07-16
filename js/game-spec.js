@@ -260,7 +260,8 @@
         try {
           if (this._registry.reelCount() !== next.reelCount) {
             console.log('[gameSpec] reelCount', this._registry.reelCount(), '→', next.reelCount, '(推 registry.setReelCount)');
-            this._registry.setReelCount(next.reelCount);
+            // v9.5:isLineLike 一併帶入,讓 registry 決定賠付連線數列(pay_rows)要不要隨輪數自動增減
+            this._registry.setReelCount(next.reelCount, next.isLineLike);
           }
         } catch (e) {
           console.warn('[gameSpec] setReelCount 傳播失敗:', e);

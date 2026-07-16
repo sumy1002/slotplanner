@@ -189,6 +189,35 @@
   }
 
   // ════════════════════════════════════════════════════════════
+  //  v9.5:盤面輪數變動 → 賠付連線數列(pay_rows)自動增減
+  //    只在「連線型」玩法(LINE/WAYS/MEGAWAYS)且符號本身不是 SCATTER/BONUS(這兩類一律用圖示數量計,
+  //    不受輪數限制)時套用。自動管理下限固定 3 連(不開放 UI 顯示/調整);使用者若要 2 連,
+  //    自行用「+新增連線數」加,加了之後不受輪數變動影響(2 連本就低於自動下限)。
+  // ════════════════════════════════════════════════════════════
+  const AUTO_PAY_LO = 3;
+  function _isAutoPaySymbol(s) {
+    const t = s.type;
+    return t !== 'SCATTER' && t !== 'BONUS';
+  }
+  function syncSymbolPayRowsToReelCount(s, n) {
+    if (!_isAutoPaySymbol(s)) return;
+    const rows = Array.isArray(s.pay_rows) ? s.pay_rows : [];
+    // 移除已不可能出現的連線數(count ≥ 自動下限 且 超過新輪數);2 連等使用者自行新增的低位列不受影響
+    const kept = rows.filter(r => !(Number(r.count) >= AUTO_PAY_LO && Number(r.count) > n));
+    // 補齊 3..n 尚未存在的列(pay=0,交給使用者填數值)
+    const used = new Set(kept.map(r => Number(r.count)));
+    for (let c = AUTO_PAY_LO; c <= n; c++) {
+      if (!used.has(c)) kept.push({ count: c, count_to: 0, pay: 0 });
+    }
+    kept.sort((a, b) => (Number(a.count) || 0) - (Number(b.count) || 0));
+    s.pay_rows = kept;
+  }
+  function syncPayRowsToReelCount(symbols, n, isLineLike) {
+    if (!isLineLike) return;   // 非連線型玩法(CLUSTER/SCATTER)不受輪數自動管理
+    symbols.forEach(s => syncSymbolPayRowsToReelCount(s, n));
+  }
+
+  // ════════════════════════════════════════════════════════════
   //  RegistrySnapshot — undo/redo 快照
   // ════════════════════════════════════════════════════════════
   function makeSnapshot(symbols, swatchMap) {
@@ -225,6 +254,7 @@
       this._symbols = [];
       this._swatchMap = {};   // id -> [bg, fg]
       this._reelCount = 5;
+      this._isLineLike = true;   // v9.5:賠付連線型(LINE/WAYS/MEGAWAYS)旗標,由 gameSpec 推入,決定 pay_rows 是否隨輪數自動增減
     }
 
     // ── 初始化（嘗試從 localStorage 還原，失敗則用 defaults） ──
@@ -284,13 +314,16 @@
       this.emit('changed');
     }
 
-    setReelCount(n) {
+    setReelCount(n, isLineLike) {
+      if (typeof isLineLike === 'boolean') this._isLineLike = isLineLike;
       if (n === this._reelCount) {
         this._symbols.forEach(s => setSymbolReelCount(s, n));
+        syncPayRowsToReelCount(this._symbols, n, this._isLineLike);
         return;
       }
       this._reelCount = n;
       this._symbols.forEach(s => setSymbolReelCount(s, n));
+      syncPayRowsToReelCount(this._symbols, n, this._isLineLike);
       this._saveLocalStorage();
       this.emit('changed');
     }
