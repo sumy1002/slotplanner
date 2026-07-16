@@ -211,7 +211,7 @@ body::before { content: none; display: none; }
   position: relative; z-index: 1;
   height: 100vh;
   height: 100dvh;   /* v7.1:手機瀏覽器網址列不再吃掉高度 */
-  padding: 16px;
+  padding: var(--space-5);
   display: flex;
 }
 
@@ -494,15 +494,18 @@ body::before { content: none; display: none; }
 .input {
   background: var(--input-bg);
   border: 0.5px solid var(--input-brd);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-input);
   padding: 0 12px; height: 42px;
-  font-size: 13px; color: var(--text);
+  font-size: var(--fs-sm); color: var(--text);
   outline: none; font-family: inherit;
   box-shadow: var(--shadow-sm);
   transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
   width: 100%;
   -webkit-appearance: none;
   appearance: none;
+}
+.input:hover:not(:disabled):not(:focus) {
+  border-color: color-mix(in srgb, var(--input-focus-brd) 35%, var(--input-brd));
 }
 .input:focus {
   border-color: var(--input-focus-brd);
@@ -520,7 +523,7 @@ body::before { content: none; display: none; }
   color: rgba(70,68,62,0.32);
   box-shadow: none;
 }
-.input-sm { height: 32px; font-size: 12px; padding: 0 10px; }
+.input-sm { height: 32px; font-size: var(--fs-xs); padding: 0 10px; }
 /* #8:置中對齊工具(套在數值/短欄位上,文字框維持靠左)*/
 .input-center { text-align: center; }
 
@@ -535,8 +538,8 @@ select.input,
 }
 
 .field-label {
-  font-size: 13px; font-weight: 700; color: var(--text);
-  margin-bottom: 6px;
+  font-size: var(--fs-base); font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
 }
 .field-label-sm {
   font-size: var(--fs-xs); color: var(--text-light);
