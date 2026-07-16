@@ -104,12 +104,12 @@
 
   --divider: #eef0f2;
 
-  /* ── 圓角階梯(v7.0 收斂得更俐落)── */
-  --r-xs:   6px;
-  --r-sm:   8px;
-  --r-md:  10px;
-  --r-lg:  14px;
-  --r-xl:  18px;
+  /* ── 圓角階梯(v7.0 收斂得更俐落; token polish:整體大一階)── */
+  --r-xs:   8px;
+  --r-sm:   10px;
+  --r-md:   12px;
+  --r-lg:   16px;
+  --r-xl:   22px;
   --r-pill: 999px;
 
   /* 舊 token alias */
@@ -153,25 +153,25 @@
   --z-nav:        100;    /* 底部導覽層級 */
 
   /* ── v9.0 / 硬核工作站大改版:間距刻度(外鬆內緊的統一單位)──
-     1-3 給卡片內部(緊湊:格點/輸入框/表格列),4-8 給卡片之間與版面級留白(寬敞)。 */
+     1-3 給卡片內部(緊湊:格點/輸入框/表格列),4-8 給卡片之間與版面級留白(寬敞)。
+     token polish:整體 +2px,保留 1–3 不動。 */
   --space-1: 2px;
   --space-2: 4px;
   --space-3: 8px;
-  --space-4: 12px;
-  --space-5: 16px;
-  --space-6: 24px;
-  --space-7: 32px;
+  --space-4: 14px;
+  --space-5: 18px;
+  --space-6: 28px;
+  --space-7: 36px;
   --space-8: 48px;
 
-  /* ── UI/UX 改版 P1:字級階層(取代散落各處的 9~13px 寫死字級)──
-     地板拉到 12px(原 9~11.5px 一律升到這裡),避免長時間閱讀疲勞。
+  /* ── UI/UX 改版 P1 / token polish:字級階層整體大一階 ──
      --fs-xs 是「最小可讀字」,不再有比它更小的內文/標籤文字。 */
-  --fs-xs:   12px;   /* 原 9 / 9.5 / 10 / 10.5 / 11 / 11.5px 的新地板 */
-  --fs-sm:   13px;   /* 次要內文、按鈕、輸入框 */
-  --fs-base: 14px;   /* 一般內文(對齊 body 預設) */
-  --fs-md:   15px;   /* 卡片標題、強調內文 */
-  --fs-lg:   16px;   /* 區塊標題 */
-  --fs-xl:   20px;   /* 頁面級標題 */
+  --fs-xs:   13px;
+  --fs-sm:   14px;
+  --fs-base: 15px;
+  --fs-md:   16px;
+  --fs-lg:   18px;
+  --fs-xl:   22px;
 }
 
 * { box-sizing: border-box; }
@@ -179,7 +179,7 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, sans-serif;
-  font-size: 14px; color: var(--text);
+  font-size: 15px; color: var(--text);
   background: var(--bg);
   overflow: hidden;
   /* iOS 觸控反饋去掉 */
