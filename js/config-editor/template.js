@@ -421,8 +421,16 @@
         </div>
         <template v-for="t in grp.tabs" :key="t.id">
         <div class="cfg-tab"
-             :class="{ active: (active === t.id && !(t.id === 'rules')) || (t.id === 'rules' && (active === 'rules' || active === 'paylines')) || (t.id === 'reel_weights' && (active === 'reel_strips' || active === 'grid_size_weights' || active === 'distribution_bins')), 'cfg-tab-rules-parent': t.id === 'rules',
-                       'cfg-tab-dirty': dirtyTabs[t.id], 'cfg-tab-na': tabNotApplicable(t.id) }"
+             :class="{
+               active: t.id === 'rules'
+                 ? (active === 'rules' || active === 'paylines')
+                 : (t.id === 'reel_weights'
+                     ? (active === 'reel_weights' || active === 'reel_strips' || active === 'grid_size_weights' || active === 'distribution_bins')
+                     : active === t.id),
+               'cfg-tab-rules-parent': t.id === 'rules',
+               'cfg-tab-dirty': dirtyTabs[t.id],
+               'cfg-tab-na': tabNotApplicable(t.id)
+             }"
              @click="t.id === 'rules' ? onRulesParentClick() : (active = t.id, cfgTabRailCollapsed = true)"
              :title="tabNotApplicable(t.id) ? tabNAReason(t.id) : (t.name + (t.desc ? ' · ' + t.desc : ''))">
           <span class="cfg-tab-icon">{{ t.icon }}</span>
@@ -440,28 +448,11 @@
         </div>
         </template>
       </div>
-
-      <!-- 📄 文件群組（不在 TABS 內：跨分頁輸出步驟，不對應 A.xlsx sheet）-->
-      <div class="cfg-tab-group">
-        <div class="cfg-tab-group-header">
-          <span class="cfg-tab-group-icon">📄</span>
-          <span class="cfg-tab-group-label">文件</span>
-        </div>
-        <div class="cfg-tab"
-             :class="{ active: active === 'docgen' }"
-             @click="active = 'docgen'; cfgTabRailCollapsed = true"
-             :title="'文件生成 · 把設定匯出成 Excel 或 Markdown 文件'">
-          <span class="cfg-tab-icon">📋</span>
-          <div class="cfg-tab-text">
-            <div class="cfg-tab-name">文件生成</div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- ── 右:當前分頁內容 ── -->
     <!-- 浮動「重設此頁」按鈕在 cfg-content 之外(cfg-body 內),避免被內部捲動帶走 -->
-    <button v-if="active !== 'docgen' && activeTab.kind !== 'fullpane'"
+    <button v-if="activeTab.kind !== 'fullpane'"
             class="cfg-content-reset-fab"
             @click="resetCurrent"
             :title="'重設本分頁(' + (activeTab.name || '') + ')為預設值'">

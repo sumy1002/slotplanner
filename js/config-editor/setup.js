@@ -10220,7 +10220,7 @@
       // ── 把子 component(symbol-page)的 status 事件往上傳 ──
       function passStatus(s) { emit('status', s); }
 
-      const activeTab = computed(() => TABS.find(t => t.id === active.value) || TABS[0]);
+      const activeTab = computed(() => TABS.find(t => t.id === active.value) || TABS.find(t => t.id === 'rules') || TABS[0]);
       // ── v8.14 批1:fit 頁集合(捲動白名單反集)──
       //   白名單(允許長內容捲動):layout / symbols / reel_strips。
       //   其餘分頁套 cfg-content--fit:清除底部人工撐高(64px Inspector 保留區、末段 margin、
