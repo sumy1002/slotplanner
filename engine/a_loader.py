@@ -23,6 +23,7 @@ A.xlsx 解析器與全分頁交叉驗證
 from __future__ import annotations
 import re
 import json
+import math
 import warnings
 import pandas as pd
 from pathlib import Path
@@ -1185,8 +1186,14 @@ def _parse_reel_weights(
                     sheet, f"Symbol_ID {sid} 在 03_Symbols 不存在", row=idx + 2
                 )
             weight = float(r["Weight"])
-            if weight < 0:
-                raise ConfigValidationError(sheet, "Weight 不可為負", row=idx + 2)
+            # M2 (R-P0):權重須為 >= 0 的有限數。空白儲存格經 pandas → NaN,
+            #   舊碼 `weight < 0`(NaN<0=False)會放行 NaN → 下游 random.choices 拋
+            #   「Total of weights must be finite」。此處以 math.isfinite 一併擋 NaN/±inf。
+            #   保留 weight == 0 合法(0 = 該符號於此輪排除)。
+            if not math.isfinite(weight) or weight < 0:
+                raise ConfigValidationError(
+                    sheet, "Weight 必須為 >= 0 的有限數(不可空白/NaN/±inf/負)", row=idx + 2
+                )
 
             # v4.7:Reel_ID 三種定址 — 純數字=主輪、<n>.sub=副輪、其他字串=Panel ID
             is_subreel = reel_id_raw.endswith(".sub")
@@ -1219,6 +1226,8 @@ def _parse_reel_weights(
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
     if not out:
         raise ConfigValidationError(sheet, "至少需 1 筆權重")
+    # 註:reel/panel 群組「全零」驗證由 _cross_validate 統一處理(既有 2064-2086),
+    #   此處不重複。M2(上方)已擋 NaN/±inf/負,補上既有 sum()<=0 對 NaN 的盲區。
     return out
 
 
@@ -1251,11 +1260,18 @@ def _parse_grid_size_weights(
                     f"Reel {reel_id} 的 Grid_Size {grid_size} 超過 Max_Rows {layout_max[reel_id]}",
                     row=idx + 2,
                 )
+            # M2 (R-P0):同 04_Reel_Weights — 權重須 >= 0 有限數;NaN/±inf/負一律報錯
+            #   (舊碼無任何檢查,NaN 會靜默灌入 → 下游 gsize 抽樣拋 finite 例外)。
+            gs_weight = float(r["Weight"])
+            if not math.isfinite(gs_weight) or gs_weight < 0:
+                raise ConfigValidationError(
+                    sheet, "Weight 必須為 >= 0 的有限數(不可空白/NaN/±inf/負)", row=idx + 2
+                )
             out.append(GridSizeWeight(
                 mode=mode,
                 reel_id=reel_id,
                 grid_size=grid_size,
-                weight=float(r["Weight"]),
+                weight=gs_weight,
             ))
         except ConfigValidationError:
             raise
@@ -1699,12 +1715,18 @@ def _parse_combo_weights(
                 continue   # 範例列略過
             if sid not in symbols:
                 continue
+            # M2 (R-P0):08_Combo_Weights 為選用覆蓋且原設計「任何解析問題即略過」
+            #   (無 ConfigValidationError re-raise);故非有限/負權重採「跳過該列」而非報錯,
+            #   與本函式既有容忍風格一致,同時避免 NaN 灌入 combo 覆蓋池。
+            cw_weight = float(r["Weight"])
+            if not math.isfinite(cw_weight) or cw_weight < 0:
+                continue
             out.append(ComboWeightOverride(
                 mode=mode,
                 after_combo=int(after_val),
                 reel_id=reel_id,
                 symbol_id=sid,
-                weight=float(r["Weight"]),
+                weight=cw_weight,
             ))
         except (ValueError, KeyError):
             continue
@@ -2083,6 +2105,21 @@ def _cross_validate(cfg: AConfig):
             raise ConfigValidationError(
                 "04_Reel_Weights",
                 f"Mode={mode} Panel={pid} 的權重總和必須 > 0",
+            )
+
+    # M3 (R-P0):05_Grid_Size_Weights 每個 (Mode, Reel) 群組權重總和須 > 0。
+    #   reel_generator._build_gsize_pools 對每組「無條件」建 _GridSizePool(不像 _build_pools
+    #   有 sym_list 空守衛),故全零 gsize 群組 → 下游 pool.draw() 拋 finite/>0 例外。
+    #   與上方 reel/panel 檢查同款;grid_size 為選用(Megaways),空 → 無群組 → 略過。
+    #   (04_Reel_Weights 解析端 M2 已擋 NaN/±inf/負,此處 sum 不會是 NaN。)
+    _gsize_groups = defaultdict(list)
+    for g in cfg.grid_size_weights:
+        _gsize_groups[(g.mode, g.reel_id)].append(g)
+    for (mode, reel_id), gs in _gsize_groups.items():
+        if sum(g.weight for g in gs) <= 0:
+            raise ConfigValidationError(
+                "05_Grid_Size_Weights",
+                f"Mode={mode} Reel={reel_id} 的格數權重總和必須 > 0",
             )
 
     # v5.1:附掛副盤符號集交叉驗證(同 panel 的 symbol_set 規則)

@@ -38,11 +38,24 @@
     return _SYM_CAT_TO_ENUM[s] || _SYM_CAT_TO_ENUM[up] || 'NORMAL';
   }
 
+  // M1 (R-P0):DSL 條件跨端對稱正規化。後端 condition_parser 的 NUMBER pattern `-?\d+`
+  //   會把無空白的 `5-1` 貪婪吃成 NUMBER(5),NUMBER(-1) → 解析殘留 token 報錯,而 JS
+  //   builder 原樣接受 → 匯出的 A.xlsx 下游 Python loader 拒整份 config。此處在「二元
+  //   運算元 緊貼 運算子 緊貼 運算元」時補單一空白(5-1 → 5 - 1、global.p*0.5 →
+  //   global.p * 0.5),讓兩端一致。獨立負數(-5)、比較子(>/==)、小數點(.)皆不誤傷。
+  //   ⚠ 僅可用於「條件字串」;不可用於 Actions/param(action 端 5-1 語意為 range {_range:[5,-1]})。
+  function _normArithDSL(s) {
+    if (s == null) return s;
+    return String(s).replace(
+      /([A-Za-z0-9_.\]])\s*([*/+\-])\s*(?=[A-Za-z0-9_.[])/g, '$1 $2 '
+    );
+  }
+
   // mode_scope ↔ condition 合併:後端 PuzzleRule 沒有 mode_scope 欄位
   //   v8.16:多模式(逗號分隔)→「mode in [A, B]」前綴;單模式路徑不變。
   function _composeConditionWithModeScope(modeScope, condition) {
     const ms = (modeScope || 'ALL').toString().trim();
-    let cond = (condition || '').toString().trim();
+    let cond = _normArithDSL((condition || '').toString().trim());
     if (!ms || ms === 'ALL') return cond;
     // v8.16:scope 非 ALL 時先剝除既有 mode 前綴(與 helpers.extractModeScope 同規則),
     //   以 mode_scope 為唯一真相重組,避免雙重編碼。
@@ -788,7 +801,7 @@
     const wsDR = wb.addWorksheet('10_Discard_Rules');
     wsDR.addRow(['Discard_ID', 'Discard_Kind', 'Mode_Scope', 'Condition', 'Notes', 'Enabled']);   // §4.10b:尾端 additive Enabled
     for (const d of discards) {
-      wsDR.addRow([d.discard_id, d.discard_kind, d.mode_scope, d.condition, d.notes, d.enabled === false ? 'FALSE' : 'TRUE']);
+      wsDR.addRow([d.discard_id, d.discard_kind, d.mode_scope, _normArithDSL(d.condition), d.notes, d.enabled === false ? 'FALSE' : 'TRUE']);
     }
     boldHdr(wsDR); setCols(wsDR, [12, 14, 13, 36, 24, 10]);
 
@@ -818,7 +831,7 @@
                 'Refill_Track_Override',    // v8.39 GAP-F1:尾端 additive('' = 沿用全域)
                 'Cascade_Enabled', 'Cascade_Max_Depth']);  // 架構檢閱 #6:尾端 additive(前 27 欄不動)
     for (const m of modes) {
-      wsM.addRow([m.mode, m.trigger_condition, m.spin_count, m.inherit_globals,
+      wsM.addRow([m.mode, _normArithDSL(m.trigger_condition), m.spin_count, m.inherit_globals,
                   m.on_enter_reset_vars, m.notes, m.reset_scope || '',
                   m.cap_enabled || '', m.cap_value || '', m.stack_mode || '',
                   m.mode_kind || 'SPIN', m.wheel_upgrade_to || '',
@@ -830,7 +843,7 @@
                   m.respin_reset_symbol || '',                       // v8.22 G3
                   m.grid_expand_in_collect ? 'TRUE' : 'FALSE',       // v8.22 G3
                   m.allow_persistent ? 'TRUE' : 'FALSE',             // v8.22 G3
-                  m.end_condition || '',                             // v8.24 G5
+                  _normArithDSL(m.end_condition || ''),                             // v8.24 G5
                   (Array.isArray(m.unlock_requires) ? m.unlock_requires.join(',') : (m.unlock_requires || '')), // v8.28 缺口B
                   m.mult_compose_override || '',                     // v8.28 缺口C
                   m.refill_track_override || '',                     // v8.39 GAP-F1

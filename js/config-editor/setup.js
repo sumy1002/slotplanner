@@ -98,34 +98,33 @@
       const tplLoadPreviewOpen = ref(false);
       const tplLoadPreviewData = ref(null);    // { slug, name, description, counts, currentCounts, diff }
       function _computeCurrentCounts() {
-        // 從 LS 直接讀(避免依賴 reactive 變數順序)
-        const counts = {
-          modes: 0, layout: 0, paylines: 0, constraints: 0,
-          rules: 0, discards: 0, symbols: 0, jackpots: 0,
+        // 從 LS 直接讀(避免依賴 reactive 變數順序)。
+        // L1 (R-P0):改為 per-key safe-parse。舊碼單一 try/catch 下,任一 key 的 JSON
+        //   損毀(如 modes.v1)會讓其後所有計數一起歸零 → 範本 diff 顯示錯誤的當前值。
+        //   逐鍵各自吞錯,一個髒 key 不牽連其他(實測:髒 modes 時 layout/paylines/symbols 仍正確)。
+        const _arr = (k) => {
+          try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; }
+          catch (e) { return []; }
         };
-        try {
-          const m = JSON.parse(localStorage.getItem('slotplanner.aconfig.modes.v1') || '[]');
-          counts.modes = Array.isArray(m) ? m.length : 0;
-          const l = JSON.parse(localStorage.getItem('slotplanner.aconfig.layout.v1') || '[]');
-          counts.layout = Array.isArray(l) ? l.length : 0;
-          const p = JSON.parse(localStorage.getItem('slotplanner.aconfig.paylines.v1') || '[]');
-          counts.paylines = Array.isArray(p) ? p.length : 0;
-          const c = JSON.parse(localStorage.getItem('slotplanner.aconfig.constraints.v1') || '[]');
-          counts.constraints = Array.isArray(c) ? c.length : 0;
-          const r = JSON.parse(localStorage.getItem('slotplanner.aconfig.rules.v1') || '[]');
-          counts.rules = Array.isArray(r) ? r.length : 0;
-          const d = JSON.parse(localStorage.getItem('slotplanner.aconfig.discards.v1') || '[]');
-          counts.discards = Array.isArray(d) ? d.length : 0;
-          const reg = JSON.parse(localStorage.getItem('slotplanner.registry.v1') || 'null');
-          counts.symbols = reg && Array.isArray(reg.symbols) ? reg.symbols.length : 0;
-          const jp = JSON.parse(localStorage.getItem('slotplanner.aconfig.jackpots.v1') || '[]');
-          counts.jackpots = Array.isArray(jp) ? jp.length : 0;
-          const bc = JSON.parse(localStorage.getItem('slotplanner.aconfig.betconfig.v1') || '{}');
-          counts.buy_features = Array.isArray(bc.buy_features) ? bc.buy_features.length : 0;
-          const cv = JSON.parse(localStorage.getItem('slotplanner.aconfig.coinvalues.v1') || '{}');
-          counts.coin_denoms = Array.isArray(cv.denominations) ? cv.denominations.length : 0;
-        } catch (e) {}
-        return counts;
+        const _obj = (k) => {
+          try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return (v && typeof v === 'object') ? v : {}; }
+          catch (e) { return {}; }
+        };
+        const reg = _obj('slotplanner.registry.v1');
+        const bc  = _obj('slotplanner.aconfig.betconfig.v1');
+        const cv  = _obj('slotplanner.aconfig.coinvalues.v1');
+        return {
+          modes:        _arr('slotplanner.aconfig.modes.v1').length,
+          layout:       _arr('slotplanner.aconfig.layout.v1').length,
+          paylines:     _arr('slotplanner.aconfig.paylines.v1').length,
+          constraints:  _arr('slotplanner.aconfig.constraints.v1').length,
+          rules:        _arr('slotplanner.aconfig.rules.v1').length,
+          discards:     _arr('slotplanner.aconfig.discards.v1').length,
+          symbols:      (reg && Array.isArray(reg.symbols)) ? reg.symbols.length : 0,
+          jackpots:     _arr('slotplanner.aconfig.jackpots.v1').length,
+          buy_features: Array.isArray(bc.buy_features) ? bc.buy_features.length : 0,
+          coin_denoms:  Array.isArray(cv.denominations) ? cv.denominations.length : 0,
+        };
       }
       function showTemplateDiff(t) {
         // t 是 templates list 裡的 meta
