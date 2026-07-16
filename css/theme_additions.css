@@ -1083,17 +1083,17 @@
 .cfg-source-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 46px;
-  padding: 0 18px;
+  gap: var(--space-4);
+  height: 52px;
+  padding: 0 var(--space-5);
   background: var(--glass-2);
   border-bottom: 1px solid var(--glass-brd);
   flex-shrink: 0;
 }
 .cfg-source-icon { font-size: 14px; }
 .cfg-source-text {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text);
 }
 .cfg-source-dot {
@@ -1117,38 +1117,45 @@
 
 /* ── 左:13 分頁清單 ── */
 .cfg-tabs {
-  width: 196px;                       /* v9.0:工作流主軸收窄,讓右側 Canvas 更寬敞純淨 */
+  width: 200px;
   flex-shrink: 0;
   background: var(--left-pane-bg);
-  border-right: 0.5px solid var(--glass-edge);  /* v9.0:髮絲邊取代實邊,降線條噪音 */
-  padding: var(--space-3) var(--space-2);
+  border-right: 0.5px solid var(--glass-edge);
+  padding: var(--space-4) var(--space-3);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 .cfg-tab {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
   cursor: pointer;
-  background: transparent;            /* v9.0:idle 態去底色,只靠 hover/active 才現形,更沉靜 */
+  background: transparent;
   border: 1.5px solid transparent;
-  border-left: 2px solid transparent; /* v9.0:active 指示改用左側細條,取代整塊軟填底 */
-  transition: background 0.15s, border-color 0.15s, transform 0.06s;
+  border-left: 2px solid transparent;
+  transition: background var(--t-fast), border-color var(--t-fast),
+              transform 120ms var(--ease-ios), box-shadow var(--t-fast);
   position: relative;
 }
 .cfg-tab:hover {
   background: var(--glass-3);
   border-color: transparent;
+  transform: translateY(-1px);
+}
+.cfg-tab:active {
+  background: var(--press);
+  transform: scale(0.98);
 }
 .cfg-tab.active {
   background: var(--accent);
   border-color: var(--accent-brd);
   border-left-color: var(--accent-hex);
-  box-shadow: none;                   /* v9.0:去陰影,純靠底色+左側細條做出「當前」感 */
+  box-shadow: none;
+  transform: none;
 }
 .cfg-tab.active .cfg-tab-name {
   color: var(--accent-text);
@@ -1175,7 +1182,7 @@
   gap: 1px;
 }
 .cfg-tab-name {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text);
   line-height: 1.3;
@@ -1192,7 +1199,7 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 22px 28px 32px;
+  padding: var(--space-6) var(--space-7) var(--space-8);
 }
 
 /* ── 表單區塊 ── */
@@ -4511,8 +4518,8 @@
 .cfg-tab-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 10px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 .cfg-tab-group:last-child { margin-bottom: 0; }
 
@@ -4520,15 +4527,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px 4px;
+  padding: 8px 10px 6px;
   font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.10em;
-  color: var(--text-light);
+  color: var(--text-muted);
   text-transform: uppercase;
   user-select: none;
   border-bottom: 1px dashed var(--glass-brd);
-  margin-bottom: 3px;
+  margin-bottom: var(--space-2);
 }
 .cfg-tab-group-icon {
   font-size: var(--fs-xs);
@@ -10866,7 +10873,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   }
   .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab {
     justify-content: flex-start;
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
   .cfg-tabs:not(.cfg-rail-pinned):hover .cfg-tab-group-header {
     height: auto;
@@ -10899,7 +10906,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
   /* 釘選態 = 常駐展開(正常流,推開內容 → 點擊跳板) */
   .cfg-tabs.cfg-rail-pinned {
-    width: 196px;                     /* v9.0:與 .cfg-tabs 基準寬度一致(收窄的工作流主軸) */
+    width: 200px;                     /* 與 .cfg-tabs 基準寬度一致 */
     transition: width 0.18s cubic-bezier(0.4,0,0.2,1);
   }
   @media (max-width: 1100px) {
