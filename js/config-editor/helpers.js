@@ -33,55 +33,53 @@
   //  group 欄位用於左側欄分組;TAB_GROUPS 定義分組順序與標題
   // ──────────────────────────────────────────────────────────
   const TAB_GROUPS = [
-    // v7.10:規則為「基礎設定」群組第一項(IA 重構);全域/模式/Bonus 收進規則頁子分頁
-    { id: 'base',   label: '基礎設定',     icon: '🏗' },
-    { id: 'rule',   label: '賠付',         icon: '🎯' },   // v7.10:原「賠付 & 規則」,規則移出後改名「賠付」
-    { id: 'weight', label: '權重表',       icon: '🎲' },
-    // v3.1:移除 'adv' 群組 — 原本只有 12_Distribution_Bins,改放到 'rule' 群組末尾
+    // P1 shell IA:工作流分組(結構 → 機制 → 機率 → 輸出)
+    { id: 'structure', label: '結構', icon: '🏗' },
+    { id: 'mechanic',  label: '機制', icon: '🎯' },
+    { id: 'weight',    label: '機率', icon: '🎲' },
+    { id: 'output',    label: '輸出', icon: '📄' },
   ];
 
   const TABS = [
-    // ── 基礎設定(v7.10:規則為總入口,排基礎設定第一位)──
-    // v7.10:09_Puzzle_Rules + 10_Discard_Rules 合併的 'rules' tab 成為總入口,
-    //   內含子分頁:模式(賠付橫幅 + 11_Mode_Config + 玩法)/ 盤面圖示規則 / 通用規則。
-    //   01_Global(賠付類型/計分方向/起始模式)併入規則頁,bonus_games 入口關閉;
-    //   兩者 markup 仍在(以 active 路由),但從導覽列隱藏(hidden)。
-    { id: 'rules',             sheet: '09 + 10 + 01 + 11',     name: '規則',         icon: '🧩', done: true, group: 'base',
-      desc: '機制、模式切換與盤面圖示判定規則的建立入口' },
-    { id: 'layout',            sheet: '02_Layout',             name: '盤面結構',     icon: '🎰', done: true, group: 'base',
+    // ── 結構 ──
+    { id: 'layout',            sheet: '02_Layout',             name: '盤面結構',     icon: '🎰', done: true, group: 'structure',
       desc: '設定轉輪數、每輪格數與盤面尺寸' },
-    { id: 'symbols',           sheet: '03_Symbols',            name: '符號清單',     icon: '🎨', done: true, group: 'base',
+    { id: 'symbols',           sheet: '03_Symbols',            name: '符號清單',     icon: '🎨', done: true, group: 'structure',
       kind: 'fullpane', desc: '管理圖示、賠付倍數與符號屬性' },
-    { id: 'bet_config',        sheet: '14_Bet_Config',          name: '押注',        icon: '🎰', done: true, group: 'base',
+
+    // ── 機制 ──
+    { id: 'rules',             sheet: '09 + 10 + 01 + 11',     name: '規則',         icon: '🧩', done: true, group: 'mechanic',
+      desc: '機制、模式切換與盤面圖示判定規則的建立入口' },
+    { id: 'bet_config',        sheet: '14_Bet_Config',         name: '押注',         icon: '🎰', done: true, group: 'mechanic',
       desc: '押注面額、加押 / 購買與比倍設定' },
-    // v7.10:global 併入規則頁(模式子分頁的賠付橫幅 + 起始模式),從導覽列隱藏(markup/路由/匯出皆保留)
-    { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'base', hidden: true,
-      desc: '賠付類型、計分方向與起始模式' },
-    // v8.0:bonus_games 分頁移除(bonus 併入 mode 玩法種類 mode_kind)
-    // ── 賠付 ──
-    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'rule', hidden: true,   // 甲:改由規則頁 peer 分段進入
-      desc: '設定中獎線路徑與計分方式' },
-    { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'rule',
+    { id: 'constraints',       sheet: '07_Constraints',        name: '硬約束',       icon: '🚫', done: true, group: 'mechanic',
       desc: '盤面產生時必須遵守的限制條件' },
-    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'rule', hidden: true,   // v6.2 #0→甲:併入押注頁,分頁隱藏
+    { id: 'global',            sheet: '01_Global',             name: '全域設定',     icon: '⚙️', done: true, group: 'mechanic', hidden: true,
+      desc: '賠付類型、計分方向與起始模式' },
+    { id: 'paylines',          sheet: '06_Paylines',           name: '中獎線',       icon: '➰', done: true, group: 'mechanic', hidden: true,
+      desc: '設定中獎線路徑與計分方式' },
+    { id: 'jackpots',          sheet: '13_Jackpots',           name: 'JP 彩金',      icon: '💰', done: true, group: 'mechanic', hidden: true,
       desc: '彩金等級與中獎機率設定' },
-    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'rule', hidden: true,   // W1:改由權重頁「分佈」peer 進入
-      desc: '中獎倍數的分佈區間設定' },
-    // v8.6 / R5 E-16:比倍(Gamble)分頁(D5 拍板:賠付群組尾;TABS scope 豁免比照 v7.10)
-    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'rule', hidden: true,   // 甲:併入押注頁,分頁隱藏
+    { id: 'gamble',            sheet: '18_Gamble',             name: '比倍',         icon: '🎴', done: true, group: 'mechanic', hidden: true,
       desc: '比倍(Gamble)加倍玩法設定' },
-    // ── 權重表 ──
-    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: '權重',         icon: '🎲', done: true, group: 'weight',   // W1:權重頁 parent(輪帶/分佈 peer host)
+
+    // ── 機率 ──
+    { id: 'reel_weights',      sheet: '04_Reel_Weights',       name: '權重',         icon: '🎲', done: true, group: 'weight',
       desc: '輪帶與符號出現機率設定' },
-    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight', hidden: true,   // W1:改由權重頁「輪帶」peer 進入
+    { id: 'reel_strips',       sheet: '04b_Reel_Strips',       name: '真實輪帶',     icon: '🎞️', done: true, group: 'weight', hidden: true,
       desc: '實際輪帶符號排列順序' },
-    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight', hidden: true,   // W1:改由權重頁「分佈」peer 進入
+    { id: 'grid_size_weights', sheet: '05_Grid_Size_Weights',  name: '格數權重',     icon: '📏', done: true, group: 'weight', hidden: true,
       desc: '不同盤面格數的出現機率' },
-    // v4.0 / #14:連爆權重(08)已移除 UI 分頁(資料也清掉);A.xlsx 仍會輸出空的 08 sheet 以維持 13 分頁結構
-    { id: 'multipliers',       sheet: '15_Multipliers',         name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true,  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+    { id: 'distribution_bins', sheet: '12_Distribution_Bins',  name: '分佈區間',     icon: '📊', done: true, group: 'weight', hidden: true,
+      desc: '中獎倍數的分佈區間設定' },
+    { id: 'multipliers',       sheet: '15_Multipliers',        name: '倍數系統',     icon: '✖️', done: true, group: 'weight', hidden: true,
       desc: '中獎倍數加成規則' },
-    { id: 'coin_values',       sheet: '16_Coin_Values',         name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true,  // v6.3 / Q3:已併入符號頁「倍數/彩金」,分頁隱藏
+    { id: 'coin_values',       sheet: '16_Coin_Values',        name: '金幣面額',     icon: '🪙', done: true, group: 'weight', hidden: true,
       desc: '金幣符號的面額設定' },
+
+    // ── 輸出（無 A.xlsx sheet；跨分頁文件步驟）──
+    { id: 'docgen',            sheet: '—',                     name: '文件生成',     icon: '📋', done: true, group: 'output',
+      kind: 'fullpane', desc: '把設定匯出成 Excel 或 Markdown 文件' },
   ];
 
   // 依 group 切分(渲染用),保持 TABS 內各 group 內部的原順序
