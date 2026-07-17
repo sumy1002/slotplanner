@@ -1763,16 +1763,88 @@
       }
       function closeModeAddSec(m) { modeAddSecMenu[modeCardKey(m)] = false; }
 
+      // 三步精靈：step 1 共通／step 2 區段／step 3 預覽確認；僅 step===3 可建立
       const modeAddDlg = reactive({
-        open: false, name: '', kind: 'SPIN', otherText: '', tpEnabled: false, tpRows: [],
+        open: false,
+        step: 1,
+        name: '',
+        kind: 'SPIN',
+        otherText: '',
+        triggerOn: false,
+        tpEnabled: false,
+        tpRows: [],
+        end_condition: '',
+        unlock_requires: [],
+        enabled_sections: [],
+        focusSection: '',
+        // 步驟 2 欄位暫存（建立時抄到 mode）
+        pay_type_override: '',
+        reset_scope: '',
+        stack_mode: '',
+        cap_enabled: '',
+        cap_value: '',
+        choice_group: '',
+        respin_base: 0,
+        respin_reset_on: '',
+        respin_stop_cond: '',
+        collect_enabled: false,
+        respin_reset_symbol: '',
+        grid_expand_in_collect: false,
+        allow_persistent: false,
+        cascade_enabled: false,
+        cascade_max_depth: 0,
+        mult_compose_override: '',
+        refill_track_override: '',
+        wheel_upgrade_to: '',
+        pick_count: 0,
+        collect_target: 0,
+        items: [],
+        draftMode: null, // { mode:'__MODE_ADD__', trigger_condition:'', … } 供 modeCond
       });
+      function modeAddDlgResetDraftMode() {
+        modeAddDlg.draftMode = {
+          mode: '__MODE_ADD__',
+          trigger_condition: '',
+        };
+        // modeCond 定義較後；開啟／重設時才呼叫，runtime 必已就緒
+        if (modeCond && modeCond.ensure) modeCond.ensure(modeAddDlg.draftMode);
+      }
       function openAddModeDlg() {
         modeAddDlg.open = true;
+        modeAddDlg.step = 1;
         modeAddDlg.name = '';
         modeAddDlg.kind = 'SPIN';
         modeAddDlg.otherText = '';
+        modeAddDlg.triggerOn = false;
         modeAddDlg.tpEnabled = false;
         modeAddDlg.tpRows = [];
+        modeAddDlg.end_condition = '';
+        modeAddDlg.unlock_requires = [];
+        modeAddDlg.enabled_sections = MS.defaultEnabledSections
+          ? MS.defaultEnabledSections('SPIN') : ['pay_type'];
+        modeAddDlg.focusSection = modeAddDlg.enabled_sections[0] || '';
+        modeAddDlg.pay_type_override = '';
+        modeAddDlg.reset_scope = '';
+        modeAddDlg.stack_mode = '';
+        modeAddDlg.cap_enabled = '';
+        modeAddDlg.cap_value = '';
+        modeAddDlg.choice_group = '';
+        modeAddDlg.respin_base = 0;
+        modeAddDlg.respin_reset_on = '';
+        modeAddDlg.respin_stop_cond = '';
+        modeAddDlg.collect_enabled = false;
+        modeAddDlg.respin_reset_symbol = '';
+        modeAddDlg.grid_expand_in_collect = false;
+        modeAddDlg.allow_persistent = false;
+        modeAddDlg.cascade_enabled = false;
+        modeAddDlg.cascade_max_depth = 0;
+        modeAddDlg.mult_compose_override = '';
+        modeAddDlg.refill_track_override = '';
+        modeAddDlg.wheel_upgrade_to = '';
+        modeAddDlg.pick_count = 0;
+        modeAddDlg.collect_target = 0;
+        modeAddDlg.items = [];
+        modeAddDlgResetDraftMode();
         Vue.nextTick(() => {
           try { document.querySelector('.cfg-modedlg-name')?.focus(); } catch (e) { /* no-op */ }
         });
@@ -1804,7 +1876,91 @@
       });
       function modeAddDlgTpAdd()      { modeAddDlg.tpRows.push({ scatter_count: 0, pay: 0, grants_spins: 0 }); }
       function modeAddDlgTpRemove(i)  { modeAddDlg.tpRows.splice(i, 1); }
+
+      // 步驟 1 解鎖前提 chip（暫存於 dlg，不碰既有 modeUnlockToggle）
+      function modeAddDlgUnlockHas(name) {
+        return modeAddDlg.unlock_requires.indexOf(name) >= 0;
+      }
+      function modeAddDlgUnlockToggle(name) {
+        const arr = modeAddDlg.unlock_requires;
+        const i = arr.indexOf(name);
+        if (i >= 0) arr.splice(i, 1);
+        else arr.push(name);
+      }
+
+      const modeAddCanNext = computed(() => {
+        if (modeAddDlg.step === 1) return modeAddCanConfirm.value;
+        return true; // 步驟 2 不強制勾選
+      });
+
+      function modeAddDlgApplyKindDefaults() {
+        const kind = modeAddDlg.kind;
+        modeAddDlg.enabled_sections = MS.defaultEnabledSections
+          ? MS.defaultEnabledSections(kind) : [];
+        modeAddDlg.focusSection = modeAddDlg.enabled_sections[0] || '';
+      }
+
+      function modeAddDlgNext() {
+        if (!modeAddCanNext.value) return;
+        if (modeAddDlg.step === 1) {
+          modeAddDlgApplyKindDefaults();
+          modeAddDlg.step = 2;
+          return;
+        }
+        if (modeAddDlg.step === 2) modeAddDlg.step = 3;
+      }
+
+      function modeAddDlgBack() {
+        if (modeAddDlg.step > 1) modeAddDlg.step -= 1;
+      }
+
+      function modeAddDlgToggleSection(id) {
+        const arr = modeAddDlg.enabled_sections;
+        const i = arr.indexOf(id);
+        if (i >= 0) {
+          arr.splice(i, 1);
+          if (modeAddDlg.focusSection === id) {
+            modeAddDlg.focusSection = arr[0] || '';
+          }
+        } else {
+          arr.push(id);
+          modeAddDlg.focusSection = id;
+        }
+      }
+
+      function modeAddDlgFocusSection(id) {
+        if (modeAddDlg.enabled_sections.indexOf(id) >= 0) {
+          modeAddDlg.focusSection = id;
+        }
+      }
+
+      const modeAddDlgSections = computed(() =>
+        MS.sectionsForKind ? MS.sectionsForKind(modeAddDlg.kind) : []
+      );
+
+      const modeAddDlgPreview = computed(() => {
+        const lines = [];
+        lines.push(`名稱: ${modeAddDlg.name.trim() || '—'}`);
+        lines.push(`玩法: ${modeAddDlg.kind}${modeAddDlg.kind === 'OTHER' ? ' / ' + modeAddDlg.otherText.trim() : ''}`);
+        if (modeAddDlg.triggerOn) {
+          const dsl = (modeAddDlg.draftMode && modeAddDlg.draftMode.trigger_condition) || '（空）';
+          lines.push(`觸發條件: ${dsl}`);
+          if (modeAddDlgTpVisible.value && modeAddDlg.tpEnabled) {
+            lines.push(`觸發給付: ${modeAddDlg.tpRows.length} 列`);
+          }
+          if (modeAddDlg.end_condition) lines.push(`結束條件: ${modeAddDlg.end_condition}`);
+          if (modeAddDlg.unlock_requires.length) {
+            lines.push(`解鎖前提: ${modeAddDlg.unlock_requires.join(', ')}`);
+          }
+        } else {
+          lines.push('觸發條件: 關');
+        }
+        lines.push('已啟用設定: ' + (modeAddDlg.enabled_sections.join(', ') || '（無）'));
+        return lines;
+      });
+
       function confirmAddModeDlg() {
+        if (modeAddDlg.step !== 3) return;
         if (!modeAddCanConfirm.value) return;
         const name = modeAddDlg.name.trim();
         // v8.43 / C-1:# 為輪帶變體保留字元,模式名拒收
@@ -1814,25 +1970,46 @@
         }
         const m = makeMode(name);
         modes.push(m);
-        _ensureModeGameplayFields(m);                     // v7.10:補 reset_scope/trigger_pays
+        // 不在此強制 enabled_sections（由下方從 dlg 寫入）
+        _ensureModeGameplayFields(m);
         if (MK.applyModeAddKind) {
           MK.applyModeAddKind(m, modeAddDlg.kind, modeAddDlg.otherText);
         } else {
           m.mode_kind = modeAddDlg.kind;
           if (modeAddDlg.kind === 'OTHER') m.notes = modeAddDlg.otherText.trim();
         }
+
+        if (modeAddDlg.triggerOn && modeAddDlg.draftMode) {
+          m.trigger_condition = modeAddDlg.draftMode.trigger_condition || '';
+          m.end_condition = modeAddDlg.end_condition || '';
+          m.unlock_requires = modeAddDlg.unlock_requires.slice();
+        }
         if (modeAddDlgTpVisible.value && modeAddDlg.tpEnabled) {
           m.trigger_pays = modeAddDlg.tpRows.map(r => ({
             scatter_count: Number(r.scatter_count) || 0,
-            pay:           Number(r.pay) || 0,
-            grants_spins:  Number(r.grants_spins) || 0,
+            pay: Number(r.pay) || 0,
+            grants_spins: Number(r.grants_spins) || 0,
           }));
-          if (m.trigger_pays.length === 0) m.trigger_pays.push({ scatter_count: 0, pay: 0, grants_spins: 0 });
+          if (m.trigger_pays.length === 0) {
+            m.trigger_pays.push({ scatter_count: 0, pay: 0, grants_spins: 0 });
+          }
         }
-        modeExpandedKey.value = modeCardKey(m);           // 新卡自動展開
+
+        // 步驟 2 欄位：簡化全部抄到 m（未啟用區段值亦保留）
+        const copyKeys = [
+          'pay_type_override', 'reset_scope', 'stack_mode', 'cap_enabled', 'cap_value',
+          'choice_group', 'respin_base', 'respin_reset_on', 'respin_stop_cond',
+          'collect_enabled', 'respin_reset_symbol', 'grid_expand_in_collect', 'allow_persistent',
+          'cascade_enabled', 'cascade_max_depth', 'mult_compose_override', 'refill_track_override',
+          'wheel_upgrade_to', 'pick_count', 'collect_target',
+        ];
+        for (const k of copyKeys) m[k] = modeAddDlg[k];
+        m.items = (modeAddDlg.items || []).map(it => Object.assign({}, it));
+        m.enabled_sections = modeAddDlg.enabled_sections.slice();
+
+        modeExpandedKey.value = modeCardKey(m);
         modeAddDlg.open = false;
         emit('status', { type: 'ok', msg: `已新增模式 ${name}` });
-        // 沿用既有流程:捲動到新卡片(找不到則 no-op)
         Vue.nextTick(() => {
           try {
             const cards = document.querySelectorAll('.cfg-mode-card');
@@ -12455,9 +12632,13 @@
         addMode, removeMode, renameMode, modeCardKey, passStatus,
         scopeStrHas, toggleScopeStr, scopeHasMode, toggleScopeMode,
         modeUnlockHas, modeUnlockToggle,
-        // v8.14 批3 #3:新增模式彈窗
+        // v8.14 批3 #3:新增模式彈窗（三步精靈）
         modeAddDlg, openAddModeDlg, modeAddDlgPick, modeAddDlgNameTaken, modeAddCanConfirm,
         modeAddDlgTpVisible, modeAddDlgTpAdd, modeAddDlgTpRemove, confirmAddModeDlg,
+        modeAddDlgNext, modeAddDlgBack, modeAddCanNext,
+        modeAddDlgToggleSection, modeAddDlgFocusSection,
+        modeAddDlgSections, modeAddDlgPreview,
+        modeAddDlgUnlockHas, modeAddDlgUnlockToggle,
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
         addReel, removeReel, swapReels,
