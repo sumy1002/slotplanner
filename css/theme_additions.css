@@ -11534,6 +11534,51 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 
 /* ── #3:新增規則彈窗補充(沿用 cfg-modedlg 視覺) ── */
 #app .cfg-modedlg.cfg-modedlg-wide { width: min(680px, 100%); }
+/* 新增模式三步精靈：較寬以容納步驟 2 左右欄 */
+#app .cfg-modedlg.cfg-modedlg-mode-add { width: min(720px, 100%); }
+#app .cfg-modedlg-split {
+  display: flex;
+  gap: 12px;
+  min-height: 280px;
+  align-items: stretch;
+}
+#app .cfg-modedlg-sec-nav {
+  width: 38%;
+  flex: 0 0 38%;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 420px;
+}
+#app .cfg-modedlg-sec-pane {
+  flex: 1;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  padding: 12px;
+  overflow: auto;
+  max-height: 420px;
+}
+#app .cfg-modedlg-sec-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#app .cfg-modedlg-sec-item.focused {
+  background: var(--surface-2, #e8f0fe);
+}
+#app .cfg-modedlg-preview-text {
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  margin: 0;
+  padding: 12px;
+  background: var(--surface-2, #fafafa);
+  border-radius: 8px;
+}
 #app .cfg-ruledlg-step {
   font-size: var(--fs-hint);
   font-weight: 600;

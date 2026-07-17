@@ -5811,82 +5811,453 @@
               <span>新增模式</span>
             </button>
 
-            <!-- ═══ v8.14 #3:新增模式彈窗(主 app 內 overlay;Esc / 點遮罩 = 取消)═══ -->
+            <!-- ═══ 新增模式三步精靈（步驟 1 共通／2 區段／3 預覽；僅末步可建立）═══ -->
             <div v-if="modeAddDlg.open" class="cfg-modedlg-mask"
                  @click.self="modeAddDlg.open = false"
                  @keydown.esc="modeAddDlg.open = false">
-              <div class="cfg-modedlg" role="dialog" aria-label="新增模式">
-                <div class="cfg-modedlg-title">新增模式</div>
-
-                <!-- 模式名稱(必填紅星 + 撞名防呆)+ 快選 -->
-                <div class="cfg-modedlg-field">
-                  <label class="cfg-label">模式名稱 <span class="cfg-req" aria-hidden="true">*</span></label>
-                  <div class="cfg-modedlg-name-row">
-                    <input class="input input-w-name cfg-modedlg-name"
-                           :class="{ err: modeAddDlgNameTaken }"
-                           type="text" v-model.trim="modeAddDlg.name"
-                           placeholder="例:NG / FG / BG" maxlength="20"
-                           @keyup.enter="confirmAddModeDlg">
-                    <span class="cfg-modedlg-quick-lbl">快選</span>
-                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'NG' }" @click="modeAddDlgPick('NG')">NG</button>
-                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'FG' }" @click="modeAddDlgPick('FG')">FG</button>
-                    <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'BG' }" @click="modeAddDlgPick('BG')">BG</button>
-                  </div>
-                  <div v-if="modeAddDlgNameTaken" class="cfg-warn cfg-warn-inline">⚠ 已有同名模式(不分大小寫),請換一個名稱</div>
+              <div class="cfg-modedlg cfg-modedlg-wide cfg-modedlg-mode-add" role="dialog" aria-label="新增模式">
+                <div class="cfg-modedlg-title">
+                  新增模式
+                  <span class="cfg-ruledlg-step">步驟 {{ modeAddDlg.step }} / 3</span>
                 </div>
 
-                <!-- 玩法大方向（五選一單排；OTHER 時顯示必填描述） -->
-                <div class="cfg-modedlg-field">
-                  <label class="cfg-label">玩法大方向 <span class="cfg-key">mode_kind</span></label>
-                  <div class="cfg-chip-row cfg-modedlg-kind-row">
-                    <button v-for="opt in MODE_KIND_OPTIONS" :key="opt.v"
-                            class="cfg-chip" :class="{ active: modeAddDlg.kind === opt.v }"
-                            @click="modeAddDlg.kind = opt.v">{{ opt.label }}</button>
-                  </div>
-                  <div v-if="modeAddDlg.kind === 'OTHER'" class="cfg-modedlg-other" style="margin-top:10px;">
-                    <label class="cfg-label">玩法描述 <span class="cfg-req" aria-hidden="true">*</span></label>
-                    <input class="input" type="text" v-model.trim="modeAddDlg.otherText"
-                           placeholder="例：消除 / 過關" maxlength="80"
-                           @keyup.enter="confirmAddModeDlg">
-                  </div>
-                  <div class="cfg-hint">確認後主畫面的模式卡片會依此顯示對應內容;之後仍可在卡片內調整。</div>
-                </div>
-
-                <!-- 觸發給付(NG 隱藏;bonus 玩法不適用) -->
-                <div v-if="modeAddDlgTpVisible" class="cfg-modedlg-field">
-                  <label class="cfg-label">觸發給付 <span class="cfg-key">trigger_pays</span></label>
-                  <div class="cfg-chip-row">
-                    <button class="cfg-chip" :class="{ active: !modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = false">關閉</button>
-                    <button class="cfg-chip" :class="{ active: modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = true">開啟</button>
-                  </div>
-                  <template v-if="modeAddDlg.tpEnabled">
-                    <div v-for="(tp, ti) in modeAddDlg.tpRows" :key="'dtp'+ti" class="cfg-mode-tp-row">
-                      <div class="cfg-mode-tp-cell">
-                        <span class="cfg-mode-tp-lbl">scatter 數</span>
-                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.scatter_count">
-                      </div>
-                      <div class="cfg-mode-tp-cell">
-                        <span class="cfg-mode-tp-lbl">給付 ×注額</span>
-                        <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="tp.pay">
-                      </div>
-                      <div class="cfg-mode-tp-cell">
-                        <span class="cfg-mode-tp-lbl">給予免費局</span>
-                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.grants_spins">
-                      </div>
-                      <button class="cfg-mode-delete-btn" @click="modeAddDlgTpRemove(ti)" title="刪除此列">✕</button>
+                <!-- ── 步驟 1：名稱／玩法／觸發 ── -->
+                <template v-if="modeAddDlg.step === 1">
+                  <div class="cfg-modedlg-field">
+                    <label class="cfg-label">模式名稱 <span class="cfg-req" aria-hidden="true">*</span></label>
+                    <div class="cfg-modedlg-name-row">
+                      <input class="input input-w-name cfg-modedlg-name"
+                             :class="{ err: modeAddDlgNameTaken }"
+                             type="text" v-model.trim="modeAddDlg.name"
+                             placeholder="例:NG / FG / BG" maxlength="20"
+                             @keyup.enter="modeAddDlgNext">
+                      <span class="cfg-modedlg-quick-lbl">快選</span>
+                      <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'NG' }" @click="modeAddDlgPick('NG')">NG</button>
+                      <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'FG' }" @click="modeAddDlgPick('FG')">FG</button>
+                      <button class="cfg-chip" :class="{ active: modeAddDlg.name === 'BG' }" @click="modeAddDlgPick('BG')">BG</button>
                     </div>
-                    <button class="cfg-mode-add-btn cfg-bonus-item-add cfg-btn-inline" @click="modeAddDlgTpAdd">
-                      <span style="font-size:14px">+</span> 新增觸發給付
-                    </button>
-                    <div class="cfg-hint">也可以先建立模式,之後在卡片內的「玩法設定」補填或調整。</div>
-                  </template>
+                    <div v-if="modeAddDlgNameTaken" class="cfg-warn cfg-warn-inline">⚠ 已有同名模式(不分大小寫),請換一個名稱</div>
+                  </div>
+
+                  <div class="cfg-modedlg-field">
+                    <label class="cfg-label">玩法大方向 <span class="cfg-key">mode_kind</span></label>
+                    <div class="cfg-chip-row cfg-modedlg-kind-row">
+                      <button v-for="opt in MODE_KIND_OPTIONS" :key="opt.v"
+                              class="cfg-chip" :class="{ active: modeAddDlg.kind === opt.v }"
+                              @click="modeAddDlg.kind = opt.v">{{ opt.label }}</button>
+                    </div>
+                    <div v-if="modeAddDlg.kind === 'OTHER'" class="cfg-modedlg-other" style="margin-top:10px;">
+                      <label class="cfg-label">玩法描述 <span class="cfg-req" aria-hidden="true">*</span></label>
+                      <input class="input" type="text" v-model.trim="modeAddDlg.otherText"
+                             placeholder="例：消除 / 過關" maxlength="80"
+                             @keyup.enter="modeAddDlgNext">
+                    </div>
+                    <div class="cfg-hint">下一步會依玩法預勾可用設定；之後仍可在卡片內調整。</div>
+                  </div>
+
+                  <div class="cfg-modedlg-field">
+                    <label class="cfg-label">觸發條件</label>
+                    <div class="cfg-chip-row">
+                      <button class="cfg-chip" :class="{ active: !modeAddDlg.triggerOn }"
+                              @click="modeAddDlg.triggerOn = false">關</button>
+                      <button class="cfg-chip" :class="{ active: modeAddDlg.triggerOn }"
+                              @click="modeAddDlg.triggerOn = true">開</button>
+                    </div>
+                    <template v-if="modeAddDlg.triggerOn && modeAddDlg.draftMode">
+                      <!-- 複用模式卡拼圖（無釘選測試檢查器） -->
+                      <div class="cfg-puzzle-section" style="margin-top:8px;">
+                        <span style="display:none">{{ modeCond.ensure(modeAddDlg.draftMode), '' }}</span>
+                        <div class="cfg-puzzle-header">
+                          <span class="cfg-puzzle-title">🧩 觸發條件 <span class="cfg-key">trigger_condition</span></span>
+                          <div class="cfg-puzzle-mode-toggle">
+                            <button class="cfg-chip cfg-chip-sm"
+                                    :class="{ active: (condBuilderState.mode[modeCond.key(modeAddDlg.draftMode)] || 'builder') !== 'raw' }"
+                                    @click="modeCond.setMode(modeAddDlg.draftMode, 'builder')">🧩 拼圖</button>
+                            <button class="cfg-chip cfg-chip-sm"
+                                    :class="{ active: condBuilderState.mode[modeCond.key(modeAddDlg.draftMode)] === 'raw' }"
+                                    @click="modeCond.setMode(modeAddDlg.draftMode, 'raw')">⌨ 原始</button>
+                          </div>
+                        </div>
+                        <div v-if="(condBuilderState.mode[modeCond.key(modeAddDlg.draftMode)] || 'builder') !== 'raw'" class="cfg-puzzle-body">
+                          <div v-if="!condBuilderState.rows[modeCond.key(modeAddDlg.draftMode)] || condBuilderState.rows[modeCond.key(modeAddDlg.draftMode)].length === 0"
+                               class="cfg-puzzle-empty">尚無條件;按下方按鈕新增第一片(可留空)</div>
+                          <div v-else class="cfg-puzzle-rows">
+                            <template v-for="(row, ri) in condBuilderState.rows[modeCond.key(modeAddDlg.draftMode)]" :key="'madr'+ri">
+                              <div v-if="ri > 0" class="cfg-puzzle-combinator">
+                                <button class="cfg-chip cfg-chip-sm"
+                                        :class="{ active: row.combinator === 'AND' }"
+                                        @click="row.combinator = 'AND'; modeCond.rebuild(modeAddDlg.draftMode)">AND</button>
+                                <button class="cfg-chip cfg-chip-sm"
+                                        :class="{ active: row.combinator === 'OR' }"
+                                        @click="row.combinator = 'OR'; modeCond.rebuild(modeAddDlg.draftMode)">OR</button>
+                              </div>
+                              <div class="cfg-puzzle-row">
+                                <div class="cfg-puzzle-piece cfg-puzzle-piece-var">
+                                  <label class="cfg-puzzle-piece-label">變數</label>
+                                  <select class="cfg-puzzle-select"
+                                          :value="row.category"
+                                          @change="modeCond.changeCat(modeAddDlg.draftMode, ri, $event.target.value)">
+                                    <option v-for="cat in VAR_CATEGORIES" :key="cat.id" :value="cat.id">{{ varCatLabel(cat.id) }}</option>
+                                  </select>
+                                </div>
+                                <div v-if="rowCategoryMeta(row).needsSubkey" class="cfg-puzzle-piece cfg-puzzle-piece-subkey">
+                                  <label class="cfg-puzzle-piece-label">.{{ rowCategoryMeta(row).subkeyHint }}</label>
+                                  <select v-if="rowCategoryMeta(row).subkeySource === 'symbols' && symbolNames.length > 0"
+                                          class="cfg-puzzle-select"
+                                          v-model="row.subkey"
+                                          @change="modeCond.rebuild(modeAddDlg.draftMode)">
+                                    <option value="">(選擇)</option>
+                                    <option v-for="s in symbolNames" :key="s" :value="s">{{ s }}</option>
+                                  </select>
+                                  <input v-else
+                                         class="cfg-puzzle-input cfg-mono"
+                                         type="text"
+                                         v-model.trim="row.subkey"
+                                         @input="modeCond.rebuild(modeAddDlg.draftMode)"
+                                         :placeholder="rowCategoryMeta(row).subkeyHint">
+                                </div>
+                                <div class="cfg-puzzle-piece cfg-puzzle-piece-op">
+                                  <label class="cfg-puzzle-piece-label">運算</label>
+                                  <select class="cfg-puzzle-select cfg-puzzle-op"
+                                          v-model="row.op"
+                                          @change="modeCond.rebuild(modeAddDlg.draftMode)">
+                                    <option v-for="o in OP_TYPES" :key="o" :value="o">{{ opLabel(o) }}</option>
+                                  </select>
+                                </div>
+                                <div class="cfg-puzzle-piece cfg-puzzle-piece-value">
+                                  <label class="cfg-puzzle-piece-label">值</label>
+                                  <select v-if="rowCategoryMeta(row).valueType === 'mode' && modeNames.length > 0"
+                                          class="cfg-puzzle-select"
+                                          v-model="row.value"
+                                          @change="modeCond.rebuild(modeAddDlg.draftMode)">
+                                    <option v-for="mn in modeNames" :key="mn" :value="mn">{{ mn }}</option>
+                                  </select>
+                                  <input v-else-if="rowCategoryMeta(row).valueType === 'number'"
+                                         class="cfg-puzzle-input cfg-mono"
+                                         type="number" step="any"
+                                         v-model="row.value"
+                                         @input="modeCond.rebuild(modeAddDlg.draftMode)"
+                                         placeholder="0">
+                                  <input v-else
+                                         class="cfg-puzzle-input cfg-mono"
+                                         type="text"
+                                         v-model.trim="row.value"
+                                         @input="modeCond.rebuild(modeAddDlg.draftMode)"
+                                         placeholder="值">
+                                </div>
+                                <button class="cfg-puzzle-row-del"
+                                        @click="modeCond.removeRow(modeAddDlg.draftMode, ri)"
+                                        title="移除此片拼圖">✕</button>
+                              </div>
+                            </template>
+                          </div>
+                          <div class="cfg-puzzle-add">
+                            <button v-if="!condBuilderState.rows[modeCond.key(modeAddDlg.draftMode)] || condBuilderState.rows[modeCond.key(modeAddDlg.draftMode)].length === 0"
+                                    class="cfg-mode-add-btn cfg-puzzle-add-btn"
+                                    @click="modeCond.addRow(modeAddDlg.draftMode, 'AND')">
+                              <span style="font-size: 14px;">+</span>
+                              <span>新增第一片條件</span>
+                            </button>
+                            <template v-else>
+                              <button class="cfg-puzzle-add-and" @click="modeCond.addRow(modeAddDlg.draftMode, 'AND')">+ AND 條件</button>
+                              <button class="cfg-puzzle-add-or" @click="modeCond.addRow(modeAddDlg.draftMode, 'OR')">+ OR 條件</button>
+                            </template>
+                          </div>
+                          <div class="cfg-puzzle-dsl">
+                            <span class="cfg-puzzle-dsl-label">生成的 DSL:</span>
+                            <code class="cfg-puzzle-dsl-code">{{ modeAddDlg.draftMode.trigger_condition || '(空)' }}</code>
+                          </div>
+                        </div>
+                        <div v-else class="cfg-puzzle-body">
+                          <input class="input cfg-mono cfg-puzzle-raw-input"
+                                 type="text"
+                                 v-model.trim="modeAddDlg.draftMode.trigger_condition"
+                                 placeholder="留空表示無觸發條件">
+                          <div v-if="condBuilderState.error[modeCond.key(modeAddDlg.draftMode)]" class="cfg-warn cfg-warn-inline">
+                            ⚠ {{ condBuilderState.error[modeCond.key(modeAddDlg.draftMode)] }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 觸發給付：僅 SPIN 且名稱非 NG -->
+                      <div v-if="modeAddDlgTpVisible" style="margin-top:10px;">
+                        <label class="cfg-label">觸發給付 <span class="cfg-key">trigger_pays</span></label>
+                        <div class="cfg-chip-row">
+                          <button class="cfg-chip" :class="{ active: !modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = false">關閉</button>
+                          <button class="cfg-chip" :class="{ active: modeAddDlg.tpEnabled }" @click="modeAddDlg.tpEnabled = true">開啟</button>
+                        </div>
+                        <template v-if="modeAddDlg.tpEnabled">
+                          <div v-for="(tp, ti) in modeAddDlg.tpRows" :key="'dtp'+ti" class="cfg-mode-tp-row">
+                            <div class="cfg-mode-tp-cell">
+                              <span class="cfg-mode-tp-lbl">scatter 數</span>
+                              <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.scatter_count">
+                            </div>
+                            <div class="cfg-mode-tp-cell">
+                              <span class="cfg-mode-tp-lbl">給付 ×注額</span>
+                              <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="tp.pay">
+                            </div>
+                            <div class="cfg-mode-tp-cell">
+                              <span class="cfg-mode-tp-lbl">給予免費局</span>
+                              <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="tp.grants_spins">
+                            </div>
+                            <button class="cfg-mode-delete-btn" @click="modeAddDlgTpRemove(ti)" title="刪除此列">✕</button>
+                          </div>
+                          <button class="cfg-mode-add-btn cfg-bonus-item-add cfg-btn-inline" @click="modeAddDlgTpAdd">
+                            <span style="font-size:14px">+</span> 新增觸發給付
+                          </button>
+                        </template>
+                      </div>
+
+                      <div class="cfg-field" style="margin-top:10px;">
+                        <label class="cfg-label">結束條件(可選) <span class="cfg-key">end_condition</span></label>
+                        <input class="input cfg-mono" type="text" v-model.trim="modeAddDlg.end_condition"
+                               placeholder="respins_left == 0 / symbol_count.SEVEN >= 1 …">
+                      </div>
+                      <div class="cfg-field" style="margin-top:8px;">
+                        <label class="cfg-label">解鎖前提(可選) <span class="cfg-key">unlock_requires</span></label>
+                        <div v-if="modeNames.length" class="cfg-chip-row">
+                          <button v-for="nm in modeNames" :key="'madulk'+nm"
+                                  class="cfg-chip cfg-chip-sm"
+                                  :class="{ active: modeAddDlgUnlockHas(nm) }"
+                                  @click="modeAddDlgUnlockToggle(nm)">{{ nm }}</button>
+                        </div>
+                        <div v-else class="cfg-hint">尚無其他模式可作為前提。</div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+
+                <!-- ── 步驟 2：左勾選 + 右聚焦表單 ── -->
+                <div class="cfg-modedlg-split" v-if="modeAddDlg.step === 2">
+                  <aside class="cfg-modedlg-sec-nav">
+                    <div class="cfg-label">可用設定</div>
+                    <label v-for="sec in modeAddDlgSections" :key="'mas'+sec.id"
+                           class="cfg-modedlg-sec-item"
+                           :class="{ focused: modeAddDlg.focusSection === sec.id && modeAddDlg.enabled_sections.includes(sec.id) }">
+                      <input type="checkbox"
+                             :checked="modeAddDlg.enabled_sections.includes(sec.id)"
+                             @change="modeAddDlgToggleSection(sec.id)">
+                      <span @click.prevent="modeAddDlgFocusSection(sec.id)">{{ sec.label }}</span>
+                    </label>
+                  </aside>
+                  <div class="cfg-modedlg-sec-pane">
+                    <div v-if="!modeAddDlg.focusSection" class="cfg-hint">勾選左側設定後在此編輯</div>
+
+                    <template v-if="modeAddDlg.focusSection === 'pay_type'">
+                      <label class="cfg-label">賠付模型覆寫 <span class="cfg-key">pay_type_override</span></label>
+                      <select class="input input-w-name" v-model="modeAddDlg.pay_type_override">
+                        <option value="">（繼承全域）</option>
+                        <option value="LINE">LINE（固定中獎線）</option>
+                        <option value="WAYS">WAYS（相鄰全路徑）</option>
+                        <option value="SCATTER">SCATTER（任意位置散佈）</option>
+                        <option value="CLUSTER">CLUSTER（相鄰成群）</option>
+                      </select>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'multipliers'">
+                      <div class="cfg-field">
+                        <label class="cfg-label">倍數重置範圍 <span class="cfg-key">reset_scope</span></label>
+                        <select class="input input-w-name" v-model="modeAddDlg.reset_scope">
+                          <option v-for="opt in RESET_SCOPE_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
+                        </select>
+                      </div>
+                      <div class="cfg-field" style="margin-top:8px;">
+                        <label class="cfg-label">倍數疊加方式 <span class="cfg-key">stack_mode</span></label>
+                        <select class="input input-w-name" v-model="modeAddDlg.stack_mode">
+                          <option v-for="opt in STACK_MODE_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
+                        </select>
+                      </div>
+                      <div class="cfg-field" style="margin-top:8px;">
+                        <label class="cfg-label">封頂 / 上限 <span class="cfg-key">cap</span></label>
+                        <div class="cfg-mode-cap-row">
+                          <label class="cfg-check">
+                            <input type="checkbox" :checked="modeAddDlg.cap_enabled === 'Y'"
+                                   @change="modeAddDlg.cap_enabled = $event.target.checked ? 'Y' : ''">
+                            <span>有封頂</span>
+                          </label>
+                          <input class="input input-w-name" type="text" v-model="modeAddDlg.cap_value"
+                                 :disabled="modeAddDlg.cap_enabled !== 'Y'" placeholder="例:5,000×">
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'choice_group'">
+                      <label class="cfg-label">玩家擇一組 <span class="cfg-key">choice_group</span></label>
+                      <input class="input input-w-name cfg-mono" type="text" placeholder="—"
+                             v-model.trim="modeAddDlg.choice_group">
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'hold_win'">
+                      <label class="cfg-label">鎖點重轉 Hold&amp;Win</label>
+                      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span class="cfg-bonus-ilabel">初始局數</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="modeAddDlg.respin_base">
+                        <span class="cfg-bonus-ilabel">重置條件</span>
+                        <select class="input" v-model="modeAddDlg.respin_reset_on" :disabled="!(Number(modeAddDlg.respin_base) > 0)">
+                          <option value="">（未指定）</option>
+                          <option value="NEW_SYMBOL">落新符號重置</option>
+                          <option value="ANY_WIN">任何中獎重置</option>
+                          <option value="NEVER">不重置</option>
+                        </select>
+                      </div>
+                      <input class="input" type="text" style="margin-top:6px;" placeholder="停止條件（自由描述）"
+                             v-model.trim="modeAddDlg.respin_stop_cond" :disabled="!(Number(modeAddDlg.respin_base) > 0)">
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'collect'">
+                      <label class="cfg-label">Hold&amp;Win 收集設定</label>
+                      <div class="cfg-collect-grid">
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">收集型</span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.collect_enabled === true }"
+                                    @click="modeAddDlg.collect_enabled = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.collect_enabled !== true }"
+                                    @click="modeAddDlg.collect_enabled = false">關</button>
+                          </div>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">重置符號</span>
+                          <select class="input input-w-id" v-model="modeAddDlg.respin_reset_symbol">
+                            <option value="">（依重置條件）</option>
+                            <option v-for="s in symbolNames" :key="'madrrs'+s" :value="s">{{ s }}</option>
+                          </select>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">收集中擴張</span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.grid_expand_in_collect === true }"
+                                    @click="modeAddDlg.grid_expand_in_collect = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.grid_expand_in_collect !== true }"
+                                    @click="modeAddDlg.grid_expand_in_collect = false">關</button>
+                          </div>
+                        </div>
+                        <div class="cfg-collect-cell">
+                          <span class="cfg-bonus-ilabel">允許 persistent</span>
+                          <div class="cfg-chip-row">
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.allow_persistent === true }"
+                                    @click="modeAddDlg.allow_persistent = true">開</button>
+                            <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.allow_persistent !== true }"
+                                    @click="modeAddDlg.allow_persistent = false">關</button>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'cascade'">
+                      <label class="cfg-label">消除連鎖 <span class="cfg-key">cascade_enabled</span></label>
+                      <div class="cfg-chip-row">
+                        <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.cascade_enabled === true }"
+                                @click="modeAddDlg.cascade_enabled = true">開</button>
+                        <button class="cfg-chip cfg-chip-sm" :class="{ active: modeAddDlg.cascade_enabled !== true }"
+                                @click="modeAddDlg.cascade_enabled = false">關</button>
+                      </div>
+                      <div v-if="modeAddDlg.cascade_enabled" class="cfg-field" style="margin-top:6px;">
+                        <label class="cfg-label">連鎖深度上限覆寫</label>
+                        <input class="input input-sm cfg-mono" type="number" min="0" step="1"
+                               v-model.number="modeAddDlg.cascade_max_depth" style="width:100px;" placeholder="0">
+                      </div>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'mult_compose'">
+                      <label class="cfg-label">倍數複合覆寫 <span class="cfg-key">mult_compose_override</span></label>
+                      <select class="input input-w-name" v-model="modeAddDlg.mult_compose_override">
+                        <option value="">（沿用全域）</option>
+                        <option value="MUL">相乘</option>
+                        <option value="ADD">相加</option>
+                        <option value="MAX">取最高</option>
+                      </select>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'refill_track'">
+                      <label class="cfg-label">補盤路徑覆寫 <span class="cfg-key">refill_track_override</span></label>
+                      <select class="input input-w-name" v-model="modeAddDlg.refill_track_override">
+                        <option value="">（沿用全域）</option>
+                        <option v-for="to in trackOptions" :key="'madrto'+to.value" :value="to.value">{{ to.label }}</option>
+                        <option v-if="isOrphanTrackRef(modeAddDlg.refill_track_override)" :value="modeAddDlg.refill_track_override">{{ modeAddDlg.refill_track_override }}（⚠ 軌道不存在）</option>
+                      </select>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'wheel'">
+                      <label class="cfg-label">升級目標 <span class="cfg-key">wheel_upgrade_to</span></label>
+                      <select class="input input-w-name" v-model="modeAddDlg.wheel_upgrade_to">
+                        <option value="">（無升級）</option>
+                        <option v-for="wt in modes.filter(x => x.mode_kind === 'WHEEL' && (x.mode || '').trim())" :key="'madwt'+wt.mode" :value="wt.mode">{{ wt.mode }}</option>
+                      </select>
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'pick'">
+                      <label class="cfg-label">抽選次數 <span class="cfg-key">pick_count</span></label>
+                      <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="modeAddDlg.pick_count">
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'collect_target'">
+                      <label class="cfg-label">收集目標 <span class="cfg-key">collect_target</span></label>
+                      <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="modeAddDlg.collect_target">
+                    </template>
+
+                    <template v-if="modeAddDlg.focusSection === 'bonus_items'">
+                      <div class="cfg-bonus-items-title">
+                        {{ modeAddDlg.kind === 'WHEEL' ? '輪盤分段' : modeAddDlg.kind === 'PICK' ? '獎項池' : '收集獎勵' }}
+                      </div>
+                      <div v-if="(modeAddDlg.items || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無獎項,按下方「+ 新增獎項」開始。</div>
+                      <div v-for="(it, ii) in modeAddDlg.items" :key="'madmi'+ii" class="cfg-bonus-item-row cfg-reveal-zone">
+                        <input class="input input-w-id" type="text" v-model.trim="it.label" placeholder="標籤">
+                        <div class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">{{ modeAddDlg.kind === 'COLLECTION' ? '門檻' : '值×注額' }}</span>
+                          <input class="input input-w-num input-center" type="number" min="0" step="any"
+                                 v-model.number="it.value" :disabled="!!it.link_jackpot">
+                        </div>
+                        <div v-if="modeAddDlg.kind !== 'COLLECTION'" class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">權重</span>
+                          <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="it.weight">
+                        </div>
+                        <span v-if="modeAddDlg.kind !== 'COLLECTION'" class="cfg-bonus-ipct">{{ (modeItemPct({ mode_kind: modeAddDlg.kind, items: modeAddDlg.items }, ii) || 0).toFixed(1) }}%</span>
+                        <label v-if="modeAddDlg.kind === 'PICK'" class="cfg-bonus-end-toggle" title="抽到此項即結束">
+                          <input type="checkbox" v-model="it.is_end"> 結束
+                        </label>
+                        <div class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">連結JP</span>
+                          <select class="input input-w-id" v-model="it.link_jackpot">
+                            <option value="">—</option>
+                            <option v-for="j in modeItemJpOptions({ items: modeAddDlg.items }, it)" :key="j.jp_id" :value="j.jp_id">{{ j.name || j.jp_id }}</option>
+                          </select>
+                        </div>
+                        <div class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">角色</span>
+                          <select class="input input-w-id" v-model="it.item_role">
+                            <option v-for="r in MODE_ITEM_ROLES" :key="'madir'+r.key" :value="r.key">{{ r.zh }}</option>
+                          </select>
+                        </div>
+                        <div v-if="modeAddDlg.kind !== 'COLLECTION'" class="cfg-bonus-icell">
+                          <span class="cfg-bonus-ilabel">連結模式</span>
+                          <select class="input input-w-id" v-model="it.link_mode">
+                            <option value="">—</option>
+                            <option v-for="mm in modeItemModeOptions({ mode: '' })" :key="'madlm'+mm" :value="mm">{{ mm }}</option>
+                          </select>
+                        </div>
+                        <button class="cfg-mode-delete-btn cfg-reveal" @click="removeModeItem({ items: modeAddDlg.items }, ii)" title="刪除">✕</button>
+                      </div>
+                      <button class="cfg-mode-add-btn cfg-bonus-item-add"
+                              @click="addModeItem({ mode_kind: modeAddDlg.kind, items: modeAddDlg.items })">
+                        <span style="font-size:14px">+</span> 新增獎項
+                      </button>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- ── 步驟 3：唯讀預覽 ── -->
+                <div v-if="modeAddDlg.step === 3" class="cfg-modedlg-preview">
+                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\\n') }}</pre>
                 </div>
 
                 <div class="cfg-modedlg-actions">
                   <button class="btn-pill" @click="modeAddDlg.open = false">取消</button>
-                  <button class="btn-pill cfg-modedlg-confirm"
-                          :disabled="!modeAddCanConfirm"
-                          @click="confirmAddModeDlg">建立模式</button>
+                  <button v-if="modeAddDlg.step > 1" class="btn-pill" @click="modeAddDlgBack">上一步</button>
+                  <button v-if="modeAddDlg.step < 3" class="btn-pill cfg-modedlg-confirm"
+                          :disabled="!modeAddCanNext" @click="modeAddDlgNext">下一步</button>
+                  <button v-else class="btn-pill cfg-modedlg-confirm"
+                          :disabled="!modeAddCanConfirm" @click="confirmAddModeDlg">建立模式</button>
                 </div>
               </div>
             </div>
