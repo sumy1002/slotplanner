@@ -1564,7 +1564,8 @@
         if (m.cap_value == null) m.cap_value = '';         // 封頂值(字串,可含區間)
         if (m.stack_mode == null) m.stack_mode = '';       // '' = 繼承全域 | 'MUL' | 'ADD'
         // v7.14:additive 玩法種類 + bonus 小遊戲欄位(makeMode 在 helpers,不在 scope;此處補預設)。
-        if (m.mode_kind == null || m.mode_kind === '') m.mode_kind = 'SPIN';  // SPIN/WHEEL/PICK/COLLECTION
+        //   空值才預設 SPIN；已是 OTHER／WHEEL 等不覆寫。
+        if (m.mode_kind == null || m.mode_kind === '') m.mode_kind = 'SPIN';  // SPIN/WHEEL/PICK/COLLECTION/OTHER
         if (m.wheel_upgrade_to == null) m.wheel_upgrade_to = '';
         if (m.pick_count == null) m.pick_count = 0;
         if (m.collect_target == null) m.collect_target = 0;
@@ -1714,16 +1715,20 @@
       // v8.0:關聯 Bonus 子卡已移除(bonus 併入 mode 玩法種類);modeBn* helpers 一併移除。
 
       // ── v8.14 批3 #3:新增模式改「彈窗流程」──
-      //   名稱必填 + 撞名防呆(不分大小寫);玩法大方向四選一;
+      //   名稱必填 + 撞名防呆(不分大小寫);玩法大方向五選一(含 OTHER);
       //   非 NG 且 SPIN 時可先開啟觸發給付並逐列填寫(也可留到卡片內補填)。
       //   確認後仍走既有 makeMode + _ensureModeGameplayFields,資料形狀零改動。
+      // ModeKind 純函式（mode-kind.js）；fallback 僅防呆，正式路徑靠 app.html 載入順序。
+      const MK = (window.SlotPlanner && window.SlotPlanner.ConfigEditor &&
+                  window.SlotPlanner.ConfigEditor.ModeKind) || {};
       const modeAddDlg = reactive({
-        open: false, name: '', kind: 'SPIN', tpEnabled: false, tpRows: [],
+        open: false, name: '', kind: 'SPIN', otherText: '', tpEnabled: false, tpRows: [],
       });
       function openAddModeDlg() {
         modeAddDlg.open = true;
         modeAddDlg.name = '';
         modeAddDlg.kind = 'SPIN';
+        modeAddDlg.otherText = '';
         modeAddDlg.tpEnabled = false;
         modeAddDlg.tpRows = [];
         Vue.nextTick(() => {
@@ -1735,6 +1740,21 @@
         const n = modeAddDlg.name.trim().toUpperCase();
         return !!n && modes.some(m => (m.mode || '').trim().toUpperCase() === n);
       });
+      const modeAddCanConfirm = computed(() => {
+        const fn = MK.modeAddCanConfirm;
+        if (!fn) {
+          const n = modeAddDlg.name.trim();
+          if (!n || modeAddDlgNameTaken.value) return false;
+          if (modeAddDlg.kind === 'OTHER' && !modeAddDlg.otherText.trim()) return false;
+          return true;
+        }
+        return fn({
+          name: modeAddDlg.name,
+          nameTaken: modeAddDlgNameTaken.value,
+          kind: modeAddDlg.kind,
+          otherText: modeAddDlg.otherText,
+        });
+      });
       // 觸發給付區顯示條件:名稱非空、非 NG、玩法為 SPIN(bonus 小遊戲不適用,與卡片 cfg-kind-na 一致)
       const modeAddDlgTpVisible = computed(() => {
         const n = modeAddDlg.name.trim().toUpperCase();
@@ -1743,8 +1763,8 @@
       function modeAddDlgTpAdd()      { modeAddDlg.tpRows.push({ scatter_count: 0, pay: 0, grants_spins: 0 }); }
       function modeAddDlgTpRemove(i)  { modeAddDlg.tpRows.splice(i, 1); }
       function confirmAddModeDlg() {
+        if (!modeAddCanConfirm.value) return;
         const name = modeAddDlg.name.trim();
-        if (!name || modeAddDlgNameTaken.value) return;   // 防呆:空名 / 撞名不建立
         // v8.43 / C-1:# 為輪帶變體保留字元,模式名拒收
         if (name.includes('#')) {
           emit('status', { type: 'err', msg: `模式名稱不可含「#」(輪帶變體保留字元)` });
@@ -1753,7 +1773,12 @@
         const m = makeMode(name);
         modes.push(m);
         _ensureModeGameplayFields(m);                     // v7.10:補 reset_scope/trigger_pays
-        m.mode_kind = modeAddDlg.kind;
+        if (MK.applyModeAddKind) {
+          MK.applyModeAddKind(m, modeAddDlg.kind, modeAddDlg.otherText);
+        } else {
+          m.mode_kind = modeAddDlg.kind;
+          if (modeAddDlg.kind === 'OTHER') m.notes = modeAddDlg.otherText.trim();
+        }
         if (modeAddDlgTpVisible.value && modeAddDlg.tpEnabled) {
           m.trigger_pays = modeAddDlg.tpRows.map(r => ({
             scatter_count: Number(r.scatter_count) || 0,
@@ -4281,14 +4306,20 @@
       // v7.14:mode-owned bonus 小遊戲(mode_kind != SPIN 時,mode 攜帶獎項表)
       //   沿用 makeBonusItem / jackpots;handler 皆函式(render 時求值,前向引用安全)。
       // ════════════════════════════════════════════════════════════
-      const MODE_KIND_OPTIONS = [
-        { v: 'SPIN',       label: 'SPIN — 旋轉模式' },
-        { v: 'WHEEL',      label: 'WHEEL — 輪盤' },       // v8.14 #4:去掉 bonus 字樣
-        { v: 'PICK',       label: 'PICK — 選獎' },
-        { v: 'COLLECTION', label: 'COLLECTION — 收集' },
+      const MODE_KIND_OPTIONS = MK.MODE_KIND_OPTIONS || [
+        { v: 'SPIN', label: 'SPIN' },
+        { v: 'WHEEL', label: '輪盤' },
+        { v: 'PICK', label: '點點樂' },
+        { v: 'COLLECTION', label: '收集' },
+        { v: 'OTHER', label: '其他' },
       ];
-      const MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
-      function isBonusKind(m) { return !!(m && m.mode_kind && m.mode_kind !== 'SPIN'); }
+      const MODE_KIND_LABEL = MK.MODE_KIND_LABEL || {
+        SPIN: 'SPIN', WHEEL: '輪盤', PICK: '點點樂', COLLECTION: '收集', OTHER: '其他',
+      };
+      function isBonusKind(m) {
+        return MK.isBonusKind ? MK.isBonusKind(m)
+          : !!(m && (m.mode_kind === 'WHEEL' || m.mode_kind === 'PICK' || m.mode_kind === 'COLLECTION'));
+      }
       function addModeItem(m) {
         _ensureModeGameplayFields(m);
         const it = makeBonusItem('', m.mode_kind === 'COLLECTION' ? 0 : 10, 100);
@@ -12383,7 +12414,7 @@
         scopeStrHas, toggleScopeStr, scopeHasMode, toggleScopeMode,
         modeUnlockHas, modeUnlockToggle,
         // v8.14 批3 #3:新增模式彈窗
-        modeAddDlg, openAddModeDlg, modeAddDlgPick, modeAddDlgNameTaken,
+        modeAddDlg, openAddModeDlg, modeAddDlgPick, modeAddDlgNameTaken, modeAddCanConfirm,
         modeAddDlgTpVisible, modeAddDlgTpAdd, modeAddDlgTpRemove, confirmAddModeDlg,
         layout, layoutCells, layoutLabels, layoutViewBox, totalCells, layoutDebugJson,
         activeReelIdx, activeReel,
