@@ -1961,7 +1961,8 @@
           lines.push('觸發條件: 關');
         }
         lines.push('已啟用設定: ' + (modeAddDlg.enabled_sections.join(', ') || '（無）'));
-        return lines;
+        // ponytail: 在 computed 內 join；勿在 template 寫 join('\n')（Vue compile 會炸）
+        return lines.join('\n');
       });
 
       function confirmAddModeDlg() {
