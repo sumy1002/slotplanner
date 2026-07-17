@@ -11164,6 +11164,28 @@
             shortcutsHelpOpen.value = !shortcutsHelpOpen.value;
           }
         }
+        // 範本面板 Esc：最外層優先；閉合順序由 TemplateUi.resolveTemplateEsc 決定
+        if (ev.key === 'Escape' && showTemplatePanel.value) {
+          const TU = (window.SlotPlanner && window.SlotPlanner.ConfigEditor
+            && window.SlotPlanner.ConfigEditor.TemplateUi) || null;
+          const cur = {
+            showTemplatePanel: showTemplatePanel.value,
+            diffOpen: diffOpen.value,
+            tplLoadPreviewOpen: tplLoadPreviewOpen.value,
+          };
+          const next = TU
+            ? TU.resolveTemplateEsc(cur)
+            : { ...cur, showTemplatePanel: false };
+          if (next.tplLoadPreviewOpen !== cur.tplLoadPreviewOpen && !next.tplLoadPreviewOpen) {
+            closeTemplateDiff();
+          } else if (next.diffOpen !== cur.diffOpen && !next.diffOpen) {
+            closeDiffModal();
+          } else if (next.showTemplatePanel !== cur.showTemplatePanel) {
+            showTemplatePanel.value = next.showTemplatePanel;
+          }
+          ev.preventDefault();
+          return;
+        }
         // Esc:統一關閉快捷鍵一覽浮層(其餘各自的 popover/選單已各自綁定 Escape)
         if (ev.key === 'Escape' && shortcutsHelpOpen.value) {
           shortcutsHelpOpen.value = false;
