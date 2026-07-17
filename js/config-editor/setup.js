@@ -1721,6 +1721,39 @@
       // ModeKind 純函式（mode-kind.js）；fallback 僅防呆，正式路徑靠 app.html 載入順序。
       const MK = (window.SlotPlanner && window.SlotPlanner.ConfigEditor &&
                   window.SlotPlanner.ConfigEditor.ModeKind) || {};
+      // ModeSections 純函式（mode-sections.js）；卡片區段啟停 helpers。
+      const MS = (window.SlotPlanner && window.SlotPlanner.ConfigEditor &&
+                  window.SlotPlanner.ConfigEditor.ModeSections) || {};
+
+      function modeSectionOn(m, id) {
+        const list = MS.resolveEnabledSections ? MS.resolveEnabledSections(m) : [];
+        return list.indexOf(id) >= 0;
+      }
+      function modeSectionList(m) {
+        return MS.sectionsForKind ? MS.sectionsForKind(m && m.mode_kind) : [];
+      }
+      function modeSectionsAvailableToAdd(m) {
+        const all = modeSectionList(m);
+        const on = new Set(MS.resolveEnabledSections ? MS.resolveEnabledSections(m) : []);
+        return all.filter(s => !on.has(s.id));
+      }
+      function modeSectionAdd(m, id) {
+        if (!m || !id) return;
+        const arr = MS.materializeEnabledSections
+          ? MS.materializeEnabledSections(m)
+          : (m.enabled_sections || (m.enabled_sections = []));
+        if (arr.indexOf(id) < 0) arr.push(id);
+      }
+      function modeSectionRemove(m, id) {
+        if (!m || !id) return;
+        const arr = MS.materializeEnabledSections
+          ? MS.materializeEnabledSections(m)
+          : (m.enabled_sections || (m.enabled_sections = []));
+        const i = arr.indexOf(id);
+        if (i >= 0) arr.splice(i, 1);
+        // 不清欄位值（spec）
+      }
+
       const modeAddDlg = reactive({
         open: false, name: '', kind: 'SPIN', otherText: '', tpEnabled: false, tpRows: [],
       });
@@ -12595,6 +12628,8 @@
         //   legacyBonusCount/migrateBonusesToModes)已移除——bonus 併入 mode 玩法種類。
         // v7.14:mode 玩法種類 + mode-owned bonus 獎項
         MODE_KIND_OPTIONS, MODE_KIND_LABEL, isBonusKind,
+        // 模式卡片區段啟停（ModeSections）
+        modeSectionOn, modeSectionList, modeSectionsAvailableToAdd, modeSectionAdd, modeSectionRemove,
         addModeItem, removeModeItem, modeItemJpOptions, modeItemPct, modeExpected,
         modeItemModeOptions,   // v8.27 批8:item→模式連結下拉
         // v8.22 / G3:獎項角色 + Hold&Win 設定面
