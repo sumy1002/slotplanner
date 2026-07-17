@@ -1754,6 +1754,15 @@
         // 不清欄位值（spec）
       }
 
+      // 「新增設定」子選單開合（runtime-only；以 modeCardKey 索引，不污染 mode 物件）
+      const modeAddSecMenu = reactive({});
+      function isModeAddSecOpen(m) { return !!modeAddSecMenu[modeCardKey(m)]; }
+      function toggleModeAddSec(m) {
+        const k = modeCardKey(m);
+        modeAddSecMenu[k] = !modeAddSecMenu[k];
+      }
+      function closeModeAddSec(m) { modeAddSecMenu[modeCardKey(m)] = false; }
+
       const modeAddDlg = reactive({
         open: false, name: '', kind: 'SPIN', otherText: '', tpEnabled: false, tpRows: [],
       });
@@ -12630,6 +12639,7 @@
         MODE_KIND_OPTIONS, MODE_KIND_LABEL, isBonusKind,
         // 模式卡片區段啟停（ModeSections）
         modeSectionOn, modeSectionList, modeSectionsAvailableToAdd, modeSectionAdd, modeSectionRemove,
+        isModeAddSecOpen, toggleModeAddSec, closeModeAddSec,
         addModeItem, removeModeItem, modeItemJpOptions, modeItemPct, modeExpected,
         modeItemModeOptions,   // v8.27 批8:item→模式連結下拉
         // v8.22 / G3:獎項角色 + Hold&Win 設定面

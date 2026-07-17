@@ -5490,8 +5490,11 @@
                   <div class="cfg-mode-spin-fields" :class="{ 'cfg-kind-na': isBonusKind(m) }">
                   <div v-if="isBonusKind(m)" class="cfg-hint cfg-kind-na-note">此玩法為 bonus 小遊戲,以下旋轉相關設定不適用。</div>
 
+                  <template v-if="modeSectionOn(m, 'multipliers')">
                   <div class="cfg-field" style="margin-top:8px;">
-                    <label class="cfg-label">倍數重置範圍 <span class="cfg-key">reset_scope</span></label>
+                    <label class="cfg-label">倍數重置範圍 <span class="cfg-key">reset_scope</span>
+                      <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'multipliers')" title="從卡片隱藏，值保留">隱藏</button>
+                    </label>
                     <select class="input input-w-name" v-model="m.reset_scope">
                       <option v-for="opt in RESET_SCOPE_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
                     </select>
@@ -5519,7 +5522,9 @@
                     </div>
                     <div class="cfg-hint">此模式的贏分上限(規格書描述用);空白 = 不封頂。</div>
                   </div>
+                  </template>
 
+                  <!-- trigger_pays：不進 enabled_sections；沿用既有 spin-fields 顯示 -->
                   <div class="cfg-mode-tp">
                     <div class="cfg-label" style="margin-bottom:4px;">
                       觸發給付 <span class="cfg-key">trigger_pays</span>
@@ -5549,15 +5554,19 @@
 
                   <!-- v8.5 / R3:玩家擇一 + Hold&Win Respin(所有玩法種類皆適用;規格描述,引擎不消費)-->
                   <div class="cfg-mode-r3-fields">
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">玩家擇一組(可選) <span class="cfg-key">choice_group</span></label>
+                    <div v-if="modeSectionOn(m, 'choice_group')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">玩家擇一組(可選) <span class="cfg-key">choice_group</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'choice_group')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <input class="input input-w-name cfg-mono" type="text" placeholder="—"
                              v-model.trim="m.choice_group"
                              title="同組名的模式=玩家擇一進入(二選一/三選一 FS;Dog House / Moon Princess)">
                       <div class="cfg-hint">觸發時由玩家在同組模式中選一個進入;留空 = 一般模式。同組需至少 2 個模式。</div>
                     </div>
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">鎖點重轉(可選) <span class="cfg-key">Hold&Win Respin / respin_base</span></label>
+                    <div v-if="modeSectionOn(m, 'hold_win')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">鎖點重轉(可選) <span class="cfg-key">Hold&Win Respin / respin_base</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'hold_win')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span class="cfg-bonus-ilabel">初始局數</span>
                         <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.respin_base">
@@ -5581,8 +5590,10 @@
                       <div class="cfg-hint">生存局 / 條件式結束的結構化謂詞(White Rabbit 活到某條件、Toro 直到某符號)；拼圖層可用「結束 feature（END_FEATURE）」動作連動。與上方自由文字停止條件並存;純描述,判定交下游。</div>
                     </div>
                     <!-- v8.7 / R6 A-2:per-mode 賠付模型覆寫(規格描述) -->
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">賠付模型覆寫(可選) <span class="cfg-key">pay_type_override</span></label>
+                    <div v-if="modeSectionOn(m, 'pay_type')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">賠付模型覆寫(可選) <span class="cfg-key">pay_type_override</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'pay_type')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <select class="input input-w-name" v-model="m.pay_type_override">
                         <option value="">（繼承全域）</option>
                         <option value="LINE">LINE（固定中獎線）</option>
@@ -5605,8 +5616,10 @@
                       <div class="cfg-hint">此模式需先「玩過 / 解鎖」勾選的模式才可進入（漸進解鎖 FS，如 Immortal Romance 密室鏈）。與「玩家擇一」正交（擇一＝互斥選擇；前提＝進入門檻）。空＝無前提。純描述,交下游遵循。</div>
                     </div>
                     <!-- v8.28 / 缺口C:此模式的跨來源倍數複合覆寫 -->
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">倍數複合覆寫(可選) <span class="cfg-key">mult_compose_override</span></label>
+                    <div v-if="modeSectionOn(m, 'mult_compose')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">倍數複合覆寫(可選) <span class="cfg-key">mult_compose_override</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'mult_compose')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <select class="input input-w-name" v-model="m.mult_compose_override">
                         <option value="">（沿用全域）</option>
                         <option value="MUL">相乘</option>
@@ -5616,8 +5629,10 @@
                       <div class="cfg-hint">此模式的多來源倍數複合方式;留空 = 沿用全域「跨來源倍數複合」設定。純描述,計分實作歸下游。</div>
                     </div>
                     <!-- v8.39 / GAP-F1:此模式的補盤軌道覆寫 -->
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">補盤路徑覆寫(可選) <span class="cfg-key">refill_track_override</span></label>
+                    <div v-if="modeSectionOn(m, 'refill_track')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">補盤路徑覆寫(可選) <span class="cfg-key">refill_track_override</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'refill_track')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <select class="input input-w-name" v-model="m.refill_track_override">
                         <option value="">（沿用全域）</option>
                         <option v-for="to in trackOptions" :key="'rto'+to.value" :value="to.value">{{ to.label }}</option>
@@ -5627,8 +5642,10 @@
                     </div>
 
                     <!-- 架構檢閱 #6:消除連鎖(Cascade / Tumble)結構化宣告 -->
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">消除連鎖(Cascade)<span class="cfg-key">cascade_enabled</span></label>
+                    <div v-if="modeSectionOn(m, 'cascade')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">消除連鎖(Cascade)<span class="cfg-key">cascade_enabled</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'cascade')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <div class="cfg-chip-row">
                         <button class="cfg-chip cfg-chip-sm" :class="{ active: m.cascade_enabled === true }"
                                 @click="m.cascade_enabled = true">開</button>
@@ -5645,8 +5662,10 @@
                     </div>
 
                     <!-- v8.22 / G3:Hold&Win 設定面(常見收集玩法走設定;罕見互動走 G1 拼圖)-->
-                    <div class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">Hold&amp;Win 收集設定 <span class="cfg-key">collect_*</span></label>
+                    <div v-if="modeSectionOn(m, 'collect')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">Hold&amp;Win 收集設定 <span class="cfg-key">collect_*</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'collect')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <div class="cfg-collect-grid">
                         <div class="cfg-collect-cell">
                           <span class="cfg-bonus-ilabel">收集型 <span class="cfg-key">collect_enabled</span></span>
@@ -5689,29 +5708,36 @@
 
                   <!-- v7.14:bonus 小遊戲編輯器(mode_kind != SPIN)-->
                   <div v-if="isBonusKind(m)" class="cfg-mode-minigame">
-                    <div v-if="m.mode_kind === 'WHEEL'" class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">升級目標 <span class="cfg-key">wheel_upgrade_to</span></label>
+                    <div v-if="m.mode_kind === 'WHEEL' && modeSectionOn(m, 'wheel')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">升級目標 <span class="cfg-key">wheel_upgrade_to</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'wheel')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <select class="input input-w-name" v-model="m.wheel_upgrade_to">
                         <option value="">（無升級）</option>
                         <option v-for="wt in modeWheelTargets(m)" :key="wt.mode" :value="wt.mode">{{ wt.mode }}</option>
                       </select>
                       <div class="cfg-hint">轉到特定分段時升級到另一個 WHEEL 模式;空 = 無升級。目標必須也是 WHEEL 玩法。</div>
                     </div>
-                    <div v-if="m.mode_kind === 'PICK'" class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">抽選次數 <span class="cfg-key">pick_count</span></label>
+                    <div v-if="m.mode_kind === 'PICK' && modeSectionOn(m, 'pick')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">抽選次數 <span class="cfg-key">pick_count</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'pick')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.pick_count">
                       <div class="cfg-hint">可抽選的次數;0 = 抽到「結束」項為止。</div>
                     </div>
-                    <div v-if="m.mode_kind === 'COLLECTION'" class="cfg-field" style="margin-top:8px;">
-                      <label class="cfg-label">收集目標 <span class="cfg-key">collect_target</span></label>
+                    <div v-if="m.mode_kind === 'COLLECTION' && modeSectionOn(m, 'collect_target')" class="cfg-field" style="margin-top:8px;">
+                      <label class="cfg-label">收集目標 <span class="cfg-key">collect_target</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'collect_target')" title="從卡片隱藏，值保留">隱藏</button>
+                      </label>
                       <input class="input input-w-num input-center" type="number" min="0" step="1" v-model.number="m.collect_target">
                       <div class="cfg-hint">達到此累積量即完成收集。</div>
                     </div>
 
-                    <div class="cfg-bonus-items" style="margin-top:8px;">
+                    <div v-if="modeSectionOn(m, 'bonus_items')" class="cfg-bonus-items" style="margin-top:8px;">
                       <div class="cfg-bonus-items-title">
                         {{ m.mode_kind === 'WHEEL' ? '輪盤分段' : m.mode_kind === 'PICK' ? '獎項池' : '收集獎勵' }}
                         <span v-if="modeExpected(m) != null && modeExpected(m) > 0" class="cfg-bonus-ev">期望 ×{{ modeExpected(m).toFixed(2) }}</span>
+                        <button type="button" class="cfg-mode-sec-rm" @click="modeSectionRemove(m, 'bonus_items')" title="從卡片隱藏，值保留">隱藏</button>
                       </div>
                       <div v-if="(m.items || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無獎項,按下方「+ 新增獎項」開始。</div>
                       <div v-for="(it, ii) in m.items" :key="'mi'+ii" class="cfg-bonus-item-row cfg-reveal-zone">
@@ -5758,6 +5784,21 @@
                       </button>
                     </div>
                   </div><!-- /cfg-mode-minigame -->
+
+                  <!-- 新增設定：列出尚未啟用的區段 -->
+                  <div class="cfg-mode-add-section" v-if="modeSectionsAvailableToAdd(m).length">
+                    <button type="button" class="cfg-mode-add-btn cfg-btn-inline"
+                            @click="toggleModeAddSec(m)">
+                      <span style="font-size:14px">+</span> 新增設定
+                    </button>
+                    <div v-if="isModeAddSecOpen(m)" class="cfg-mode-add-sec-menu">
+                      <button v-for="sec in modeSectionsAvailableToAdd(m)" :key="'addsec'+sec.id"
+                              type="button" class="cfg-mode-add-sec-item"
+                              @click="modeSectionAdd(m, sec.id); closeModeAddSec(m)">
+                        {{ sec.label }}
+                      </button>
+                    </div>
+                  </div>
 
                   </div><!-- /cfg-card-body -->
                 </div><!-- /cfg-mode-gameplay -->

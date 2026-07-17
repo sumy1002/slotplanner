@@ -13062,3 +13062,43 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-cv-mechfilter-ic { color:#EF9F27; }
 #app .cfg-cv-mechfilter-sel { font-size:12px; padding:4px 7px; border-radius:8px; border:.5px solid var(--border,rgba(127,127,127,.25)); background:var(--surface-1,transparent); color:var(--text); cursor:pointer; }
 #app .cfg-cv-mechfilter-info { font-size: var(--fs-xs); color:#EF9F27; font-weight:500; }
+
+/* 模式卡片：區段隱藏鈕 +「新增設定」子選單 */
+#app .cfg-mode-sec-rm {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: var(--fs-xs, 11px);
+  font-weight: 400;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  vertical-align: middle;
+}
+#app .cfg-mode-sec-rm:hover {
+  background: var(--surface-2, #f3f3f3);
+  color: var(--text, #333);
+}
+#app .cfg-mode-add-sec-menu {
+  margin-top: 8px;
+  border: 1px dashed var(--border, #ccc);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 280px;
+}
+#app .cfg-mode-add-sec-item {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+#app .cfg-mode-add-sec-item:hover {
+  background: var(--surface-2, #f3f3f3);
+}
