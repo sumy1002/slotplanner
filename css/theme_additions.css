@@ -3516,15 +3516,31 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* 範本管理：全螢幕置中 modal */
+.cfg-tpl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 880; /* 低於 cfg-diff(900) / cfg-tpl-diff(9999) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(40, 36, 32, 0.38);
+}
+
 .cfg-tpl-panel {
-  margin-top: 10px;
+  width: min(920px, 100%);
+  max-height: min(82vh, 800px);
+  margin-top: 0;
   padding: 14px 16px;
-  background: rgb(var(--tint-2) / 0.06);
+  background: var(--glass-5, rgba(255, 255, 255, 0.92));
   border: 1.5px solid var(--accent-brd);
   border-radius: var(--r-card);
+  box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .cfg-tpl-header {
@@ -3589,7 +3605,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 320px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
   padding-right: 4px;
 }
