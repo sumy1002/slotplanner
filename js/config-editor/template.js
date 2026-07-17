@@ -3836,7 +3836,7 @@
         <!-- ═══ 子分類:盤面圖示規則 / 通用規則(共用既有 puzzle 編輯器)═══ -->
         <div v-show="rulesSection === 'board' || rulesSection === 'general'"
              class="cfg-rules-section cfg-rules-section-puzzle"
-             style="display:flex;flex-direction:column;height:100%;min-height:0;">
+             style="display:flex;flex-direction:column;flex:1;min-height:0;">
         <div class="cfg-form-header" style="flex-shrink:0;">
           <!-- v8.15 #1:標題動態跟隨子分頁(盤面/圖示規則 · 通用規則 · 棄牌規則) -->
           <div class="cfg-form-title">
@@ -5243,7 +5243,7 @@
         </div><!-- /cfg-rules-section-puzzle -->
 
         <!-- §4.5/§4.10:棄牌條件 專屬簡單清單(SOFT;HARD 僅 round-trip 不呈現)-->
-        <div v-show="rulesSection === 'discard'" class="cfg-rules-section cfg-rules-section-discard" style="display:flex;flex-direction:column;height:100%;min-height:0;">
+        <div v-show="rulesSection === 'discard'" class="cfg-rules-section cfg-rules-section-discard" style="display:flex;flex-direction:column;flex:1;min-height:0;">
           <div class="cfg-form-header" style="flex-shrink:0;">
             <div class="cfg-form-title">🗑 棄牌條件 <span class="sym-info sym-info-below" data-tip="符合條件的盤面生成後會被主動排除,並列入棄牌率計算。舊檔 HARD(風控)棄牌僅保留匯出,不在此清單編輯。">ⓘ</span></div>
             <div class="cfg-form-sub">符合條件時該局棄牌(SOFT:仍計入但獨立追蹤)。純靜態描述,執行交下游模擬工具。</div>
@@ -6398,7 +6398,7 @@
 
                 <!-- ── 步驟 3：唯讀預覽 ── -->
                 <div v-if="modeAddDlg.step === 3" class="cfg-modedlg-preview">
-                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\n') }}</pre>
+                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\\n') }}</pre>
                 </div>
 
                 <div class="cfg-modedlg-actions">

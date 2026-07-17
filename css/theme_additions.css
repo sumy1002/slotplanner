@@ -3903,11 +3903,12 @@
    ============================================================ */
 
 /* ── 通用左右分割容器 ── */
+/* ponytail: 用 flex:1 撐滿剩餘高度,勿再用 calc(100vh-220px)(殼層高度一變就底部留白) */
 .cfg-split-layout {
   display: flex;
   gap: 0;
-  height: calc(100vh - 220px);
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -4166,8 +4167,8 @@
 .cfg-paylines-split {
   display: flex;
   gap: 0;
-  height: calc(100vh - 220px);
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 .cfg-paylines-split-list {
@@ -6706,13 +6707,13 @@
 }
 
 /* ── 兩欄主容器 ── */
+/* ponytail: 與硬約束相同,吃 flex 剩餘空間,避免 calc(100vh-220px) 底部空白 */
 .cfg-paylines-v2 {
   display: flex;
   gap: 0;
-  height: calc(100vh - 220px);
-  min-height: 460px;
-  overflow: hidden;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── 左欄:列表(縮窄到 200px,但每個 item 含 mini SVG)── */
@@ -10954,8 +10955,10 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
    ════════════════════════════════════════════════════════════════ */
 .cfg-rules-host { gap: 0; }
 .cfg-rules-sectionhost { overflow: hidden; }
+/* flex:1 而非 height:100% — sectionhost 上方還有 peer/subtoggle,100% 會溢出並在底部留白 */
 .cfg-rules-section {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 4px;
 }
@@ -11235,6 +11238,38 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   min-height: 0;
 }
 #app .cfg-content--fit .cfg-sticky-form > .cfg-empty-state { flex: none; }
+/* 規則/中獎線等 master-detail:撐滿剩餘高度,勿留下 calc(100vh) 底部空白 */
+#app .cfg-content--fit .cfg-split-layout,
+#app .cfg-content--fit .cfg-paylines-v2,
+#app .cfg-content--fit .cfg-paylines-split {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+#app .cfg-content--fit .cfg-rules-section {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+/* Inspector dock 為 position:fixed — fill 頁勿在 form 流內留 64px,否則 master-detail
+   底部會卡一塊空白;改由內部可捲動欄位自行留底距 */
+#app .cfg-content--fit .cfg-rules-host,
+#app .cfg-content--fit .cfg-paylines-v2-form,
+#app .cfg-content--fit .cfg-constraints-v2-form {
+  padding-bottom: 0;
+}
+#app .cfg-content--fit.has-pinned-inspector .cfg-rules-host,
+#app .cfg-content--fit.has-pinned-inspector .cfg-paylines-v2-form,
+#app .cfg-content--fit.has-pinned-inspector .cfg-constraints-v2-form {
+  padding-bottom: 0;
+}
+#app .cfg-content--fit .cfg-split-detail,
+#app .cfg-content--fit .cfg-constraints-v2-stage,
+#app .cfg-content--fit .cfg-paylines-v2-stage,
+#app .cfg-content--fit .cfg-rules-section-genlimits,
+#app .cfg-content--fit .cfg-rules-section-modes {
+  padding-bottom: 28px;
+}
 
 /* ── 批2-A:文字級距統一(同類型統一 + 全體 +2px)──
    token 四檔 + key/hint 輔級;字族不動(Jakarta+Noto TC;JetBrains Mono 僅 cfg-key/代碼欄) */
