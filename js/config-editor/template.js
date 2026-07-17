@@ -284,13 +284,15 @@
     </button>
   </div>
 
-  <!-- ── 範本管理面板(可折疊)── -->
-  <div v-if="showTemplatePanel" class="cfg-tpl-panel">
-    <div class="cfg-tpl-header">
-      <span class="cfg-tpl-title">📋 設定範本管理</span>
-      <span class="cfg-tpl-hint">把目前所有設定存為快照,可在不同設計案間切換</span>
-      <button class="cfg-tpl-close" @click="showTemplatePanel = false" title="收合面板">✕</button>
-    </div>
+  <!-- ── 範本管理彈窗 ── -->
+  <div v-if="showTemplatePanel" class="cfg-tpl-overlay"
+       @click.self="showTemplatePanel = false">
+    <div class="cfg-tpl-panel" role="dialog" aria-modal="true" aria-label="設定範本管理">
+      <div class="cfg-tpl-header">
+        <span class="cfg-tpl-title">📋 設定範本管理</span>
+        <span class="cfg-tpl-hint">把目前所有設定存為快照,可在不同設計案間切換</span>
+        <button class="cfg-tpl-close" @click="showTemplatePanel = false" title="關閉">✕</button>
+      </div>
 
     <!-- 篩選列(永遠顯示) -->
     <div v-if="templateList.length > 0" class="cfg-tpl-filter-row">
@@ -385,11 +387,12 @@
     </div>
 
     <!-- 從 JSON 匯入 -->
-    <div class="cfg-tpl-import">
-      <label class="btn-pill" title="從本機選擇 JSON 範本檔,加入清單(不會覆蓋目前設定)">
-        ⇧ 從 JSON 匯入範本
-        <input type="file" accept=".json,application/json" @change="onImportTemplate" hidden>
-      </label>
+      <div class="cfg-tpl-import">
+        <label class="btn-pill" title="從本機選擇 JSON 範本檔,加入清單(不會覆蓋目前設定)">
+          ⇧ 從 JSON 匯入範本
+          <input type="file" accept=".json,application/json" @change="onImportTemplate" hidden>
+        </label>
+      </div>
     </div>
   </div>
 
