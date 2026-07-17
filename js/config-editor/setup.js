@@ -11164,7 +11164,7 @@
             shortcutsHelpOpen.value = !shortcutsHelpOpen.value;
           }
         }
-        // 範本面板 Esc：最外層優先；閉合順序由 TemplateUi.resolveTemplateEsc 決定
+        // 範本面板 Esc：巢狀先關，再關範本彈窗；閉合順序由 TemplateUi.resolveTemplateEsc 決定
         if (ev.key === 'Escape' && showTemplatePanel.value) {
           const TU = (window.SlotPlanner && window.SlotPlanner.ConfigEditor
             && window.SlotPlanner.ConfigEditor.TemplateUi) || null;

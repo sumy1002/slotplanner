@@ -1057,7 +1057,7 @@ select:hover:not(.input):not([class*="cfg-"]):not([class*="sim-"]) {
   }
   .cfg-hamburger-bars::before { position: absolute; top: -6px; }
   .cfg-hamburger-bars::after  { position: absolute; top: 6px; }
-  #app .cfg-tpl-panel { max-height: none; }
+  #app .cfg-tpl-panel { max-height: min(82vh, 800px); }
   #app .cfg-tpl-filter-row { flex-wrap: wrap; gap: 6px; }
   #app .cfg-tpl-item { flex-direction: column; align-items: stretch; gap: 8px; }
   #app .cfg-tpl-actions { flex-wrap: wrap; }
