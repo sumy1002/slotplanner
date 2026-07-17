@@ -511,6 +511,20 @@ class JackpotTier:
 
 
 # ============================================================
+# 收集條分段門檻 (MeterTier;G-1;對應 21_Collection_Meters 的 Tiers 欄)
+#   一段 tier = 累積值達 threshold 時,觸發 action(params)。純描述,引擎不消費;
+#   觸發時機由下游模擬工具依此定義實作。action 沿用 on_full_action 同慣例(寬鬆字串,
+#   可填 ActionType 字面值如 SPAWN / BOARD_DESTROY / SWITCH_MODE 或自由文字),
+#   params 為該動作的參數字串(寬鬆;可含冒號,不可含分號——需含分號時整欄改用 JSON 形)。
+# ============================================================
+@dataclass
+class MeterTier:
+    threshold: float = 0.0    # 觸發門檻(累積值達此即觸發;非數字 → 上游 lint 警示、略過)
+    action: str = ""          # 觸發動作(寬鬆字串;ActionType 字面值或自由文字)
+    params: str = ""          # 動作參數(寬鬆字串)
+
+
+# ============================================================
 # 收集條 / 進度條 (MeterDef;架構檢閱 #21;對應 21_Collection_Meters)
 #   拼圖式機制原生描述「單次事件觸發單次動作」(PuzzleRule),但收集條類玩法
 #   (如 Sweet Bonanza 的 Scatter 符號收集、Money Train 的收集計量、任何
@@ -539,6 +553,12 @@ class MeterDef:
     link_jackpot: str = ""        # 集滿連動的彩池(同構 BonusItem.link_jackpot;""=無)
     carry_over: bool = False      # 是否跨模式延續(False=切模式即視同離開此收集條情境)
     notes: str = ""
+    # ── G-1:分段門檻(additive;缺 → 空/0/False = 退回現行單一 capacity + on_full_action)──
+    #   絕對模式:tiers 列出各門檻的反應;比率模式:tier_step>0 時,每 tier_step 個觸發一次
+    #   (每步動作複用 on_full_action),tier_repeat 決定是否每個倍數都觸發。純描述,引擎不消費。
+    tiers: list = None            # list[MeterTier];絕對門檻反應清單(None/[] = 無)
+    tier_step: float = 0.0        # 0/空 = 絕對模式;>0 = 比率型每 N 個觸發一次
+    tier_repeat: bool = False     # 比率型:True=每個 N 都觸發 / False=僅第一個 N 觸發一次
 
 
 # ============================================================
@@ -708,6 +728,12 @@ class ModeGridRange:
     min_rows: int
     max_rows: int
     notes: str = ""
+    # ── G-7/8:動態盤面幾何(additive;0 = 未設,安全降級為現行行為)──
+    #   base_max:基本期列上限(通常＝max_rows;0=沿用 max_rows)。
+    #   feature_max:特色期列上限(可高於基本;0=無特色成長)。White Rabbit 7→12、Cygnus →8。
+    #   純描述,幾何轉變執行歸下游;不改 computeWaysCount / 引擎行為。
+    base_max: int = 0
+    feature_max: int = 0
 
     @property
     def is_variable(self) -> bool:
@@ -817,6 +843,13 @@ class CellAttr:
     #   Sugar Rush 式「格位倍數逐次翻倍,封頂128x」即填 cap_value="128"。
     #   純描述,引擎不消費;封頂判定(MULTIPLY_VALUE 執行到此格時是否還能再翻倍)交下游模擬工具。
     cap_value: str = ""
+    # ── G-2:動態格位狀態層(additive;缺欄 → 空 = 純靜態屬性 = 現行行為,安全降級)──
+    #   純描述狀態語意,執行(倒數 −1 / 擊破 / 累加 / 觸發後動作)歸下游模擬工具;工具不跑狀態機。
+    state_type: str = ""       # MARKER / COVER / COUNTDOWN / COUNTER / ""(空=無狀態=純靜態屬性)
+    state_init: str = ""       # 狀態初值(遮蓋層數 3 / 倒數起始 5…;寬鬆字串,可空)
+    state_trigger: str = ""    # 觸發事件(ON_WIN_OVERLAP=中獎覆蓋此格 / ON_SYMBOL_LANDED / ON_COMBO_STEP / 自由)
+    on_state_action: str = ""  # 觸發/歸零後動作(atype 字面值或自由文字,同 on_full_action 慣例)
+    state_region: str = ""     # 作用範圍(空=錨點格 (reel,row);ALL / R1-R3 / col:2 / "(1,1);(2,2)" …)
 
 
 
@@ -969,6 +1002,19 @@ class ModeConfig:
     #   常見於基本盤與 Bonus 模式連鎖上限不同的設計)。缺欄(舊 A.xlsx)→ False / 0(安全降級)。
     cascade_enabled: bool = False
     cascade_max_depth: int = 0
+    # ── G-7/8 / D1甲:動態盤面幾何轉變(additive;掛 modes 之每模式子清單,同 trigger_pays 範式)。
+    #   缺 02e / 空清單 → 幾何維持 02_Layout/05b 靜態值(現行行為)。純描述,執行歸下游。──
+    geometry_transitions: list["GeometryTransition"] = field(default_factory=list)
+    # ── G-9 / D1甲:符號池動態變更(deck-thinning / 符號值升級;additive;掛每模式子清單,同上範式)。
+    #   缺 11d / 空清單 → 符號集固定(現行行為)。純描述,對接 CONVERT atype,執行歸下游。──
+    symbol_ops: list["SymbolOp"] = field(default_factory=list)
+    # ── G-4 / D1甲:hold-and-win / cash-on-reels 描述欄(additive;掛 modes.v1,消化既有 respin_* 欄)。
+    #   respin 收集回合本體沿用既有 respin_base/respin_reset_on/respin_reset_symbol/respin_stop_cond/
+    #   collect_enabled;此處只補真正缺的描述欄。缺 22_HoldWin → 全空(現行行為)。純描述,執行歸下游。──
+    hw_trigger_symbol: str = ""   # 觸發 / 被收集的符號(金幣符;Money Train coin、Big Bamboo golden bamboo)
+    hw_persist_value: bool = False # 收集格是否攜帶持久值(cash-on-reels 金額常駐)
+    hw_collect_rule: str = ""     # 收集 / 結算規則(自由字串;「填滿全付」「達標升級 jackpot」)
+    hw_link_jackpot: str = ""     # 連結彩池級距(參照 19_Jackpot_Tiers 的 JP_ID / 級距名;下游解析)
 
 
 # ============================================================
@@ -979,6 +1025,48 @@ class TriggerPay:
     scatter_count: int            # 觸發所需 scatter 數
     pay: float = 0.0              # 注額倍數(觸發即付)
     grants_spins: int = 0         # 該觸發給予的免費局數(0 = 不適用 / 沿用模式 spin_count)
+
+
+# ============================================================
+# 動態盤面幾何轉變 (G-7/8,對應 02e_Geometry_Transitions)
+# ============================================================
+@dataclass
+class GeometryTransition:
+    """遊玩中盤面幾何轉變宣告(規格描述;引擎不消費、不執行、不算 RTP)。
+
+    一宣告統包五款(White Rabbit 延展轉軸 / Punk 增輪 / xWays / Pirots / Cygnus):
+    描述「在什麼觸發下、哪個維度、每次變多少、上限、ways 如何重算」。
+    對接既有 GROW_BOARD / EXPAND_REEL atype(觸發時概念上發這些 action,執行歸下游)。
+    掛 ModeConfig.geometry_transitions(每模式子清單);缺 02e / 空 → 幾何靜態(安全降級)。
+    """
+    mode: str                     # 所屬模式(Mode_Scope)
+    dimension: str                # ROW_HEIGHT / REEL_COUNT / GRID_ROWS
+    trigger_source: str = ""      # 觸發符號或事件(自由字串)
+    step: str = ""                # 每次變化量(如 +1;寬鬆字串)
+    cap: str = ""                 # 上限(列數 / 輪數;寬鬆字串)
+    ways_recompute: str = ""      # PRODUCT_OF_ROWS / FIXED / NONE(自由)
+    notes: str = ""
+
+
+# ============================================================
+# 符號池動態變更 (G-9,對應 11d_Mode_Symbol_Ops)
+# ============================================================
+@dataclass
+class SymbolOp:
+    """feature 中符號池動態變更宣告(規格描述;引擎不消費、不執行、不算 RTP)。
+
+    一宣告涵蓋 deck-thinning(移出符號池)與符號值升級(對接 CONVERT atype):
+    描述「什麼操作、選誰(Target)、每次幾個、豁免哪些、何時觸發」。
+    命中 xWays Hoarder(移最低符)/ Drop'em(移掉落池符)/ Pirots(寶石 1→5 升級)。
+    掛 ModeConfig.symbol_ops(每模式子清單);缺 11d / 空 → 符號集固定(安全降級)。
+    """
+    mode: str                     # 所屬模式(Mode_Scope)
+    op: str                       # REMOVE / UPGRADE(自由)
+    target: str = ""              # 選誰:lowest / highest / by_id:H1,H2 / by_color:GEM_RED(自由;下游解析)
+    count: str = ""               # 每次處理幾個(寬鬆字串)
+    immune: str = ""              # 豁免清單(symbol_id 逗號分隔;如 WILD,SCATTER)
+    trigger: str = ""             # 觸發事件 / 符號(自由字串)
+    notes: str = ""
 
 
 # ============================================================

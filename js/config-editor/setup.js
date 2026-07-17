@@ -737,6 +737,7 @@
         adjacent_count:         { label: '相鄰計數', needsSubkey: true, subkeyPrefix: '' },
         cluster_max:            { label: '連通群大小', needsSubkey: true, subkeyPrefix: '' },
         board_symbol_total:     { label: '盤面符號總數' },
+        board_var:              { label: '盤面狀態變數', needsSubkey: true, subkeyPrefix: '' },   // G-2 D4乙
         // v8.26 批7:補齊仍顯示英文的變數中文(只改顯示,英文 key/契約不動)
         //   rightmost_reel_in_win 為既有漏補;其餘四個為批次 2 / G1 價值引擎新增變數。
         rightmost_reel_in_win:  { label: '中獎最右輪' },
@@ -1603,6 +1604,20 @@
         //   cascade_enabled=此模式是否走消除補位迴圈;cascade_max_depth=0 沿用全域 max_chain_depth。
         if (m.cascade_enabled == null) m.cascade_enabled = false;
         if (m.cascade_max_depth == null) m.cascade_max_depth = 0;
+        // ── G-7/8:動態盤面幾何(additive;makeMode 在 helpers 凍結,此處補預設)。
+        //   row_feature_max=特色期列上限(0=無特色成長,05b Feature_Max 空);
+        //   geometry_transitions[]=幾何轉變宣告(掛此模式,同 trigger_pays 範式;空=幾何靜態)。──
+        if (m.row_feature_max == null) m.row_feature_max = 0;
+        if (!Array.isArray(m.geometry_transitions)) m.geometry_transitions = [];
+        // ── G-9:符號池動態變更(additive;makeMode 在 helpers 凍結,此處補預設)。
+        //   symbol_ops[]=deck-thinning / 符號值升級宣告(掛此模式;空=符號集固定)。──
+        if (!Array.isArray(m.symbol_ops)) m.symbol_ops = [];
+        // ── G-4:hold-and-win / cash-on-reels 新欄(additive;makeMode 在 helpers 凍結,此處補預設)。
+        //   respin 收集回合本體沿用既有 respin_*/collect_enabled;此處只補真正缺的描述欄。──
+        if (m.hw_trigger_symbol == null) m.hw_trigger_symbol = '';
+        if (m.hw_persist_value == null) m.hw_persist_value = false;
+        if (m.hw_collect_rule == null) m.hw_collect_rule = '';
+        if (m.hw_link_jackpot == null) m.hw_link_jackpot = '';
       }
       modes.forEach(_ensureModeGameplayFields);
       // v7.10:trigger_pays(scatter-pay 觸發給付)逐列增刪。資料 additive,引擎尚未消費(Stage 3 才執行)。
@@ -1613,6 +1628,42 @@
       function removeTriggerPay(m, idx) {
         if (Array.isArray(m.trigger_pays)) m.trigger_pays.splice(idx, 1);
       }
+      // ── G-7/8:幾何轉變(02e)逐列增刪(掛此模式,同 trigger_pays 範式)。additive,引擎不消費。──
+      function addGeometryTransition(m) {
+        _ensureModeGameplayFields(m);
+        m.geometry_transitions.push({ dimension: 'ROW_HEIGHT', trigger_source: '', step: '',
+                                      cap: '', ways_recompute: 'PRODUCT_OF_ROWS', notes: '' });
+      }
+      function removeGeometryTransition(m, idx) {
+        if (Array.isArray(m.geometry_transitions)) m.geometry_transitions.splice(idx, 1);
+      }
+      // G-7/8 前端下拉選項(D4沿用)
+      const GEOMETRY_DIMENSIONS = [
+        { v: 'ROW_HEIGHT', label: 'ROW_HEIGHT — 每欄列高(xWays/延展轉軸)' },
+        { v: 'REEL_COUNT', label: 'REEL_COUNT — 增輪(Punk 第6輪)' },
+        { v: 'GRID_ROWS',  label: 'GRID_ROWS — 整體列數(Cygnus/Pirots)' },
+      ];
+      const WAYS_RECOMPUTE_OPTIONS = [
+        { v: 'PRODUCT_OF_ROWS', label: 'PRODUCT_OF_ROWS — 各輪列數乘積(Megaways 式)' },
+        { v: 'FIXED',           label: 'FIXED — ways/線數不變' },
+        { v: 'NONE',            label: 'NONE — 非 ways 制' },
+      ];
+      // ── G-9:符號池操作(11d)逐列增刪(掛此模式,同 trigger_pays 範式)。additive,引擎不消費。──
+      function addSymbolOp(m) {
+        _ensureModeGameplayFields(m);
+        m.symbol_ops.push({ op: 'REMOVE', target: 'lowest', count: '1', immune: '', trigger: '', notes: '' });
+      }
+      function removeSymbolOp(m, idx) {
+        if (Array.isArray(m.symbol_ops)) m.symbol_ops.splice(idx, 1);
+      }
+      // G-9 前端下拉 / datalist 選項(D4沿用;Target 為自由字串,datalist 僅提示)
+      const SYMBOL_OP_OPTIONS = [
+        { v: 'REMOVE',  label: 'REMOVE — 移出符號池(deck-thinning)' },
+        { v: 'UPGRADE', label: 'UPGRADE — 符號值升級(對接 CONVERT)' },
+      ];
+      const SYMBOL_TARGET_HINTS = ['lowest', 'highest', 'by_id:', 'by_color:'];
+      // G-4:Link_Jackpot datalist 提示(常見級距名;自由字串,下游解析)
+      const HOLD_WIN_JACKPOT_HINTS = ['GRAND', 'MAJOR', 'MINOR', 'MINI'];
       // reset_scope 下拉選項(空=繼承全域)
       const RESET_SCOPE_OPTIONS = [
         { v: '',         label: '(繼承全域)' },
@@ -1961,8 +2012,7 @@
           lines.push('觸發條件: 關');
         }
         lines.push('已啟用設定: ' + (modeAddDlg.enabled_sections.join(', ') || '（無）'));
-        // ponytail: 在 computed 內 join；勿在 template 寫 join('\n')（Vue compile 會炸）
-        return lines.join('\n');
+        return lines;
       });
 
       function confirmAddModeDlg() {
@@ -2057,7 +2107,7 @@
         const _hasTok = (v) => !!(v && v !== 'ALL' &&
           String(v).split(',').map(x => x.trim()).includes(name));
         try {
-          [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
+          [rules, discards, constraints, genLimits, cellAttrs, jackpots, symbolGroups, reelLinks, meters].forEach(arr => {   // v8.38:+reelLinks;G-1:+meters(R-H1 盤點)
             if (Array.isArray(arr)) arr.forEach(o => { if (_hasTok(o && o.mode_scope)) refs++; });
           });
           // v8.44 / C-2:面板作動模式 csv(欄名 active_modes)一併盤點
@@ -2159,7 +2209,7 @@
           const next = parts.map(p => (p === old ? (changed = true, newName) : p));
           if (changed) o.mode_scope = Array.from(new Set(next)).join(',');
         };
-        [rules, discards, constraints, genLimits, cellAttrs, symbolGroups, reelLinks].forEach(arr => {   // v8.38:+reelLinks
+        [rules, discards, constraints, genLimits, cellAttrs, symbolGroups, reelLinks, meters].forEach(arr => {   // v8.38:+reelLinks;G-1:+meters(R-H1 補)
           if (Array.isArray(arr)) arr.forEach(_renScope);
         });
         // 3b-1b) R-H1 修補:符號(registry)mode_scope 逗號名單一併重寫。
@@ -2564,6 +2614,7 @@
         const badSet = cvMainInvalid.value;
         const pdrag = cvPDragCells.value;
         const fltSet = cvFltSet.value;   // #2 機制篩選高亮集（forward-ref;computed 於 render 才求值）
+        const stateSet = cvStateSet.value;   // G-2:有 State_Type 的錨點格集合(常駐徽章;forward-ref)
         const out = [];
         const COLS = cvCols.value, ROWS = cvRows.value;
         for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -2572,7 +2623,7 @@
           if (mainSet.has(k)) cls = 'main';
           else if (subSet.has(k)) cls = 'sub';
           else if (stageSet.has(k)) cls = 'stage';
-          out.push({ key: k, col: c, row: r, cls, editKind: editMap.get(k) || '', invalid: badSet.has(k), sel: (cls === 'main' && cvSelCols.value.has(c)), cellSel: (cvSelCell.value && cvSelCell.value.key === k), pcellSel: (cls === 'sub' && activePanelIdx.value >= 0 && cvSubOwner.value.get(k) === activePanelIdx.value), dragT: (pdrag && pdrag.keys.has(k)) ? (pdrag.collide ? 'bad' : 'ok') : '', flt: fltSet.has(k) });
+          out.push({ key: k, col: c, row: r, cls, editKind: editMap.get(k) || '', invalid: badSet.has(k), sel: (cls === 'main' && cvSelCols.value.has(c)), cellSel: (cvSelCell.value && cvSelCell.value.key === k), pcellSel: (cls === 'sub' && activePanelIdx.value >= 0 && cvSubOwner.value.get(k) === activePanelIdx.value), dragT: (pdrag && pdrag.keys.has(k)) ? (pdrag.collide ? 'bad' : 'ok') : '', flt: fltSet.has(k), state: stateSet.has(k) });
         }
         return out;
       });
@@ -4536,10 +4587,11 @@
         { v: 'WHEEL', label: '輪盤' },
         { v: 'PICK', label: '點點樂' },
         { v: 'COLLECTION', label: '收集' },
+        { v: 'HOLD_AND_WIN', label: 'Hold & Win' },
         { v: 'OTHER', label: '其他' },
       ];
       const MODE_KIND_LABEL = MK.MODE_KIND_LABEL || {
-        SPIN: 'SPIN', WHEEL: '輪盤', PICK: '點點樂', COLLECTION: '收集', OTHER: '其他',
+        SPIN: 'SPIN', WHEEL: '輪盤', PICK: '點點樂', COLLECTION: '收集', HOLD_AND_WIN: 'Hold & Win', OTHER: '其他',
       };
       function isBonusKind(m) {
         return MK.isBonusKind ? MK.isBonusKind(m)
@@ -5710,11 +5762,21 @@
       //   新 LS key slotplanner.aconfig.cellattrs.v1(已納 aconfig-xlsx 快照/還原兩處);
       //   規格描述,引擎不消費。load/save 內聯(不動 helpers 純函式區,比照 gamble)。
       const CELLATTRS_LS_KEY = 'slotplanner.aconfig.cellattrs.v1';
+      // G-2:cellAttr 正規化(defaults 打底 → 既有欄覆蓋;僅補齊缺欄:cap_value + 5 個動態狀態欄,
+      //   不動任何既有值 → 舊資料零行為變更;新欄成 own property 供 Vue 反應)。
+      function _normCellAttr(c) {
+        c = (c && typeof c === 'object') ? c : {};
+        return Object.assign({
+          attr_id: '', reel: 1, row: 1, attr: 'MULT', value: '', mode_scope: 'ALL', notes: '',
+          cap_value: '',
+          state_type: '', state_init: '', state_trigger: '', on_state_action: '', state_region: '',
+        }, c);
+      }
       function _loadCellAttrs() {
         try {
           const raw = localStorage.getItem(CELLATTRS_LS_KEY);
           const arr = raw ? JSON.parse(raw) : [];
-          return Array.isArray(arr) ? arr : [];
+          return Array.isArray(arr) ? arr.map(_normCellAttr) : [];
         } catch (e) { return []; }
       }
       const cellAttrs = reactive(_loadCellAttrs());
@@ -5793,6 +5855,17 @@
       //   歸零範圍 + 集滿動作,四個欄位講完。純描述,本工具引擎不消費。
       const METERS_LS_KEY = 'slotplanner.aconfig.meters.v1';
       const METER_RESET_SCOPES = ['CASCADE', 'SPIN', 'FEATURE'];
+      // ── G-1:收集條分段門檻(tier)正規化。一段 = {threshold, action, params}。
+      //   純描述;action 沿用 on_full_action 同慣例(ActionType 字面值或自由文字)。
+      function _normMeterTier(t) {
+        t = (t && typeof t === 'object') ? t : {};
+        const th = Number(t.threshold);
+        return {
+          threshold: Number.isFinite(th) ? th : 0,
+          action:    (t.action != null ? String(t.action).trim() : ''),
+          params:    (t.params != null ? String(t.params).trim() : ''),
+        };
+      }
       function _normMeter(m) {
         m = (m && typeof m === 'object') ? m : {};
         return {
@@ -5807,6 +5880,10 @@
           link_jackpot:   (m.link_jackpot != null ? String(m.link_jackpot).trim() : ''),
           carry_over:     !!m.carry_over,
           notes:          (m.notes != null ? String(m.notes) : ''),
+          // ── G-1:分段門檻(additive;缺 → 空/0/False = 退回現行單一 capacity + on_full_action)──
+          tiers:          Array.isArray(m.tiers) ? m.tiers.map(_normMeterTier) : [],
+          tier_step:      Number(m.tier_step) > 0 ? Number(m.tier_step) : 0,
+          tier_repeat:    !!m.tier_repeat,
         };
       }
       function _loadMeters() {
@@ -5831,11 +5908,50 @@
         meters.splice(idx, 1);
         emit('status', { type: 'ok', msg: `已刪除收集條「${id}」` });
       }
+      // ── G-1:分段門檻編輯 ──
+      function addMeterTier(mi) {
+        const m = meters[mi];
+        if (!m) return;
+        if (!Array.isArray(m.tiers)) m.tiers = [];
+        // 預填門檻:比現有最大門檻大一些(方便遞增輸入),否則預設 10
+        const maxTh = m.tiers.reduce((mx, t) => Math.max(mx, Number(t.threshold) || 0), 0);
+        m.tiers.push(_normMeterTier({ threshold: maxTh ? maxTh + 10 : 10, action: '', params: '' }));
+      }
+      function removeMeterTier(mi, ti) {
+        const m = meters[mi];
+        if (!m || !Array.isArray(m.tiers)) return;
+        if (ti < 0 || ti >= m.tiers.length) return;
+        m.tiers.splice(ti, 1);
+      }
+      // 絕對 / 比率型切換:比率型即 tier_step>0(每 N 個觸發 on_full_action)。
+      //   切到比率型 → tier_step 給預設 3;切回絕對 → tier_step 歸 0。
+      function setMeterTierMode(mi, mode) {
+        const m = meters[mi];
+        if (!m) return;
+        if (mode === 'ratio') { if (!(Number(m.tier_step) > 0)) m.tier_step = 3; }
+        else { m.tier_step = 0; m.tier_repeat = false; }
+      }
       // 軟性 lint(警示不阻擋):容量非正數(0 合法 = 無上限純計數,不算警示)+ 填充來源空白
       function meterWarn(m) {
         if (!m) return '';
         if (!String(m.fill_source || '').trim()) return '⚠ 尚未設定填充來源(符號 ID 或條件式)';
         if (Number(m.capacity) < 0) return '⚠ 容量不可為負數';
+        // G-1 tier lint:比率型步進須 > 0(setMeterTierMode 已保證,防手改);
+        //   絕對門檻:門檻應遞增且各段須有動作(純提示,不阻擋)。
+        if (Number(m.tier_step) > 0) {
+          if (!(Number(m.tier_step) > 0)) return '⚠ 比率型每 N 個的 N 需為正數';
+        } else if (Array.isArray(m.tiers) && m.tiers.length) {
+          let prev = -Infinity;
+          for (const t of m.tiers) {
+            const th = Number(t.threshold);
+            if (!Number.isFinite(th)) return '⚠ 有分段門檻非數字';
+            if (th <= prev) return '⚠ 分段門檻建議由小到大遞增';
+            prev = th;
+            if (!String(t.action || '').trim()) return '⚠ 有分段門檻尚未設定動作';
+          }
+          if (Number(m.capacity) > 0 && prev > Number(m.capacity))
+            return '⚠ 最高分段門檻超過容量(該段可能永不觸發)';
+        }
         return '';
       }
       // Board v2 §6 同款複製:插在原列後,ID 另編避免撞號
@@ -5935,12 +6051,28 @@
         { value: 'GOLD',     label: '金框格(GOLD)' },
         { value: 'CUSTOM',   label: '自訂(於備註描述)' },
       ];
+      // ── G-2 / D3甲:動態狀態型別(空=純靜態屬性=現行行為)。命中 Gems 標記/Temple Tumble 遮蓋/
+      //   Hellcatraz 倒數/Tome Eye。純描述,狀態機執行歸下游。 ──
+      const CELL_STATE_OPTIONS = [
+        { value: '',          label: '（無狀態）' },
+        { value: 'MARKER',    label: '標記(MARKER)' },
+        { value: 'COVER',     label: '遮蓋·需擊破(COVER)' },
+        { value: 'COUNTDOWN', label: '倒數·每 spin −1(COUNTDOWN)' },
+        { value: 'COUNTER',   label: '累加(COUNTER)' },
+      ];
+      // D2甲:複用現有觸發 + 新增 ON_WIN_OVERLAP(格級中獎覆蓋);允許自由字串(datalist)。
+      const STATE_TRIGGER_OPTIONS = [
+        { value: 'ON_WIN_OVERLAP',   label: 'ON_WIN_OVERLAP(中獎覆蓋此格)' },
+        { value: 'ON_SYMBOL_LANDED', label: 'ON_SYMBOL_LANDED(符號落此格)' },
+        { value: 'ON_COMBO_STEP',    label: 'ON_COMBO_STEP(連爆步進)' },
+      ];
+      const CELL_STATE_LABEL = Object.fromEntries(CELL_STATE_OPTIONS.filter(o => o.value).map(o => [o.value, o.label]));
       function addCellAttr() {
         const taken = new Set(cellAttrs.map(c => c.attr_id).filter(Boolean));
         let i = cellAttrs.length + 1;
         while (taken.has('CA' + i)) i++;
-        cellAttrs.push({ attr_id: 'CA' + i, reel: 1, row: 1, attr: 'MULT',
-                         value: '', mode_scope: 'ALL', notes: '', cap_value: '' });
+        cellAttrs.push(_normCellAttr({ attr_id: 'CA' + i, reel: 1, row: 1, attr: 'MULT',
+                         value: '', mode_scope: 'ALL', notes: '', cap_value: '' }));
       }
       function removeCellAttr(idx) { cellAttrs.splice(idx, 1); }
 
@@ -5948,19 +6080,27 @@
       //   高亮「精確錨定到格」的來源 = 02d 格子屬性。每型一選項,選取 → 該型 (reel,row) 格加 .flt。
       //   規則類機制（倍數/Scatter/黏著 Wild → 哪些格）暫緩:規則多瞄符號/條件而非固定格,
       //   且規格 §11 本身把「圈格」移到規則編輯器。不呼叫 logic_parser、不物化盤面、無契約變更。
-      const cvMechFilter = ref('');   // '' = 全部（不高亮）;否則 = CELL_ATTR value（MULT/GOLD/…）
+      const cvMechFilter = ref('');   // '' = 全部（不高亮）;否則 = CELL_ATTR value（MULT/GOLD/…）或 'state:XXX'
       const CELL_ATTR_LABEL = Object.fromEntries(CELL_ATTR_OPTIONS.map(o => [o.value, o.label]));
       const cvMechOptions = computed(() => {
         const cnt = {};
         for (const a of cellAttrs) { const t = a.attr || 'MULT'; cnt[t] = (cnt[t] || 0) + 1; }
-        return Object.keys(cnt).map(t => ({ value: t, label: (CELL_ATTR_LABEL[t] || t), count: cnt[t] }));
+        const opts = Object.keys(cnt).map(t => ({ value: t, label: (CELL_ATTR_LABEL[t] || t), count: cnt[t] }));
+        // G-2:動態狀態型別亦可篩選(value 前綴 state: 以與靜態屬性區隔)
+        const scnt = {};
+        for (const a of cellAttrs) { const s = String(a.state_type || '').trim().toUpperCase(); if (s) scnt[s] = (scnt[s] || 0) + 1; }
+        for (const s of Object.keys(scnt)) opts.push({ value: 'state:' + s, label: '狀態·' + (CELL_STATE_LABEL[s] || s), count: scnt[s] });
+        return opts;
       });
       const cvFltSet = computed(() => {
         const s = new Set();
         const f = cvMechFilter.value;
         if (!f) return s;
+        const isState = f.startsWith('state:');
+        const want = isState ? f.slice(6) : f;
         for (const a of cellAttrs) {
-          if ((a.attr || 'MULT') !== f) continue;
+          if (isState) { if (String(a.state_type || '').trim().toUpperCase() !== want) continue; }
+          else if ((a.attr || 'MULT') !== want) continue;
           const reel = Number(a.reel) || 1, row = Number(a.row) || 1;
           s.add((reel - 1) + ',' + (row - 1));   // cvGrid key = "col,row"(0-based;col=reel-1、row=絕對列-1)
         }
@@ -5969,7 +6109,19 @@
       const cvFltInfo = computed(() => {
         const f = cvMechFilter.value;
         if (!f) return null;
-        return { label: (CELL_ATTR_LABEL[f] || f), count: cvFltSet.value.size };
+        const lbl = f.startsWith('state:') ? ('狀態·' + (CELL_STATE_LABEL[f.slice(6)] || f.slice(6)))
+                                           : (CELL_ATTR_LABEL[f] || f);
+        return { label: lbl, count: cvFltSet.value.size };
+      });
+      // G-2 / D3甲:有 State_Type 的錨點格集合(canvas 常駐狀態徽章;與洞格紅標視覺區分)。
+      const cvStateSet = computed(() => {
+        const s = new Set();
+        for (const a of cellAttrs) {
+          if (!String(a.state_type || '').trim()) continue;
+          const reel = Number(a.reel) || 1, row = Number(a.row) || 1;
+          s.add((reel - 1) + ',' + (row - 1));
+        }
+        return s;
       });
 
       // ── P0-3:符號家族(03d_Symbol_Groups)──
@@ -9179,6 +9331,78 @@
             reelLinks.splice(0, reelLinks.length, ...nl);
           }
 
+          // ── 21_Collection_Meters ── G-1(決策 B 補匯入):additive by-name;
+          //   缺 sheet → 保留現有 meters(安全降級,同 04c/tracks)。Tiers 欄雙格式解析
+          //   (JSON / 分號串)與 a_loader._parse_meter_tiers、aconfig-xlsx 序列化逐鍵一致。
+          const ws21 = wb.getWorksheet('21_Collection_Meters');
+          if (ws21) {
+            const C21 = _rowReader(ws21);
+            // 分號串:以 ':' 切最多 3 份(門檻/動作/參數),參數保留其內冒號;段以 ';' 切。
+            //   JSON 形(cell 以 '[' 開頭):[{"threshold":..,"action":"..","params":".."}]。
+            //   門檻非數字 → 略過該段(安全降級;前端 lint 已警示)。空 → []。
+            const _importMeterTiers = (raw) => {
+              const s = asStr(raw).trim();
+              if (!s) return [];
+              const out = [];
+              if (s.startsWith('[')) {
+                let arr;
+                try { arr = JSON.parse(s); } catch (e) { return []; }
+                if (!Array.isArray(arr)) return [];
+                for (const it of arr) {
+                  if (!it || typeof it !== 'object') continue;
+                  const th = Number(it.threshold);
+                  if (!Number.isFinite(th)) continue;
+                  out.push({ threshold: th,
+                             action: (it.action != null ? String(it.action).trim() : ''),
+                             params: (it.params != null ? String(it.params).trim() : '') });
+                }
+                return out;
+              }
+              for (const seg of s.split(';')) {
+                const t = seg.trim();
+                if (!t) continue;
+                const parts = [];
+                let rest = t, ci = rest.indexOf(':');
+                if (ci < 0) { parts.push(rest); }
+                else {
+                  parts.push(rest.slice(0, ci)); rest = rest.slice(ci + 1);
+                  ci = rest.indexOf(':');
+                  if (ci < 0) { parts.push(rest); }
+                  else { parts.push(rest.slice(0, ci)); parts.push(rest.slice(ci + 1)); }
+                }
+                const th = Number(String(parts[0]).trim());
+                if (!Number.isFinite(th)) continue;
+                out.push({ threshold: th,
+                           action: parts.length > 1 ? String(parts[1]).trim() : '',
+                           params: parts.length > 2 ? String(parts[2]).trim() : '' });
+              }
+              return out;
+            };
+            const nm = [];
+            ws21.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mid = asStr(C21(row, 'Meter_ID')).trim();
+              if (!mid) return;
+              nm.push(_normMeter({
+                meter_id: mid,
+                label: asStr(C21(row, 'Label')),
+                mode_scope: asStr(C21(row, 'Mode_Scope')).trim() || 'ALL',
+                fill_source: asStr(C21(row, 'Fill_Source')).trim(),
+                fill_amount: asNum(C21(row, 'Fill_Amount'), 1),
+                capacity: asNum(C21(row, 'Capacity'), 0),
+                reset_scope: asStr(C21(row, 'Reset_Scope')).trim() || 'FEATURE',
+                on_full_action: asStr(C21(row, 'On_Full_Action')).trim(),
+                link_jackpot: asStr(C21(row, 'Link_Jackpot')).trim(),
+                carry_over: asBool(C21(row, 'Carry_Over')),
+                notes: asStr(C21(row, 'Notes')),
+                tiers: _importMeterTiers(C21(row, 'Tiers')),
+                tier_step: asNum(C21(row, 'Tier_Step'), 0),
+                tier_repeat: asBool(C21(row, 'Tier_Repeat')),
+              }));
+            });
+            meters.splice(0, meters.length, ...nm);
+          }
+
           // ── 13_Jackpots ── 14 欄,以 makeJackpot 為基底覆蓋。有分頁 → 以檔案為準覆蓋。
           const ws13 = wb.getWorksheet('13_Jackpots');
           if (ws13) {
@@ -9282,13 +9506,19 @@
               if (idx === 1) return;
               const aid = asStr(C02d(row, 'Attr_ID')).trim();
               if (!aid) return;
-              cas.push({ attr_id: aid, reel: asNum(C02d(row, 'Reel'), 1),
+              cas.push(_normCellAttr({ attr_id: aid, reel: asNum(C02d(row, 'Reel'), 1),
                          row: asNum(C02d(row, 'Row'), 1),
                          attr: asStr(C02d(row, 'Attr')).trim().toUpperCase() || 'MULT',
                          value: asStr(C02d(row, 'Value')).trim(),
                          mode_scope: asStr(C02d(row, 'Mode_Scope')).trim() || 'ALL',
                          notes: asStr(C02d(row, 'Notes')),
-                         cap_value: asStr(C02d(row, 'Cap_Value')).trim() });   // v8.49 缺口4
+                         cap_value: asStr(C02d(row, 'Cap_Value')).trim(),   // v8.49 缺口4
+                         // G-2:動態狀態(舊檔無此 5 欄 → asStr 得 "" = 純靜態屬性,安全降級)
+                         state_type: asStr(C02d(row, 'State_Type')).trim().toUpperCase(),
+                         state_init: asStr(C02d(row, 'State_Init')).trim(),
+                         state_trigger: asStr(C02d(row, 'State_Trigger')).trim(),
+                         on_state_action: asStr(C02d(row, 'On_State_Action')).trim(),
+                         state_region: asStr(C02d(row, 'State_Region')).trim() }));
             });
             cellAttrs.splice(0, cellAttrs.length, ...cas);
           }
@@ -9512,6 +9742,7 @@
                 reel_id: rid,
                 min_rows: asNum(C5b(row, 'Min_Rows'), 0),
                 max_rows: asNum(C5b(row, 'Max_Rows'), 0),
+                feature_max: asNum(C5b(row, 'Feature_Max'), 0),   // G-7/8:特色期列上限(缺欄→0)
               });
             });
             for (const m of modes) {
@@ -9530,6 +9761,82 @@
                 m.row_max = Math.max(...rr.map(x => x.max_rows));
               }
               m.rows_variable = m.row_max > m.row_min || m.reel_ranges.some(x => x.max_rows > x.min_rows);
+              // G-7/8 / D2甲:每模式特色 max(取各列最大;缺欄/0 → 無特色成長)
+              m.row_feature_max = Math.max(0, ...rr.map(x => Number(x.feature_max) || 0));
+            }
+          }
+
+          // ── G-7/8:02e_Geometry_Transitions(additive;舊檔無此 sheet → 跳過,幾何維持靜態)。
+          //    by-name;掛回對應模式的 geometry_transitions(同 11b/11c 匯入範式)。──
+          const ws02e = wb.getWorksheet('02e_Geometry_Transitions');
+          if (ws02e) {
+            const C02e = _rowReader(ws02e);
+            const gtByMode = {};
+            ws02e.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(C02e(row, 'Mode_Scope') || C02e(row, 'Mode')).trim();
+              if (!mode || mode.startsWith('#')) return;
+              const dim = asStr(C02e(row, 'Dimension')).trim().toUpperCase();
+              if (!dim) return;   // 無維度 → 略過
+              (gtByMode[mode] = gtByMode[mode] || []).push({
+                dimension:      dim,
+                trigger_source: asStr(C02e(row, 'Trigger_Source')).trim(),
+                step:           asStr(C02e(row, 'Step')).trim(),
+                cap:            asStr(C02e(row, 'Cap')).trim(),
+                ways_recompute: asStr(C02e(row, 'Ways_Recompute')).trim().toUpperCase(),
+                notes:          asStr(C02e(row, 'Notes')),
+              });
+            });
+            for (const m of modes) {
+              if (gtByMode[m.mode]) m.geometry_transitions = gtByMode[m.mode];
+            }
+          }
+
+          // ── G-9:11d_Mode_Symbol_Ops(additive;舊檔無此 sheet → 跳過,符號集固定)。
+          //    by-name;掛回對應模式的 symbol_ops(同 11b/11c/02e 匯入範式)。──
+          const ws11d = wb.getWorksheet('11d_Mode_Symbol_Ops');
+          if (ws11d) {
+            const C11d = _rowReader(ws11d);
+            const soByMode = {};
+            ws11d.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(C11d(row, 'Mode_Scope') || C11d(row, 'Mode')).trim();
+              if (!mode || mode.startsWith('#')) return;
+              const op = asStr(C11d(row, 'Op')).trim().toUpperCase();
+              if (!op) return;   // 無操作 → 略過
+              (soByMode[mode] = soByMode[mode] || []).push({
+                op:      op,
+                target:  asStr(C11d(row, 'Target')).trim(),
+                count:   asStr(C11d(row, 'Count')).trim(),
+                immune:  asStr(C11d(row, 'Immune')).trim(),
+                trigger: asStr(C11d(row, 'Trigger')).trim(),
+                notes:   asStr(C11d(row, 'Notes')),
+              });
+            });
+            for (const m of modes) {
+              if (soByMode[m.mode]) m.symbol_ops = soByMode[m.mode];
+            }
+          }
+
+          // ── G-4:22_HoldWin(additive;舊檔無此 sheet → 跳過,hw_ 欄維持預設)。
+          //    by-name;一行一模式,設 mode 的 hw_ 欄(respin 本體沿用 11_Mode_Config)。──
+          const ws22 = wb.getWorksheet('22_HoldWin');
+          if (ws22) {
+            const C22 = _rowReader(ws22);
+            const hwByMode = {};
+            ws22.eachRow((row, idx) => {
+              if (idx === 1) return;
+              const mode = asStr(C22(row, 'Mode_Scope') || C22(row, 'Mode')).trim();
+              if (!mode || mode.startsWith('#')) return;
+              hwByMode[mode] = {
+                hw_trigger_symbol: asStr(C22(row, 'Trigger_Symbol')).trim(),
+                hw_persist_value:  asBool(C22(row, 'Persist_Value')),
+                hw_collect_rule:   asStr(C22(row, 'Collect_Rule')).trim(),
+                hw_link_jackpot:   asStr(C22(row, 'Link_Jackpot')).trim(),
+              };
+            });
+            for (const m of modes) {
+              if (hwByMode[m.mode]) Object.assign(m, hwByMode[m.mode]);
             }
           }
 
@@ -12806,6 +13113,7 @@
         // v8.25 / G4:獎池級距
         jackpotCfg, JACKPOT_TRIGGER_OPTIONS, addJackpotTier, removeJackpotTier,
         cellAttrs, CELL_ATTR_OPTIONS, addCellAttr, removeCellAttr,   // v8.8 R4 B-6
+        CELL_STATE_OPTIONS, STATE_TRIGGER_OPTIONS,   // G-2 動態格位狀態層(D2甲/D3甲)
         cvMechFilter, cvMechOptions, cvFltInfo,   // #2 機制篩選（§11;檢視）
         jackpots, addJackpot, addJackpotPreset, removeJackpot, toggleJackpotMode, jackpotHasMode,
         JP_PRESETS, jpGlobalType, setJpGlobalType,
@@ -12820,6 +13128,9 @@
         stripGenLen, stripGenStacked, suggestedStripLen, stripCompare, stripLimitConflicts,
         genStripFromWeights, genAllStripsFromWeights, applyStripToWeights, applyAllStripsToWeights,
         addTriggerPay, removeTriggerPay, RESET_SCOPE_OPTIONS, STACK_MODE_OPTIONS,
+        addGeometryTransition, removeGeometryTransition, GEOMETRY_DIMENSIONS, WAYS_RECOMPUTE_OPTIONS,   // G-7/8
+        addSymbolOp, removeSymbolOp, SYMBOL_OP_OPTIONS, SYMBOL_TARGET_HINTS,   // G-9
+        HOLD_WIN_JACKPOT_HINTS,   // G-4
         // v8.0:legacy bonus 匯出(bonusGames/addBonusGame/bonusesForMode/bonusJpOptions/…/
         //   legacyBonusCount/migrateBonusesToModes)已移除——bonus 併入 mode 玩法種類。
         // v7.14:mode 玩法種類 + mode-owned bonus 獎項
@@ -12863,6 +13174,7 @@
         tracks, addTrack, removeTrack, reverseTrack, trackCellsWarn, trackOptions, isOrphanTrackRef,
         trackPreviewIdx, trackPreview,   // v8.39 GAP-F1+軌道
         meters, addMeter, removeMeter, duplicateMeter, meterWarn, METER_RESET_SCOPES,   // 架構檢閱 #21
+        addMeterTier, removeMeterTier, setMeterTierMode,   // G-1 收集條分段門檻
         addAction, removeAction, moveAction, duplicateAction,
         changeActionAtType, setActionsFromDSL, setActionEditMode,
         buildActionsDSL,

@@ -13147,3 +13147,11 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
 #app .cfg-mode-add-sec-item:hover {
   background: var(--surface-2, #f3f3f3);
 }
+
+/* ── G-2 / D3甲:動態格位狀態層 — canvas 常駐狀態徽章 ──
+   有 State_Type 的錨點格顯示紫色虛線內框(outline 獨立於 border/box-shadow/::before/::after,
+   與機制篩選 flt 的琥珀實框+左上圓點、以及 invalid 洞格紅標視覺明確區分,且可同時並存)。 */
+#app .cfg-cv-cell-state {
+  outline: 2px dashed #8B5CF6;
+  outline-offset: -2px;
+}

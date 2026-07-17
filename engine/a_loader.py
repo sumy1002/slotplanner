@@ -42,13 +42,13 @@ from core.schemas import (
     PuzzleRule, TriggerType,
     DiscardRule, DiscardType,
     ModeConfig, DistributionBin,
-    ResetScope, TriggerPay, MultStackMode,
+    ResetScope, TriggerPay, MultStackMode, GeometryTransition, SymbolOp,
     GenLimit, GenConstraint,
     PayType, WaysDirection,
     ConfigValidationError,
     RTPVariant, GambleConfig, CellAttr,
     JackpotTier,
-    MeterDef,
+    MeterDef, MeterTier,
     ReelLink,
     Track,
     ModeGridRange,
@@ -97,6 +97,9 @@ def load_a_config(path: str | Path) -> AConfig:
     modes = _parse_modes(sheets["11_Mode_Config"])
     _parse_mode_trigger_pays(sheets.get("11b_Mode_TriggerPays"), modes)   # v7.10 additive
     _parse_mode_items(sheets.get("11c_Mode_Items"), modes)                # v7.14 additive
+    _parse_geometry_transitions(sheets.get("02e_Geometry_Transitions"), modes)   # G-7/8 additive
+    _parse_symbol_ops(sheets.get("11d_Mode_Symbol_Ops"), modes)                  # G-9 additive
+    _parse_hold_win(sheets.get("22_HoldWin"), modes)                             # G-4 additive
     # v8.0:舊檔相容 — 若舊 A.xlsx 仍帶 17_Bonus_Games,讀入即遷移成 mode 玩法種類(併入 modes)。
     _migrate_bonus_games_to_modes(sheets.get("17_Bonus_Games"), modes)
     distribution_bins = _parse_distribution_bins(sheets["12_Distribution_Bins"])
@@ -1115,6 +1118,55 @@ def _parse_jackpot_tiers(df) -> tuple[list["JackpotTier"], str]:
     return tiers, trigger
 
 
+def _parse_meter_tiers(raw) -> list["MeterTier"]:
+    """G-1:解析 21_Collection_Meters 的 Tiers 欄(雙格式,與前端匯出/匯入端逐鍵一致)。
+
+    接受兩種形:
+      1) JSON 陣列(cell 去空白後以 '[' 開頭):[{"threshold":7,"action":"SPAWN","params":"..."}, ...]
+      2) 分號串:"門檻:動作:參數; 門檻:動作:參數"
+         每段以 ':' 切「最多 3 份」→ 參數可含 ':' 但不可含 ';'(需含 ';' 時整欄改用 JSON 形)。
+    門檻非數字 → 略過該段(安全降級;前端 lint 已警示,不在此報錯阻擋)。空 → []。
+    """
+    s = _to_str(raw).strip()
+    if not s:
+        return []
+    out: list["MeterTier"] = []
+    if s.startswith("["):
+        try:
+            arr = json.loads(s)
+        except (ValueError, TypeError):
+            return []
+        if not isinstance(arr, list):
+            return []
+        for it in arr:
+            if not isinstance(it, dict):
+                continue
+            try:
+                th = float(it.get("threshold"))
+            except (TypeError, ValueError):
+                continue
+            out.append(MeterTier(
+                threshold=th,
+                action=_to_str(it.get("action")).strip(),
+                params=_to_str(it.get("params")).strip(),
+            ))
+        return out
+    # 分號串形
+    for seg in s.split(";"):
+        seg = seg.strip()
+        if not seg:
+            continue
+        parts = seg.split(":", 2)   # 最多 3 份:門檻 / 動作 / 參數(參數保留其內冒號)
+        try:
+            th = float(parts[0].strip())
+        except (TypeError, ValueError):
+            continue                # 門檻非數字 → 略過該段
+        action = parts[1].strip() if len(parts) > 1 else ""
+        params = parts[2].strip() if len(parts) > 2 else ""
+        out.append(MeterTier(threshold=th, action=action, params=params))
+    return out
+
+
 def _parse_meters(df) -> list["MeterDef"]:
     """架構檢閱 #21:21_Collection_Meters(收集條 / 進度條)。
 
@@ -1145,6 +1197,16 @@ def _parse_meters(df) -> list["MeterDef"]:
             except ValueError:
                 raise ConfigValidationError(
                     sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE 或留空)", row=idx + 2)
+        # ── G-1:分段門檻(additive by-name;缺欄 → 空/0/False = 退回單一 capacity + on_full_action)──
+        tiers = _parse_meter_tiers(r.get("Tiers"))
+        try:
+            tier_step = float(r.get("Tier_Step", 0))
+        except (TypeError, ValueError):
+            tier_step = 0.0
+        # 空 cell 經 pandas → NaN(且 NaN 為 truthy,不能用 `or 0` 兜);非有限或負 → 0(絕對模式)
+        if not math.isfinite(tier_step) or tier_step < 0:
+            tier_step = 0.0
+        tier_repeat = _to_bool(r.get("Tier_Repeat"))
         out.append(MeterDef(
             meter_id=mid,
             label=_to_str(r.get("Label")).strip(),
@@ -1157,6 +1219,9 @@ def _parse_meters(df) -> list["MeterDef"]:
             link_jackpot=_to_str(r.get("Link_Jackpot")).strip(),
             carry_over=_to_bool(r.get("Carry_Over")),
             notes=_to_str(r.get("Notes")).strip(),
+            tiers=tiers,
+            tier_step=tier_step,
+            tier_repeat=tier_repeat,
         ))
     return out
 
@@ -1358,6 +1423,9 @@ def _parse_mode_grid_range(
             out.append(ModeGridRange(
                 mode=mode, reel_id=reel_id,
                 min_rows=mn, max_rows=mx, notes=_to_str(r.get("Notes")),
+                # G-7/8:動態幾何基本/特色列上限(additive;缺欄 → 0 = 未設,安全降級)
+                base_max=max(0, _int_or(r.get("Base_Max"), 0)),
+                feature_max=max(0, _int_or(r.get("Feature_Max"), 0)),
             ))
             seen.add((mode, reel_id))
         # 補齊未列的 mode×reel(推導)
@@ -1629,6 +1697,7 @@ def _parse_gen_constraints(df, symbols: dict) -> list:
 
 
 _VALID_CELL_ATTRS = ("MULT", "ENHANCER", "FRAME", "GOLD", "CUSTOM")   # v8.8 B-6
+_VALID_CELL_STATE_TYPES = ("MARKER", "COVER", "COUNTDOWN", "COUNTER")  # G-2;"" = 無狀態(純靜態屬性)
 
 
 def _parse_cell_attrs(df, layout: LayoutConfig) -> list:
@@ -1674,6 +1743,19 @@ def _parse_cell_attrs(df, layout: LayoutConfig) -> list:
                 _v = str(int(_v_raw))          # Excel 數字格 2 → pandas 2.0 → 還原 '2'
             else:
                 _v = _to_str(_v_raw).strip()
+            # ── G-2:動態格位狀態(additive;缺欄 → "";安全降級為純靜態屬性)──
+            st_raw = _to_str(r.get("State_Type")).strip().upper()
+            if st_raw and st_raw not in _VALID_CELL_STATE_TYPES:
+                raise ConfigValidationError(
+                    sheet,
+                    f"格子屬性 '{aid}' 的 State_Type '{st_raw}' 非合法值"
+                    f"({'/'.join(_VALID_CELL_STATE_TYPES)} 或留空)",
+                    row=idx + 2)
+            _si_raw = r.get("State_Init")
+            if isinstance(_si_raw, float) and not pd.isna(_si_raw) and _si_raw == int(_si_raw):
+                state_init = str(int(_si_raw))    # 數字格 5 → pandas 5.0 → 還原 '5'
+            else:
+                state_init = _to_str(_si_raw).strip()
             out.append(CellAttr(
                 attr_id=str(aid).strip(),
                 reel=reel,
@@ -1684,6 +1766,12 @@ def _parse_cell_attrs(df, layout: LayoutConfig) -> list:
                 notes=_to_str(r.get("Notes")),
                 # v8.49 / 缺口4:格位數值上限(缺欄 → "";安全降級,純描述引擎不消費)
                 cap_value=_to_str(r.get("Cap_Value")).strip(),
+                # G-2:動態格位狀態(缺欄 → "";執行歸下游)
+                state_type=st_raw,
+                state_init=state_init,
+                state_trigger=_to_str(r.get("State_Trigger")).strip(),
+                on_state_action=_to_str(r.get("On_State_Action")).strip(),
+                state_region=_to_str(r.get("State_Region")).strip(),
             ))
         except ConfigValidationError:
             raise
@@ -1815,7 +1903,7 @@ def _parse_discard_rules(df: pd.DataFrame) -> list[DiscardRule]:
 
 
 # v7.14:合法玩法種類(SPIN=旋轉;其餘=bonus 小遊戲)
-_VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION")
+_VALID_MODE_KINDS = ("SPIN", "WHEEL", "PICK", "COLLECTION", "HOLD_AND_WIN")
 _VALID_RESPIN_RESET = ("NEW_SYMBOL", "ANY_WIN", "NEVER")   # v8.5:Respin_Reset_On 合法值(另可留空)
 _VALID_PAY_TYPES = ("LINE", "WAYS", "SCATTER", "CLUSTER")   # v8.7 A-2:Pay_Type_Override 合法值(另可留空=繼承)
 # 架構檢閱 #6:Wild_Behavior 合法值(另可留空 = 標準 Wild,無特殊分類)
@@ -1996,6 +2084,107 @@ def _parse_mode_items(df, modes: dict) -> None:
             ))
         except (ValueError, TypeError) as e:
             raise ConfigValidationError(sheet, f"解析失敗: {e}", row=idx + 2)
+
+
+def _parse_geometry_transitions(df, modes: dict) -> None:
+    """G-7/8:02e_Geometry_Transitions(動態盤面幾何轉變宣告)。
+
+    additive 契約:sheet 不存在(df is None)→ 整段跳過,各 mode.geometry_transitions 維持空
+    (幾何維持 02_Layout/05b 靜態值,現行行為)。一個 mode 多列;依 Mode/Mode_Scope 欄分組塞回
+    對應 ModeConfig.geometry_transitions。引用不存在的 Mode → 報錯(比照 11b/11c)。
+    註解 / 範例列(Mode 以 # 開頭 / 空)略過。Dimension 為必填(空列略過)。
+    純描述,引擎不消費、不執行、不算 RTP(幾何轉變執行歸下游);不改 computeWaysCount。
+    """
+    sheet = "02e_Geometry_Transitions"
+    if df is None:
+        return
+    for idx, r in df.iterrows():
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        if mode_val is None or pd.isna(mode_val):
+            continue
+        mode = str(mode_val).strip()
+        if not mode or mode.startswith("#"):
+            continue   # 註解 / 範例列
+        dim = _to_str(r.get("Dimension")).strip().upper()
+        if not dim:
+            continue   # 無維度 → 空列略過
+        if mode not in modes:
+            raise ConfigValidationError(
+                sheet, f"Mode '{mode}' 未在 11_Mode_Config 定義", row=idx + 2)
+        modes[mode].geometry_transitions.append(GeometryTransition(
+            mode=mode,
+            dimension=dim,
+            trigger_source=_to_str(r.get("Trigger_Source")).strip(),
+            step=_to_str(r.get("Step")).strip(),
+            cap=_to_str(r.get("Cap")).strip(),
+            ways_recompute=_to_str(r.get("Ways_Recompute")).strip().upper(),
+            notes=_to_str(r.get("Notes")),
+        ))
+
+
+def _parse_symbol_ops(df, modes: dict) -> None:
+    """G-9:11d_Mode_Symbol_Ops(符號池動態變更宣告)。
+
+    additive 契約:sheet 不存在(df is None)→ 整段跳過,各 mode.symbol_ops 維持空
+    (符號集固定,現行行為)。一個 mode 多列;依 Mode/Mode_Scope 欄分組塞回對應
+    ModeConfig.symbol_ops。引用不存在的 Mode → 報錯(比照 11b/11c/02e)。
+    註解 / 範例列(Mode 以 # 開頭 / 空)略過;Op 為必填(空列略過)。
+    純描述,引擎不消費、不執行、不算 RTP(移除/升級對接 CONVERT,執行歸下游)。
+    """
+    sheet = "11d_Mode_Symbol_Ops"
+    if df is None:
+        return
+    for idx, r in df.iterrows():
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        if mode_val is None or pd.isna(mode_val):
+            continue
+        mode = str(mode_val).strip()
+        if not mode or mode.startswith("#"):
+            continue   # 註解 / 範例列
+        op = _to_str(r.get("Op")).strip().upper()
+        if not op:
+            continue   # 無操作 → 空列略過
+        if mode not in modes:
+            raise ConfigValidationError(
+                sheet, f"Mode '{mode}' 未在 11_Mode_Config 定義", row=idx + 2)
+        modes[mode].symbol_ops.append(SymbolOp(
+            mode=mode,
+            op=op,
+            target=_to_str(r.get("Target")).strip(),
+            count=_to_str(r.get("Count")).strip(),
+            immune=_to_str(r.get("Immune")).strip(),
+            trigger=_to_str(r.get("Trigger")).strip(),
+            notes=_to_str(r.get("Notes")),
+        ))
+
+
+def _parse_hold_win(df, modes: dict) -> None:
+    """G-4:22_HoldWin(hold-and-win / cash-on-reels 描述)。
+
+    additive 契約:sheet 不存在(df is None)→ 整段跳過,各 mode 的 hw_* 維持預設(空/False)。
+    一行一模式(Mode_Scope 鍵);設 modes[mode] 的 hw_trigger_symbol / hw_persist_value /
+    hw_collect_rule / hw_link_jackpot。respin 收集回合本體沿用 11_Mode_Config 既有欄(此處不動)。
+    引用不存在的 Mode → 報錯(比照 11b/11c/02e/11d)。註解 / 範例列(Mode 以 # 開頭 / 空)略過。
+    純描述,引擎不消費、不執行、不算 RTP(對接 STICKY/PAY/COLLECT,執行歸下游)。
+    """
+    sheet = "22_HoldWin"
+    if df is None:
+        return
+    for idx, r in df.iterrows():
+        mode_val = _col(r, "Mode", "Mode_Scope")
+        if mode_val is None or pd.isna(mode_val):
+            continue
+        mode = str(mode_val).strip()
+        if not mode or mode.startswith("#"):
+            continue   # 註解 / 範例列
+        if mode not in modes:
+            raise ConfigValidationError(
+                sheet, f"Mode '{mode}' 未在 11_Mode_Config 定義", row=idx + 2)
+        m = modes[mode]
+        m.hw_trigger_symbol = _to_str(r.get("Trigger_Symbol")).strip()
+        m.hw_persist_value = _to_bool(r.get("Persist_Value"))
+        m.hw_collect_rule = _to_str(r.get("Collect_Rule")).strip()
+        m.hw_link_jackpot = _to_str(r.get("Link_Jackpot")).strip()
 
 
 def _parse_distribution_bins(df: pd.DataFrame) -> dict[str, DistributionBin]:

@@ -679,6 +679,54 @@
                 <div v-else class="cfg-gg-body">
                   <div class="cfg-hint cfg-gg-cap">各輪列數固定,沿用盤面列數。</div>
                 </div>
+                <!-- ── G-7/8 / W1:特色期列上限(0/空=無特色成長;White Rabbit 12、Cygnus 8)── -->
+                <div class="cfg-gg-feature" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                  <label class="cfg-label" style="font-size:12px;">特色期列上限 <span class="cfg-key">Feature_Max</span></label>
+                  <input class="cfg-gg-num" type="number" min="0" v-model.number="m.row_feature_max" title="特色期可成長到的列上限;0=無特色成長">
+                  <span class="cfg-hint" style="font-size:11px;">0＝無特色成長</span>
+                </div>
+                <!-- ── G-7/8 / W2:動態幾何轉變子卡(遊玩中變欄高/輪數/列數;純描述,執行歸下游)── -->
+                <details class="cfg-gg-geo" style="margin-top:4px;">
+                  <summary style="cursor:pointer; font-size:12px; opacity:.8;">
+                    動態幾何轉變 <span class="cfg-key">02e</span>
+                    <span v-if="(m.geometry_transitions || []).length" class="cfg-key">{{ (m.geometry_transitions || []).length }} 條</span>
+                  </summary>
+                  <div class="cfg-hint" style="font-size:11px; margin:4px 0;">遊玩中盤面尺寸變化(維度／觸發／step／上限／ways 重算)；對接 GROW_BOARD／EXPAND_REEL，執行歸下游。</div>
+                  <div v-for="(t, ti) in m.geometry_transitions" :key="'gt' + ti" class="cfg-bf-row" style="flex-wrap:wrap; margin-bottom:4px;">
+                    <div class="cfg-bf-cell">
+                      <label class="cfg-label">維度</label>
+                      <select class="input input-w-name" v-model="t.dimension">
+                        <option v-for="o in GEOMETRY_DIMENSIONS" :key="o.v" :value="o.v">{{ o.label }}</option>
+                      </select>
+                    </div>
+                    <div class="cfg-bf-cell">
+                      <label class="cfg-label">觸發</label>
+                      <input class="input input-w-id cfg-mono" type="text" v-model.trim="t.trigger_source" placeholder="SCAT / 事件名">
+                    </div>
+                    <div class="cfg-bf-cell">
+                      <label class="cfg-label">step</label>
+                      <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="t.step" placeholder="+1">
+                    </div>
+                    <div class="cfg-bf-cell">
+                      <label class="cfg-label">上限</label>
+                      <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="t.cap" placeholder="12">
+                    </div>
+                    <div class="cfg-bf-cell">
+                      <label class="cfg-label">ways 重算</label>
+                      <select class="input input-w-name" v-model="t.ways_recompute">
+                        <option v-for="o in WAYS_RECOMPUTE_OPTIONS" :key="o.v" :value="o.v">{{ o.label }}</option>
+                      </select>
+                    </div>
+                    <div class="cfg-bf-cell cfg-bf-cell-grow">
+                      <label class="cfg-label">備註</label>
+                      <input class="input input-w-name" type="text" v-model.trim="t.notes" placeholder="延展轉軸 7→12">
+                    </div>
+                    <button class="cfg-mode-delete-btn cfg-bf-del" @click="removeGeometryTransition(m, ti)" title="刪除">✕</button>
+                  </div>
+                  <button class="cfg-mode-add-btn" @click="addGeometryTransition(m)" style="font-size:12px;">
+                    <span style="font-size:14px">+</span><span>新增幾何轉變</span>
+                  </button>
+                </details>
               </div>
             </div>
           </div>
@@ -1242,7 +1290,7 @@
                     <div class="cfg-cv-grid" @pointermove="cvGridMove" :style="{ gridTemplateColumns: 'repeat(' + cvCols + ', ' + cvCell + 'px)', gridTemplateRows: 'repeat(' + cvRows + ', ' + cvCell + 'px)' }">
                       <div v-for="cell in cvGrid" :key="cell.key"
                            class="cfg-cv-cell"
-                           :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', (cvRubberSet && cvRubberSet.has(cell.key)) ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '', cell.sel ? 'cfg-cv-cell-sel' : '', cell.cellSel ? 'cfg-cv-cell-cellsel' : '', cell.pcellSel ? 'cfg-cv-cell-psel' : '', cell.dragT ? ('cfg-cv-cell-drag' + cell.dragT) : '', cell.flt ? 'cfg-cv-cell-flt' : '', (cell.key === cvFocusKey) ? 'cfg-cv-cell-kbfocus' : '' ]"
+                           :class="[ cell.cls ? ('cfg-cv-cell-' + cell.cls) : '', (cvRubberSet && cvRubberSet.has(cell.key)) ? 'cfg-cv-cell-rubber' : '', cell.editKind ? ('cfg-cv-cell-ed-' + cell.editKind) : '', cell.invalid ? 'cfg-cv-cell-invalid' : '', cell.sel ? 'cfg-cv-cell-sel' : '', cell.cellSel ? 'cfg-cv-cell-cellsel' : '', cell.pcellSel ? 'cfg-cv-cell-psel' : '', cell.dragT ? ('cfg-cv-cell-drag' + cell.dragT) : '', cell.flt ? 'cfg-cv-cell-flt' : '', cell.state ? 'cfg-cv-cell-state' : '', (cell.key === cvFocusKey) ? 'cfg-cv-cell-kbfocus' : '' ]"
                            @pointerdown.prevent="cvCellDown(cell, $event)" @dblclick.prevent="cvCellDbl(cell)"></div>
                     </div>
                   </div>
@@ -1328,12 +1376,50 @@
               <label class="cfg-label">備註</label>
               <input class="input input-w-name" type="text" v-model.trim="ca.notes" placeholder="落在此格的贏分 ×2">
             </div>
+            <!-- G-2 / D3甲:動態狀態(摺疊;空 state_type = 純靜態屬性 = 現行行為)。純描述,執行歸下游。 -->
+            <details class="cfg-ca-state cfg-reveal-zone" style="flex-basis:100%; margin-top:4px;">
+              <summary style="cursor:pointer; font-size:12px; opacity:.75;">
+                動態狀態 <span class="cfg-key">G-2</span>
+                <span v-if="ca.state_type" class="cfg-key">{{ ca.state_type }}<span v-if="ca.state_region"> · {{ ca.state_region }}</span></span>
+              </summary>
+              <div class="cfg-bf-row" style="margin-top:6px; flex-wrap:wrap;">
+                <div class="cfg-bf-cell">
+                  <label class="cfg-label">狀態型別</label>
+                  <select class="input input-w-name" v-model="ca.state_type">
+                    <option v-for="o in CELL_STATE_OPTIONS" :key="'cs'+o.value" :value="o.value">{{ o.label }}</option>
+                  </select>
+                </div>
+                <div class="cfg-bf-cell" v-if="ca.state_type">
+                  <label class="cfg-label">初值 <span class="cfg-key">state_init</span></label>
+                  <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="ca.state_init" placeholder="3" title="遮蓋層數 / 倒數起始值等">
+                </div>
+                <div class="cfg-bf-cell" v-if="ca.state_type">
+                  <label class="cfg-label">觸發</label>
+                  <input class="input input-w-name cfg-mono" type="text" list="cellStateTriggers" v-model.trim="ca.state_trigger" placeholder="ON_WIN_OVERLAP" title="中獎覆蓋此格 / 落盤 / 連爆;可自由填">
+                </div>
+                <div class="cfg-bf-cell" v-if="ca.state_type">
+                  <label class="cfg-label">觸發後動作</label>
+                  <input class="input input-w-name cfg-mono" type="text" list="cellStateActions" v-model.trim="ca.on_state_action" placeholder="REVEAL_AS" title="atype 字面值(複用規則動作語彙);執行歸下游">
+                </div>
+                <div class="cfg-bf-cell cfg-bf-cell-grow" v-if="ca.state_type">
+                  <label class="cfg-label">範圍(可選) <span class="cfg-key">state_region</span></label>
+                  <input class="input input-w-name cfg-mono" type="text" v-model.trim="ca.state_region" placeholder="空=此格；ALL / R1-R3 / col:2 / (1,1);(2,2)" title="空=錨點格(此 Reel,列);ALL 或區域字串=廣播">
+                </div>
+              </div>
+            </details>
             <button class="cfg-mode-delete-btn cfg-bf-del cfg-reveal" @click="removeCellAttr(ci)" title="刪除">✕</button>
           </div>
           <button class="cfg-mode-add-btn" @click="addCellAttr">
             <span style="font-size:16px">+</span>
             <span>新增格子屬性</span>
           </button>
+          <!-- G-2:盤面頁專屬 datalist(不跨頁依賴 bet 頁 meterTierActions)。 -->
+          <datalist id="cellStateActions">
+            <option v-for="a in ACTION_CATALOG" :key="'csa'+a.type" :value="a.type">{{ a.label || a.type }}</option>
+          </datalist>
+          <datalist id="cellStateTriggers">
+            <option v-for="o in STATE_TRIGGER_OPTIONS" :key="'cst'+o.value" :value="o.value">{{ o.label }}</option>
+          </datalist>
         </div>
 
         <!-- ── v8.39 / GAP-F1+軌道 Phase 1:軌道(02c_Tracks)── -->
@@ -5232,6 +5318,14 @@
 
           <!-- ── 模式清單(從 11_Mode_Config 整段搬過來;v8.14 #1:對應備註自 UI 移除)── -->
           <div class="cfg-modes-list">
+            <!-- G-9:符號池操作 Target 提示(規則頁專屬 datalist,不跨頁依賴)。 -->
+            <datalist id="symbolOpTargets">
+              <option v-for="h in SYMBOL_TARGET_HINTS" :key="h" :value="h"></option>
+            </datalist>
+            <!-- G-4:Hold&Win 連結彩池提示(規則頁專屬 datalist)。 -->
+            <datalist id="holdWinJackpots">
+              <option v-for="h in HOLD_WIN_JACKPOT_HINTS" :key="h" :value="h"></option>
+            </datalist>
             <div v-for="(m, idx) in modes" :key="modeCardKey(m)" class="cfg-mode-card"
                  :class="{ 'is-duplicate': duplicateNames.has(m.mode) && m.mode,
                            'is-collapsed': !isModeExpanded(m) }">
@@ -5550,6 +5644,46 @@
                       <span style="font-size:14px">+</span> 新增觸發給付
                     </button>
                   </div>
+                  <!-- ── G-9:符號池操作(deck-thinning / 符號值升級;對接 CONVERT,執行歸下游)── -->
+                  <div class="cfg-mode-tp">
+                    <div class="cfg-label" style="margin-bottom:4px;">
+                      符號池操作 <span class="cfg-key">symbol_ops</span>
+                      <span class="cfg-hint" style="margin-left:6px;">feature 中移除符號（deck-thinning）或符號值升級；純描述，執行交下游</span>
+                    </div>
+                    <div v-if="(m.symbol_ops || []).length === 0" class="cfg-hint" style="margin:4px 0;">尚無符號池操作，按下方「+ 新增符號池操作」開始。</div>
+                    <div v-for="(so, si) in m.symbol_ops" :key="'so' + si" class="cfg-mode-tp-row cfg-reveal-zone" style="flex-wrap:wrap;">
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">操作</span>
+                        <select class="input input-w-name" v-model="so.op">
+                          <option v-for="o in SYMBOL_OP_OPTIONS" :key="o.v" :value="o.v">{{ o.label }}</option>
+                        </select>
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">目標</span>
+                        <input class="input input-w-id cfg-mono" type="text" list="symbolOpTargets" v-model.trim="so.target" placeholder="lowest / by_id:H1">
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">數量</span>
+                        <input class="input input-w-num input-center cfg-mono" type="text" v-model.trim="so.count" placeholder="1">
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">豁免</span>
+                        <input class="input input-w-id cfg-mono" type="text" v-model.trim="so.immune" placeholder="WILD,SCATTER">
+                      </div>
+                      <div class="cfg-mode-tp-cell">
+                        <span class="cfg-mode-tp-lbl">觸發</span>
+                        <input class="input input-w-id cfg-mono" type="text" v-model.trim="so.trigger" placeholder="on_win / SCAT">
+                      </div>
+                      <div class="cfg-mode-tp-cell cfg-bf-cell-grow">
+                        <span class="cfg-mode-tp-lbl">備註</span>
+                        <input class="input input-w-name" type="text" v-model.trim="so.notes" placeholder="移除最低符 / 寶石升級">
+                      </div>
+                      <button class="cfg-mode-delete-btn cfg-reveal" @click="removeSymbolOp(m, si)" title="刪除此列">✕</button>
+                    </div>
+                    <button class="cfg-mode-add-btn cfg-bonus-item-add cfg-btn-inline" @click="addSymbolOp(m)">
+                      <span style="font-size:14px">+</span> 新增符號池操作
+                    </button>
+                  </div>
                   </div><!-- /cfg-mode-spin-fields -->
 
                   <!-- v8.5 / R3:玩家擇一 + Hold&Win Respin(所有玩法種類皆適用;規格描述,引擎不消費)-->
@@ -5581,6 +5715,22 @@
                       <input class="input" type="text" style="margin-top:6px;" placeholder="停止條件（自由描述:盤面填滿 / SEVEN 出現…）"
                              v-model.trim="m.respin_stop_cond" :disabled="!(Number(m.respin_base) > 0)">
                       <div class="cfg-hint">符號落地即鎖、respin 計數的 Hold&Win 描述(Money Train / Lucky Wagon);0 = 未啟用。開放式停止條件(Toro「直到某符號出現」)寫在停止條件欄。</div>
+                      <!-- ── G-4:hold-and-win / cash-on-reels 新欄(觸發符 / 持久值 / 收集規則 / 連結彩池)── -->
+                      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                        <span class="cfg-bonus-ilabel">觸發/收集符</span>
+                        <input class="input input-w-id cfg-mono" type="text" v-model.trim="m.hw_trigger_symbol" placeholder="COIN / BAMBOO" title="被鎖/收集的符號(金幣符)">
+                        <label style="display:flex; align-items:center; gap:4px;">
+                          <input type="checkbox" v-model="m.hw_persist_value">
+                          <span class="cfg-bonus-ilabel" style="margin:0;">持久格值</span>
+                        </label>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px;">
+                        <span class="cfg-bonus-ilabel">連結彩池</span>
+                        <input class="input input-w-id cfg-mono" type="text" list="holdWinJackpots" v-model.trim="m.hw_link_jackpot" placeholder="GRAND / MAJOR" title="連結 19_Jackpot_Tiers 的級距;下游解析">
+                      </div>
+                      <input class="input" type="text" style="margin-top:6px;" placeholder="收集/結算規則(自由描述:填滿全付 / 達標升級 jackpot…)"
+                             v-model.trim="m.hw_collect_rule">
+                      <div class="cfg-hint">cash-on-reels / 金幣機描述:持久格值＝金額常駐(Big Bamboo / Cashman Bingo);連結彩池＝收集達標升級級距。純描述,對接 STICKY/PAY/COLLECT,執行交下游。</div>
                     </div>
                     <!-- v8.24 / G5:結構化結束謂詞(生存局 / 條件式結束;與上方自由文字停止條件並存)-->
                     <div class="cfg-field" style="margin-top:8px;">
@@ -6248,7 +6398,7 @@
 
                 <!-- ── 步驟 3：唯讀預覽 ── -->
                 <div v-if="modeAddDlg.step === 3" class="cfg-modedlg-preview">
-                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview }}</pre>
+                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\n') }}</pre>
                 </div>
 
                 <div class="cfg-modedlg-actions">
@@ -7050,7 +7200,10 @@
               <select class="input input-sm" v-model="mt.reset_scope" style="width:110px;" title="歸零範圍">
                 <option v-for="rs in METER_RESET_SCOPES" :key="'mrs'+rs" :value="rs">{{ rs }}</option>
               </select>
-              <input class="input input-sm" type="text" v-model.trim="mt.on_full_action" placeholder="集滿動作(如 AWARD_FREE_SPIN)" style="flex:1; min-width:160px;">
+              <input class="input input-sm" type="text" v-model.trim="mt.on_full_action"
+                     :placeholder="Number(mt.tier_step) > 0 ? '每步動作(如 CONVERT:upgrade)' : '集滿動作(如 AWARD_FREE_SPIN)'"
+                     :title="Number(mt.tier_step) > 0 ? '比率型:每 N 個觸發的動作' : '容量集滿時的終局動作'"
+                     style="flex:1; min-width:160px;">
               <select class="input input-sm" v-model="mt.link_jackpot" style="width:130px;" title="集滿連動的彩池">
                 <option value="">(不連動彩池)</option>
                 <option v-for="j in jackpots" :key="'mtjp'+j.jp_id" :value="j.jp_id">{{ j.jp_id }}{{ j.name ? '·'+j.name : '' }}</option>
@@ -7063,8 +7216,60 @@
               <input class="input input-sm" type="text" v-model="mt.notes" placeholder="備註" style="flex:1; min-width:120px;">
               <button class="btn-pill" @click="duplicateMeter(mi)" title="複製此收集條">⧉ 複製</button>
               <button class="cfg-mode-delete-btn cfg-reveal" @click="removeMeter(mi)" title="刪除此收集條">✕</button>
+              <!-- G-1:分段門檻(絕對) / 比率型升級。純描述;觸發時機交下游。 -->
+              <details class="cfg-meter-tiers" style="width:100%; margin-top:2px;"
+                       :open="(mt.tiers && mt.tiers.length) || Number(mt.tier_step) > 0">
+                <summary style="cursor:pointer; font-size:12px; opacity:.85; user-select:none;">
+                  分段門檻 / 比率升級
+                  <span v-if="Number(mt.tier_step) > 0" class="cfg-key">比率型・每 {{ mt.tier_step }} 個</span>
+                  <span v-else-if="mt.tiers && mt.tiers.length" class="cfg-key">{{ mt.tiers.length }} 段</span>
+                </summary>
+                <div style="padding:6px 0 2px 8px;">
+                  <div class="cfg-gen-subtoggle" style="margin-bottom:6px;">
+                    <button class="cfg-gen-subbtn" :class="{ active: !(Number(mt.tier_step) > 0) }"
+                            @click="setMeterTierMode(mi, 'absolute')">絕對門檻</button>
+                    <button class="cfg-gen-subbtn" :class="{ active: Number(mt.tier_step) > 0 }"
+                            @click="setMeterTierMode(mi, 'ratio')">比率型</button>
+                  </div>
+                  <!-- 絕對門檻 -->
+                  <template v-if="!(Number(mt.tier_step) > 0)">
+                    <div class="cfg-hint" style="margin:2px 0;">累積值達各門檻時觸發對應動作(如 Tome Portal 7/14/27/42)。上方「集滿動作」為容量集滿的終局動作,與此並存。</div>
+                    <div v-for="(tr, ti) in mt.tiers" :key="'mt'+mi+'t'+ti" class="cfg-field cfg-field-compact"
+                         style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:3px 0;">
+                      <span class="cfg-bonus-icell">
+                        <span class="cfg-bonus-ilabel">門檻</span>
+                        <input class="input input-w-num input-center" type="number" min="0" step="any" v-model.number="tr.threshold" style="width:64px;">
+                      </span>
+                      <input class="input input-sm cfg-mono" type="text" list="meterTierActions" v-model.trim="tr.action" placeholder="動作(如 SPAWN)" style="width:160px;" title="ActionType 字面值或自由文字">
+                      <input class="input input-sm" type="text" v-model.trim="tr.params" placeholder="參數(如 special_wild x2)" style="flex:1; min-width:150px;" title="動作參數(可含冒號;需含分號時整體改 JSON 匯出)">
+                      <button class="cfg-mode-delete-btn" @click="removeMeterTier(mi, ti)" title="刪除此分段">✕</button>
+                    </div>
+                    <button class="btn-pill" @click="addMeterTier(mi)" title="新增一段門檻"><span style="font-size:14px">+</span> 分段門檻</button>
+                  </template>
+                  <!-- 比率型 -->
+                  <template v-else>
+                    <div class="cfg-hint" style="margin:2px 0;">每累積 N 個觸發一次上方「每步動作」(如 xWays Hoarder 每 3 升級)。</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                      <span class="cfg-bonus-icell">
+                        <span class="cfg-bonus-ilabel">每</span>
+                        <input class="input input-w-num input-center" type="number" min="1" step="1" v-model.number="mt.tier_step" style="width:64px;">
+                        <span class="cfg-bonus-ilabel">個觸發</span>
+                      </span>
+                      <label class="chk" title="是否每個倍數都觸發(否=僅第一個 N 觸發一次)">
+                        <input type="checkbox" v-model="mt.tier_repeat">
+                        <span class="box"></span>
+                        <span>可重複(每個倍數都觸發)</span>
+                      </label>
+                    </div>
+                  </template>
+                </div>
+              </details>
               <div v-if="meterWarn(mt)" class="cfg-warn cfg-warn-inline" style="width:100%;">{{ meterWarn(mt) }}</div>
             </div>
+            <!-- G-1:tier 動作建議清單(單一,置於 v-for 外避免重複 id;隨 ACTION_CATALOG 自動更新) -->
+            <datalist id="meterTierActions">
+              <option v-for="a in ACTION_CATALOG" :key="'mta'+a.type" :value="a.type">{{ a.label }}</option>
+            </datalist>
             <button class="cfg-mode-add-btn" @click="addMeter">
               <span style="font-size:16px">+</span>
               <span>新增收集條</span>

@@ -336,6 +336,7 @@
     const discards    = _readLS('slotplanner.aconfig.discards.v1', []);
     const reelStrips  = _readLS('slotplanner.aconfig.reelstrips.v1', {});
     const gridWeights = _readLS('slotplanner.aconfig.gridweights.v1', {});
+    const meters      = _readLS('slotplanner.aconfig.meters.v1', []);       // G-1:收集條(唯讀;含分段門檻)
 
     const allSyms = Array.isArray(registryRaw.symbols) ? registryRaw.symbols : [];
     const syms = allSyms.filter(s => s.enabled !== false);
@@ -392,6 +393,7 @@
       discards: Array.isArray(discards) ? discards : [],
       reelStrips: (reelStrips && typeof reelStrips === 'object') ? reelStrips : {},
       gridWeights: (gridWeights && typeof gridWeights === 'object') ? gridWeights : {},
+      meters: Array.isArray(meters) ? meters : [],   // G-1:收集條(含分段門檻)
       derived: {
         gridStr,
         waysCount,
@@ -485,7 +487,7 @@
   }
 
   // v7.14:mode 玩法種類。SPIN=旋轉;WHEEL/PICK/COLLECTION=bonus 小遊戲。
-  const _MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集' };
+  const _MODE_KIND_LABEL = { SPIN: '旋轉', WHEEL: '輪盤', PICK: '選獎', COLLECTION: '收集', HOLD_AND_WIN: 'Hold & Win' };
   function _isModeBonus(md) { return !!(md && md.mode_kind && String(md.mode_kind).toUpperCase() !== 'SPIN'); }
   function _modeKindDesc(md) {
     const k = String((md && md.mode_kind) || 'SPIN').toUpperCase();
@@ -1144,6 +1146,28 @@
       });
     }
 
+    // ── G-2:格位狀態(動態)——僅列有 State_Type 的格;set 守衛保既有格子屬性表零 diff。 ──
+    if (Array.isArray(cfg.cellAttrs) && cfg.cellAttrs.some(ca => ca && String(ca.state_type || '').trim())) {
+      const _stl = { MARKER: '標記', COVER: '遮蓋(需擊破)', COUNTDOWN: '倒數(每spin−1)', COUNTER: '累加' };
+      XR++;
+      xBand('格位狀態（動態）');
+      ['格', '狀態', '初值', '觸發', '觸發後動作', '範圍', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+      XR++;
+      cfg.cellAttrs.forEach(ca => {
+        if (!ca || !String(ca.state_type || '').trim()) return;
+        const st = String(ca.state_type).toUpperCase();
+        const anchor = `(R${Number(ca.reel) || '?'}, ${Number(ca.row) || '?'})`;
+        _cell(wsX, XR, 1, anchor, { h: 'center' });
+        _cell(wsX, XR, 2, _stl[st] || st, { h: 'center' });
+        _cell(wsX, XR, 3, (ca.state_init || '').trim() || '—', { h: 'center' });
+        _cell(wsX, XR, 4, (ca.state_trigger || '').trim() || '—', { h: 'center' });
+        _cell(wsX, XR, 5, (ca.on_state_action || '').trim() || '—', { h: 'center' });
+        _cell(wsX, XR, 6, (ca.state_region || '').trim() || anchor, { h: 'center' });
+        _cell(wsX, XR, 7, ca.notes || '');
+        XR++;
+      });
+    }
+
     // v7.11:產牌限制 / 生成期約束(有資料才建表)
     if (Array.isArray(cfg.genLimits) && cfg.genLimits.length) {
       const _zl = (z) => {
@@ -1170,6 +1194,140 @@
         _cell(wsX, XR, 7, gl.notes || '');
         XR++;
       });
+    }
+
+    // ── G-1:收集條 / 進度條(有 meters 才建表;無 → 零 diff)。純描述,交下游模擬工具。──
+    if (Array.isArray(cfg.meters) && cfg.meters.filter(mt => mt && mt.meter_id).length) {
+      const _mts = cfg.meters.filter(mt => mt && mt.meter_id);
+      const _tiersOf = (mt) => (Array.isArray(mt.tiers) ? mt.tiers : [])
+        .filter(t => t && Number.isFinite(Number(t.threshold)));
+      XR++;
+      xBand('收集條 / 進度條');
+      ['收集條', '名稱', '適用模式', '填充來源', '每次+', '容量', '歸零', '集滿/每步動作', '連動彩池', '跨模式', '分段', '備註']
+        .forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+      XR++;
+      _mts.forEach(mt => {
+        const isRatio = Number(mt.tier_step) > 0;
+        const tierArr = _tiersOf(mt);
+        const cap = (Number(mt.capacity) > 0) ? mt.capacity : '無上限';
+        let seg = '—';
+        if (isRatio)             seg = `比率·每 ${mt.tier_step}${mt.tier_repeat ? '（可重複）' : '（僅首次）'}`;
+        else if (tierArr.length) seg = `絕對 ${tierArr.length} 段`;
+        _cell(wsX, XR, 1, mt.meter_id, { h: 'center' });
+        _cell(wsX, XR, 2, mt.label || '—');
+        _cell(wsX, XR, 3, (mt.mode_scope && mt.mode_scope !== 'ALL') ? mt.mode_scope : '全部', { h: 'center' });
+        _cell(wsX, XR, 4, mt.fill_source || '—');
+        _cell(wsX, XR, 5, mt.fill_amount, { h: 'center' });
+        _cell(wsX, XR, 6, cap, { h: 'center' });
+        _cell(wsX, XR, 7, mt.reset_scope || 'FEATURE', { h: 'center' });
+        _cell(wsX, XR, 8, mt.on_full_action || '—');
+        _cell(wsX, XR, 9, mt.link_jackpot || '—', { h: 'center' });
+        _cell(wsX, XR, 10, mt.carry_over ? '是' : '否', { h: 'center' });
+        _cell(wsX, XR, 11, seg, { h: 'center' });
+        _cell(wsX, XR, 12, mt.notes || '');
+        XR++;
+      });
+      // 絕對門檻明細(逐收集條;比率型已於上表「分段」欄描述)
+      _mts.forEach(mt => {
+        if (Number(mt.tier_step) > 0) return;
+        const tierArr = _tiersOf(mt);
+        if (!tierArr.length) return;
+        const sorted = [...tierArr].sort((a, b) => Number(a.threshold) - Number(b.threshold));
+        XR++;
+        xBand(`${mt.meter_id}${mt.label ? '（' + mt.label + '）' : ''} 分段門檻`);
+        ['門檻', '動作', '參數'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+        XR++;
+        sorted.forEach(t => {
+          _cell(wsX, XR, 1, t.threshold, { h: 'center' });
+          _cell(wsX, XR, 2, t.action || '—', { h: 'center' });
+          _cell(wsX, XR, 3, t.params || '');
+          XR++;
+        });
+      });
+    }
+
+    // ── G-7/8:動態盤面幾何(有 row_feature_max 或 geometry_transitions 才建表;set 守衛保零 diff)。──
+    {
+      const _featModes = (cfg.modes || []).filter(md => md && Number(md.row_feature_max) > 0);
+      const _geoModes = (cfg.modes || []).filter(md => md && Array.isArray(md.geometry_transitions)
+        && md.geometry_transitions.some(t => t && String(t.dimension || '').trim()));
+      if (_featModes.length || _geoModes.length) {
+        const _dz = { ROW_HEIGHT: '每欄列高', REEL_COUNT: '輪數', GRID_ROWS: '整體列數' };
+        XR++;
+        xBand('動態盤面幾何');
+        if (_featModes.length) {
+          _cell(wsX, XR, 1, '特色期列上限', { bold: true, bg: C.th, fg: C.thFg, h: 'center' });
+          _cell(wsX, XR, 2, _featModes.map(md => `${md.mode}→${Number(md.row_feature_max)}`).join('、'));
+          XR++;
+        }
+        if (_geoModes.length) {
+          ['模式', '維度', '觸發', '每次', '上限', 'ways重算', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+          XR++;
+          _geoModes.forEach(md => {
+            md.geometry_transitions.forEach(t => {
+              if (!t || !String(t.dimension || '').trim()) return;
+              const dim = String(t.dimension).toUpperCase();
+              _cell(wsX, XR, 1, md.mode, { h: 'center' });
+              _cell(wsX, XR, 2, _dz[dim] || dim, { h: 'center' });
+              _cell(wsX, XR, 3, (t.trigger_source || '').trim() || '—', { h: 'center' });
+              _cell(wsX, XR, 4, (t.step || '').trim() || '—', { h: 'center' });
+              _cell(wsX, XR, 5, (t.cap || '').trim() || '—', { h: 'center' });
+              _cell(wsX, XR, 6, (t.ways_recompute || '').trim() || '—', { h: 'center' });
+              _cell(wsX, XR, 7, t.notes || '');
+              XR++;
+            });
+          });
+        }
+      }
+    }
+
+    // ── G-9:符號池動態變更(有 symbol_ops 才建表;set 守衛保零 diff)。──
+    {
+      const _soModes = (cfg.modes || []).filter(md => md && Array.isArray(md.symbol_ops)
+        && md.symbol_ops.some(o => o && String(o.op || '').trim()));
+      if (_soModes.length) {
+        const _oz = { REMOVE: '移除', UPGRADE: '升級' };
+        XR++;
+        xBand('符號池動態變更');
+        ['模式', '操作', '目標', '數量', '豁免', '觸發', '備註'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+        XR++;
+        _soModes.forEach(md => {
+          md.symbol_ops.forEach(o => {
+            if (!o || !String(o.op || '').trim()) return;
+            const op = String(o.op).toUpperCase();
+            _cell(wsX, XR, 1, md.mode, { h: 'center' });
+            _cell(wsX, XR, 2, _oz[op] || op, { h: 'center' });
+            _cell(wsX, XR, 3, (o.target || '').trim() || '—', { h: 'center' });
+            _cell(wsX, XR, 4, (o.count || '').trim() || '—', { h: 'center' });
+            _cell(wsX, XR, 5, (o.immune || '').trim() || '—', { h: 'center' });
+            _cell(wsX, XR, 6, (o.trigger || '').trim() || '—', { h: 'center' });
+            _cell(wsX, XR, 7, o.notes || '');
+            XR++;
+          });
+        });
+      }
+    }
+
+    // ── G-4:Hold & Win / 金幣收集(有 hold-win 新欄 或 kind=HOLD_AND_WIN 才建表;set 守衛保零 diff)。──
+    {
+      const _hwModes = (cfg.modes || []).filter(md => md && (
+        String(md.mode_kind || '').toUpperCase() === 'HOLD_AND_WIN' ||
+        String(md.hw_trigger_symbol || '').trim() || md.hw_persist_value === true ||
+        String(md.hw_collect_rule || '').trim() || String(md.hw_link_jackpot || '').trim()));
+      if (_hwModes.length) {
+        XR++;
+        xBand('Hold & Win / 金幣收集');
+        ['模式', '觸發/收集符', '持久格值', '收集規則', '連結彩池'].forEach((h, i) => _cell(wsX, XR, i + 1, h, { bold: true, bg: C.th, fg: C.thFg, h: 'center' }));
+        XR++;
+        _hwModes.forEach(md => {
+          _cell(wsX, XR, 1, md.mode, { h: 'center' });
+          _cell(wsX, XR, 2, (md.hw_trigger_symbol || '').trim() || '—', { h: 'center' });
+          _cell(wsX, XR, 3, md.hw_persist_value ? '是' : '否', { h: 'center' });
+          _cell(wsX, XR, 4, (md.hw_collect_rule || '').trim() || '—');
+          _cell(wsX, XR, 5, (md.hw_link_jackpot || '').trim() || '—', { h: 'center' });
+          XR++;
+        });
+      }
     }
 
     // ── Sheet 5：數值機制（v5.6:投注結構 / 倍數系統 / 金幣面額）──
@@ -2240,6 +2398,90 @@
       if (bc.ante_bet_enabled) buyItems.push(`加押:成本 ×${Number(bc.ante_bet_mult) || 0} 注額，觸發倍率 ×${Number(bc.ante_bet_trigger_mult) || 0}。${bc.ante_bet_desc || ''}`);
       if (bc.buy_feature_enabled && Array.isArray(bc.buy_features)) bc.buy_features.forEach(f => buyItems.push(`購買 ${f.bf_id || ''}:進入 ${f.target_mode || '—'}，成本 ×${Number(f.cost_mult) || 0} 注額。`));
       section('加押 / 購買說明', buyItems);
+      // ── G-1:收集條說明(有 meters 才出;section() 對空 items 自動略過 → 零 diff)。
+      //   翻譯導向句子,結構化明細見 SlotPlanner 企劃書「機制備註」與規格書 markdown。
+      const meterItems = [];
+      (Array.isArray(cfg.meters) ? cfg.meters : []).forEach(mt => {
+        if (!mt || !String(mt.meter_id || '').trim()) return;
+        const nm = String(mt.label || mt.meter_id).trim();
+        const tierArr = (Array.isArray(mt.tiers) ? mt.tiers : [])
+          .filter(t => t && Number.isFinite(Number(t.threshold)));
+        if (Number(mt.tier_step) > 0) {
+          meterItems.push(`收集條「${nm}」：每累積 ${mt.tier_step} 個觸發一次${mt.on_full_action || '對應反應'}${mt.tier_repeat ? '（每個倍數皆觸發）' : '（僅首次觸發）'}。`);
+        } else if (tierArr.length) {
+          const sorted = [...tierArr].sort((a, b) => Number(a.threshold) - Number(b.threshold));
+          const parts = sorted.map(t => `${t.threshold}→${t.action || '?'}${t.params ? '（' + t.params + '）' : ''}`).join('、');
+          meterItems.push(`收集條「${nm}」：累積達 ${parts}。`);
+        } else {
+          const capTxt = Number(mt.capacity) > 0 ? `容量 ${mt.capacity}` : '無上限累積';
+          meterItems.push(`收集條「${nm}」：${capTxt}${mt.on_full_action ? `，集滿觸發 ${mt.on_full_action}` : ''}。`);
+        }
+      });
+      section('收集條說明', meterItems);
+      // ── G-2:格位狀態說明(有 State_Type 才出;section() 空 items 自動略過 → 零 diff)。
+      //   翻譯導向句子;結構化明細見 SlotPlanner 企劃書「格位狀態(動態)」與規格書 markdown。
+      const stateItems = [];
+      const _stZh = { MARKER: '標記', COVER: '遮蓋（需擊破）', COUNTDOWN: '倒數（每次轉動 −1）', COUNTER: '累加' };
+      (Array.isArray(cfg.cellAttrs) ? cfg.cellAttrs : []).forEach(ca => {
+        const st = String((ca && ca.state_type) || '').trim().toUpperCase();
+        if (!st) return;
+        const where = (ca.state_region || '').trim() || `第 ${Number(ca.reel) || '?'} 輪第 ${Number(ca.row) || '?'} 列`;
+        const initTxt = (ca.state_init || '').trim() ? `，初值 ${String(ca.state_init).trim()}` : '';
+        const actTxt = (ca.on_state_action || '').trim() ? `，觸發後 ${String(ca.on_state_action).trim()}` : '';
+        stateItems.push(`格位狀態（${where}）：${_stZh[st] || st}${initTxt}${actTxt}。`);
+      });
+      section('格位狀態說明', stateItems);
+      // ── G-7/8:動態幾何說明(有 row_feature_max 或 geometry_transitions 才出;section() 空 items 自動略過 → 零 diff)。
+      //   翻譯導向句子;結構化明細見 SlotPlanner 企劃書「動態盤面幾何」與規格書 markdown。
+      const geoItems = [];
+      const _dzc = { ROW_HEIGHT: '每欄列高', REEL_COUNT: '輪數', GRID_ROWS: '整體列數' };
+      (Array.isArray(cfg.modes) ? cfg.modes : []).forEach(md => {
+        if (md && Number(md.row_feature_max) > 0) {
+          geoItems.push(`${md.mode} 特色期盤面可成長至 ${Number(md.row_feature_max)} 列。`);
+        }
+        (Array.isArray(md && md.geometry_transitions) ? md.geometry_transitions : []).forEach(t => {
+          const dim = String((t && t.dimension) || '').trim().toUpperCase();
+          if (!dim) return;
+          const trig = (t.trigger_source || '').trim() ? `由 ${String(t.trigger_source).trim()} 觸發` : '觸發時';
+          const step = (t.step || '').trim() ? `每次 ${String(t.step).trim()}` : '';
+          const cap = (t.cap || '').trim() ? `上限 ${String(t.cap).trim()}` : '';
+          const tail = [step, cap].filter(Boolean).join('、');
+          geoItems.push(`${md.mode}：${trig}，${_dzc[dim] || dim}動態變化${tail ? '（' + tail + '）' : ''}。`);
+        });
+      });
+      section('動態幾何說明', geoItems);
+      // ── G-9:符號池動態說明(有 symbol_ops 才出;section() 空 items 自動略過 → 零 diff)。──
+      const soItems = [];
+      const _ozc = { REMOVE: '移出符號池', UPGRADE: '進行符號值升級' };
+      (Array.isArray(cfg.modes) ? cfg.modes : []).forEach(md => {
+        (Array.isArray(md && md.symbol_ops) ? md.symbol_ops : []).forEach(o => {
+          const op = String((o && o.op) || '').trim().toUpperCase();
+          if (!op) return;
+          const tgt = (o.target || '').trim() ? `目標 ${String(o.target).trim()}` : '';
+          const cnt = (o.count || '').trim() ? `每次 ${String(o.count).trim()} 個` : '';
+          const imm = (o.immune || '').trim() ? `豁免 ${String(o.immune).trim()}` : '';
+          const tail = [tgt, cnt, imm].filter(Boolean).join('、');
+          soItems.push(`${md.mode}：${_ozc[op] || op}${tail ? '（' + tail + '）' : ''}。`);
+        });
+      });
+      section('符號池動態說明', soItems);
+      // ── G-4:Hold & Win 說明(有 hold-win 新欄 或 kind=HOLD_AND_WIN 才出;section() 空 items 自動略過)。──
+      const hwItems = [];
+      (Array.isArray(cfg.modes) ? cfg.modes : []).forEach(md => {
+        if (!md) return;
+        const isHW = String(md.mode_kind || '').toUpperCase() === 'HOLD_AND_WIN';
+        const trig = (md.hw_trigger_symbol || '').trim();
+        const rule = (md.hw_collect_rule || '').trim();
+        const jp = (md.hw_link_jackpot || '').trim();
+        if (!isHW && !trig && !md.hw_persist_value && !rule && !jp) return;
+        const parts = [];
+        if (trig) parts.push(`收集符 ${trig}`);
+        if (md.hw_persist_value) parts.push('格值常駐');
+        if (rule) parts.push(`收集規則「${rule}」`);
+        if (jp) parts.push(`連結彩池 ${jp}`);
+        hwItems.push(`${md.mode}：Hold & Win / 金幣收集玩法${parts.length ? '（' + parts.join('、') + '）' : ''}。`);
+      });
+      section('Hold & Win 說明', hwItems);
     }
 
     // ══════════ 9. 演繹流程(留白分鏡頁) ══════════
@@ -2434,6 +2676,87 @@
         }
       }
       L.push('');
+    }
+
+    // ── G-7/8:動態盤面幾何(有 row_feature_max 或 geometry_transitions 才輸出;set 守衛保零 diff)。
+    //   純描述,幾何轉變執行(長盤 / ways 重算)歸下游;不改 computeWaysCount。──
+    {
+      const _featModes = (cfg.modes || []).filter(md => md && Number(md.row_feature_max) > 0);
+      const _geoModes = (cfg.modes || []).filter(md => md && Array.isArray(md.geometry_transitions)
+        && md.geometry_transitions.some(t => t && String(t.dimension || '').trim()));
+      if (_featModes.length || _geoModes.length) {
+        L.push('## 動態盤面幾何');
+        L.push('');
+        if (_featModes.length) {
+          L.push('- 特色期列上限：' + _featModes.map(md => `${md.mode} → ${Number(md.row_feature_max)} 列`).join('；') + '。基本期沿用 05b／盤面列數；特色期可成長至此上限（White Rabbit 延展轉軸、Cygnus 擴列）。');
+          L.push('');
+        }
+        if (_geoModes.length) {
+          const _dimZh = { ROW_HEIGHT: '每欄列高', REEL_COUNT: '輪數', GRID_ROWS: '整體列數' };
+          L.push('| 模式 | 維度 | 觸發 | 每次 | 上限 | ways 重算 | 備註 |');
+          L.push('| --- | --- | --- | --- | --- | --- | --- |');
+          _geoModes.forEach(md => {
+            md.geometry_transitions.forEach(t => {
+              if (!t || !String(t.dimension || '').trim()) return;
+              const dim = String(t.dimension).toUpperCase();
+              L.push(`| ${_mdCell(md.mode)} | ${_mdCell(_dimZh[dim] || dim)} | ${_mdCell((t.trigger_source || '').trim() || '—')} | ` +
+                     `${_mdCell((t.step || '').trim() || '—')} | ${_mdCell((t.cap || '').trim() || '—')} | ` +
+                     `${_mdCell((t.ways_recompute || '').trim() || '—')} | ${_mdCell(t.notes || '')} |`);
+            });
+          });
+          L.push('');
+        }
+        L.push('> 動態盤面幾何為遊玩中的尺寸轉變宣告（維度／觸發／step／上限／ways 重算）；轉變執行與 ways 重算由下游模擬工具實作，本工具不執行、不計算 RTP。');
+        L.push('');
+      }
+    }
+
+    // ── G-9:符號池動態變更(有 symbol_ops 才輸出;set 守衛保零 diff)。──
+    {
+      const _soModes = (cfg.modes || []).filter(md => md && Array.isArray(md.symbol_ops)
+        && md.symbol_ops.some(o => o && String(o.op || '').trim()));
+      if (_soModes.length) {
+        const _opZh = { REMOVE: '移除（deck-thinning）', UPGRADE: '升級' };
+        L.push('## 符號池動態變更');
+        L.push('');
+        L.push('| 模式 | 操作 | 目標 | 數量 | 豁免 | 觸發 | 備註 |');
+        L.push('| --- | --- | --- | --- | --- | --- | --- |');
+        _soModes.forEach(md => {
+          md.symbol_ops.forEach(o => {
+            if (!o || !String(o.op || '').trim()) return;
+            const op = String(o.op).toUpperCase();
+            L.push(`| ${_mdCell(md.mode)} | ${_mdCell(_opZh[op] || op)} | ${_mdCell((o.target || '').trim() || '—')} | ` +
+                   `${_mdCell((o.count || '').trim() || '—')} | ${_mdCell((o.immune || '').trim() || '—')} | ` +
+                   `${_mdCell((o.trigger || '').trim() || '—')} | ${_mdCell(o.notes || '')} |`);
+          });
+        });
+        L.push('');
+        L.push('> 符號池動態變更為 feature 中的符號集縮減 / 符號值升級宣告；實際移除 / 升級對接 `CONVERT`，由下游模擬工具實作，本工具不執行、不計算 RTP。');
+        L.push('');
+      }
+    }
+
+    // ── G-4:Hold & Win / 金幣收集(有 hold-win 新欄 或 kind=HOLD_AND_WIN 才輸出;set 守衛保零 diff)。
+    //   respin 本體見「各模式玩法設定」的 Hold&Win Respin 欄;此處為金幣收集描述。──
+    {
+      const _hwModes = (cfg.modes || []).filter(md => md && (
+        String(md.mode_kind || '').toUpperCase() === 'HOLD_AND_WIN' ||
+        String(md.hw_trigger_symbol || '').trim() || md.hw_persist_value === true ||
+        String(md.hw_collect_rule || '').trim() || String(md.hw_link_jackpot || '').trim()));
+      if (_hwModes.length) {
+        L.push('## Hold & Win / 金幣收集');
+        L.push('');
+        L.push('| 模式 | 觸發/收集符 | 持久格值 | 收集規則 | 連結彩池 |');
+        L.push('| --- | --- | --- | --- | --- |');
+        _hwModes.forEach(md => {
+          L.push(`| ${_mdCell(md.mode)} | ${_mdCell((md.hw_trigger_symbol || '').trim() || '—')} | ` +
+                 `${_mdCell(md.hw_persist_value ? '是' : '否')} | ${_mdCell((md.hw_collect_rule || '').trim() || '—')} | ` +
+                 `${_mdCell((md.hw_link_jackpot || '').trim() || '—')} |`);
+        });
+        L.push('');
+        L.push('> Hold & Win / cash-on-reels 描述：符號落地即鎖、respin 收集（respin 數見各模式玩法設定），持久格值為金額常駐；對接 `STICKY` / `PAY` / `COLLECT`，實際收集與 jackpot 命中由下游模擬工具實作，本工具不執行、不計算 RTP。');
+        L.push('');
+      }
     }
 
     // v7.14:各模式 bonus 小遊戲（mode_kind = WHEEL / PICK / COLLECTION 的模式獎項表）
@@ -2942,6 +3265,28 @@
       L.push('');
     }
 
+    // ── G-2:格位狀態(動態)——僅列有 State_Type 的格;set 守衛保既有「格子屬性」表零 diff。
+    //   純描述狀態語意,狀態機執行(倒數/擊破/累加/觸發時機)歸下游模擬工具,不算 RTP。──
+    if (Array.isArray(cfg.cellAttrs) && cfg.cellAttrs.some(ca => ca && String(ca.state_type || '').trim())) {
+      const _stLabel = { MARKER: '標記', COVER: '遮蓋(需擊破)', COUNTDOWN: '倒數(每 spin −1)', COUNTER: '累加' };
+      L.push('## 格位狀態（動態）');
+      L.push('');
+      L.push('| 格 | 狀態 | 初值 | 觸發 | 觸發後動作 | 範圍 | 備註 |');
+      L.push('| --- | --- | --- | --- | --- | --- | --- |');
+      cfg.cellAttrs.forEach(ca => {
+        if (!ca || !String(ca.state_type || '').trim()) return;
+        const st = String(ca.state_type).toUpperCase();
+        const anchor = `(R${Number(ca.reel) || '?'}, 列 ${Number(ca.row) || '?'})`;
+        const region = (ca.state_region || '').trim() ? _mdCell(String(ca.state_region)) : anchor;
+        L.push(`| ${anchor} | ${_stLabel[st] || st} | ${_mdCell((ca.state_init || '').trim() || '—')} | ` +
+               `${_mdCell((ca.state_trigger || '').trim() || '—')} | ${_mdCell((ca.on_state_action || '').trim() || '—')} | ` +
+               `${region} | ${_mdCell(ca.notes || '')} |`);
+      });
+      L.push('');
+      L.push('> 格位狀態為動態宣告（標記／遮蓋／倒數／計數 + 觸發 + 觸發後動作）；狀態機執行（倒數、擊破、累加、觸發時機）由下游模擬工具實作，本工具不執行、不計算 RTP。');
+      L.push('');
+    }
+
     // v7.11:產牌限制 / 生成期約束(有資料才輸出)
     if (Array.isArray(cfg.genLimits) && cfg.genLimits.length) {
       const _zoneLabel = (z) => {
@@ -2966,6 +3311,53 @@
       L.push('');
       L.push('> 生成期約束（產牌條件）：描述各區域內符號出現數量的上下限，供數值組 / 模擬工具落盤時遵循。');
       L.push('');
+    }
+
+    // ── G-1:收集條 / 進度條(21_Collection_Meters;含分段門檻)。set 守衛:僅有 meters 時輸出。
+    //   docgen 此前完全未渲染收集條 → 無 meters 的既有文件不受影響(零 diff);純描述,
+    //   累積 / 歸零 / 觸發時機交下游模擬工具實作,本工具不執行、不計算 RTP。
+    if (Array.isArray(cfg.meters) && cfg.meters.filter(mt => mt && mt.meter_id).length) {
+      const _mts = cfg.meters.filter(mt => mt && mt.meter_id);
+      const _tiersOf = (mt) => (Array.isArray(mt.tiers) ? mt.tiers : [])
+        .filter(t => t && Number.isFinite(Number(t.threshold)));
+      L.push('## 收集條 / 進度條');
+      L.push('');
+      L.push('| 收集條 | 名稱 | 適用模式 | 填充來源 | 每次+ | 容量 | 歸零 | 集滿/每步動作 | 連動彩池 | 跨模式 | 分段 | 備註 |');
+      L.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+      _mts.forEach(mt => {
+        const isRatio  = Number(mt.tier_step) > 0;
+        const tierArr  = _tiersOf(mt);
+        const scope    = (mt.mode_scope && mt.mode_scope !== 'ALL') ? mt.mode_scope : '全部';
+        const cap      = (Number(mt.capacity) > 0) ? mt.capacity : '無上限';
+        const jp       = mt.link_jackpot ? mt.link_jackpot : '—';
+        const carry    = mt.carry_over ? '是' : '否';
+        const act      = mt.on_full_action ? mt.on_full_action : '—';
+        let seg = '—';
+        if (isRatio)          seg = `比率·每 ${mt.tier_step}${mt.tier_repeat ? '（可重複）' : '（僅首次）'}`;
+        else if (tierArr.length) seg = `絕對 ${tierArr.length} 段`;
+        L.push(`| ${_mdCell(mt.meter_id)} | ${_mdCell(mt.label || '—')} | ${_mdCell(scope)} | ` +
+               `${_mdCell(mt.fill_source || '—')} | ${_mdCell(mt.fill_amount)} | ${_mdCell(cap)} | ` +
+               `${_mdCell(mt.reset_scope || 'FEATURE')} | ${_mdCell(act)} | ${_mdCell(jp)} | ${carry} | ` +
+               `${_mdCell(seg)} | ${_mdCell(mt.notes || '')} |`);
+      });
+      L.push('');
+      L.push('> 收集條：跨局／跨消除持續累積的進度條（如 Scatter 收集、金幣計量、Tome Portal 分段、xWays Hoarder 每 N 升級）。純描述，累積／歸零／觸發時機由下游模擬工具實作。');
+      L.push('');
+      // 絕對門檻明細(逐收集條;比率型已於上表「分段」欄描述,無需明細)
+      _mts.forEach(mt => {
+        if (Number(mt.tier_step) > 0) return;         // 比率型 → 上表已述
+        const tierArr = _tiersOf(mt);
+        if (!tierArr.length) return;
+        const sorted = [...tierArr].sort((a, b) => Number(a.threshold) - Number(b.threshold));
+        L.push(`### ${mt.meter_id}${mt.label ? '（' + mt.label + '）' : ''}　分段門檻`);
+        L.push('');
+        L.push('| 門檻 | 動作 | 參數 |');
+        L.push('| --- | --- | --- |');
+        sorted.forEach(t => {
+          L.push(`| ${_mdCell(t.threshold)} | ${_mdCell(t.action || '—')} | ${_mdCell(t.params || '')} |`);
+        });
+        L.push('');
+      });
     }
 
     // v8.2 / 缺失清單 F-19:特色規則(09_Puzzle_Rules)——結構化規則進 A.xlsx

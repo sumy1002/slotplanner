@@ -1826,6 +1826,11 @@
     { id: 'payload',               label: 'payload',               needsSubkey: true,
       subkeyHint: '欄位名',        valueType: 'auto',   subkeySource: 'text',
       desc: '伴隨 ON_CUSTOM_EMIT 帶來的資料(來自 EMIT_EVENT 的 payload 參數)' },
+    // ── G-2 / D4乙:盤面級狀態變數(純描述詞彙;parse_condition 任意識別字皆合法,Python 端零改;
+    //    聚合格位狀態,如 Tome eye_marks;實際值由下游模擬工具依 02d 格位狀態維護)──
+    { id: 'board_var',             label: 'board_var',             needsSubkey: true,
+      subkeyHint: '狀態變數名',    valueType: 'auto',   subkeySource: 'text',
+      desc: '盤面級狀態變數(聚合格位狀態,如 board_var.eye_marks;下游依 02d 格位狀態維護)' },
     // ── v8.4 / R2 P4:條件變數六枚(純描述詞彙;parse_condition 任意識別字皆合法,
     //    Python 端零改;求值語意由下游模擬工具實作) ──
     { id: 'win',                   label: 'win',                   needsSubkey: false, valueType: 'number',

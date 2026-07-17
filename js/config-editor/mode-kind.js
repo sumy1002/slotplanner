@@ -5,13 +5,15 @@
   const CE = (SP.ConfigEditor = SP.ConfigEditor || {});
 
   const MODE_KIND_OPTIONS = [
-    { v: 'SPIN',       label: 'SPIN' },
-    { v: 'WHEEL',      label: '輪盤' },
-    { v: 'PICK',       label: '點點樂' },
-    { v: 'COLLECTION', label: '收集' },
-    { v: 'OTHER',      label: '其他' },
+    { v: 'SPIN',         label: 'SPIN' },
+    { v: 'WHEEL',        label: '輪盤' },
+    { v: 'PICK',         label: '點點樂' },
+    { v: 'COLLECTION',   label: '收集' },
+    { v: 'HOLD_AND_WIN', label: 'Hold & Win' },
+    { v: 'OTHER',        label: '其他' },
   ];
   const MODE_KIND_LABEL = Object.fromEntries(MODE_KIND_OPTIONS.map(o => [o.v, o.label]));
+  // 注意:HOLD_AND_WIN 不列入 BONUS_KINDS——它是 spin 型收集(沿用 respin_*/hold_win 描述,非 items 型 bonus)。
   const BONUS_KINDS = { WHEEL: 1, PICK: 1, COLLECTION: 1 };
 
   function isBonusKind(m) {

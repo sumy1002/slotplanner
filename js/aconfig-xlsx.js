@@ -263,6 +263,7 @@
       ['04c_Reel_Links', '輪帶連動(v8.38 GAP-T1:每局隨機抽連動組;CLONE/MIRROR;選用)'],
       ['05_Grid_Size_Weights', '格數權重'],
       ['05b_Mode_Grid_Range', '逐模式逐輪可變列(Megaways;僅顯式設定的模式)'],
+      ['02e_Geometry_Transitions', '動態盤面幾何轉變(G-7/8;維度/觸發/step/上限/ways重算;選用;供下游,本工具不執行)'],
       ['06_Paylines', '中獎線'],
       ['07_Constraints', '硬約束'],
       ['07b_Gen_Limits', '產牌限制 / 生成期約束(v7.11;選用;長格式 符號×zone×min/max;供下游模擬工具,本工具不執行)'],
@@ -273,6 +274,8 @@
       ['11_Mode_Config', '模式設定'],
       ['11b_Mode_TriggerPays', '各模式 scatter-pay 觸發給付(v7.10;選用;引擎尚未消費,Stage 3 接)'],
       ['11c_Mode_Items', '各模式 bonus 小遊戲獎項表(v7.14;WHEEL/PICK/COLLECT;選用;引擎不消費)'],
+      ['11d_Mode_Symbol_Ops', '各模式符號池動態變更(G-9;REMOVE/UPGRADE;選用;對接 CONVERT,本工具不執行)'],
+      ['22_HoldWin', 'Hold&Win / 金幣收集描述(G-4;觸發符/持久值/收集規則/連結彩池;選用;對接 STICKY/PAY/COLLECT,本工具不執行)'],
       ['12_Distribution_Bins', '分佈區間'],
       ['13_Jackpots', 'JP 定義(選用;引擎忽略,供文件/前端使用)'],
       ['14_Bet_Config', '投注結構(v5.3:Ante Bet + Buy Feature;選用;引擎讀取)'],
@@ -386,14 +389,19 @@
       const wsCA = wb.addWorksheet('02d_Cell_Attributes');
       // v8.49 / 缺口4:尾端 additive 加 Cap_Value(格位數值上限;前 7 欄不動;
       //          "" = 無上限,安全降級;Sugar Rush 式「格位倍數逐次翻倍,封頂128x」用此欄)。
-      wsCA.addRow(['Attr_ID', 'Reel', 'Row', 'Attr', 'Value', 'Mode_Scope', 'Notes', 'Cap_Value']);
+      // G-2:再尾端 additive 加 5 個動態狀態欄(State_Type/Init/Trigger/On_State_Action/Region;
+      //      "" = 純靜態屬性,安全降級;命中 Gems 標記/Temple Tumble 遮蓋/Hellcatraz 倒數/Tome Eye)。
+      wsCA.addRow(['Attr_ID', 'Reel', 'Row', 'Attr', 'Value', 'Mode_Scope', 'Notes', 'Cap_Value',
+                   'State_Type', 'State_Init', 'State_Trigger', 'On_State_Action', 'State_Region']);
       for (const ca of (Array.isArray(cas) ? cas : [])) {
         if (!ca || !String(ca.attr_id || '').trim()) continue;
         wsCA.addRow([ca.attr_id, Number(ca.reel) || 1, Number(ca.row) || 1,
                      ca.attr || 'MULT', ca.value || '', ca.mode_scope || 'ALL', ca.notes || '',
-                     ca.cap_value || '']);
+                     ca.cap_value || '',
+                     ca.state_type || '', ca.state_init || '', ca.state_trigger || '',
+                     ca.on_state_action || '', ca.state_region || '']);
       }
-      boldHdr(wsCA); setCols(wsCA, [10, 8, 8, 12, 14, 14, 30, 12]);
+      boldHdr(wsCA); setCols(wsCA, [10, 8, 8, 12, 14, 14, 30, 12, 12, 10, 16, 18, 16]);
     }
 
     const wsS = wb.addWorksheet('03_Symbols');
@@ -654,10 +662,13 @@
         m && (m.grid_explicit === true || (Array.isArray(m.reel_ranges) && m.reel_ranges.length > 0)));
       if (explicitModes.length && reelIds.length) {
         const wsGR = wb.addWorksheet('05b_Mode_Grid_Range');
-        wsGR.addRow(['Mode', 'Reel_ID', 'Min_Rows', 'Max_Rows', 'Notes']);
+        // G-7/8:尾端 additive 加 Base_Max(基本期列上限)/ Feature_Max(特色期列上限;
+        //   空=無特色成長)。前 5 欄不動 → 既有 Megaways 款 ways 逐格零 diff。
+        wsGR.addRow(['Mode', 'Reel_ID', 'Min_Rows', 'Max_Rows', 'Notes', 'Base_Max', 'Feature_Max']);
         for (const m of explicitModes) {
           const rrMap = {};
           for (const x of (Array.isArray(m.reel_ranges) ? m.reel_ranges : [])) rrMap[x.reel_id] = x;
+          const featMax = Number(m.row_feature_max) > 0 ? Number(m.row_feature_max) : '';   // D2甲 每模式特色 max
           for (const rid of reelIds) {
             const cap = capOf[rid] || 1;
             let lo, hi;
@@ -670,10 +681,28 @@
             } else {                                // 顯式固定 → 沿用該輪列數
               hi = cap; lo = cap;
             }
-            wsGR.addRow([m.mode, rid, lo, hi, '']);
+            wsGR.addRow([m.mode, rid, lo, hi, '', hi, featMax]);   // Base_Max=hi(基本);Feature_Max=每模式
           }
         }
-        boldHdr(wsGR); setCols(wsGR, [12, 10, 11, 11, 24]);
+        boldHdr(wsGR); setCols(wsGR, [12, 10, 11, 11, 24, 10, 12]);
+      }
+    }
+
+    // ── G-7/8:02e_Geometry_Transitions(動態盤面幾何轉變;掛 modes 每模式 geometry_transitions)。
+    //   有任一模式含轉變才建表;無 → 略過(舊檔降級:幾何維持 02_Layout/05b 靜態值)。──
+    {
+      const geoModes = modes.filter(m => m && Array.isArray(m.geometry_transitions) && m.geometry_transitions.length);
+      if (geoModes.length) {
+        const wsGT = wb.addWorksheet('02e_Geometry_Transitions');
+        wsGT.addRow(['Mode_Scope', 'Dimension', 'Trigger_Source', 'Step', 'Cap', 'Ways_Recompute', 'Notes']);
+        for (const m of geoModes) {
+          for (const t of m.geometry_transitions) {
+            if (!t || !String(t.dimension || '').trim()) continue;   // 無維度 → 略過
+            wsGT.addRow([m.mode, t.dimension || '', t.trigger_source || '', t.step || '',
+                         t.cap || '', t.ways_recompute || '', t.notes || '']);
+          }
+        }
+        boldHdr(wsGT); setCols(wsGT, [14, 14, 18, 8, 8, 18, 28]);
       }
     }
 
@@ -878,6 +907,43 @@
     }
     boldHdr(wsMI); setCols(wsMI, [12, 16, 11, 11, 10, 12, 14, 16]);
 
+    // ── G-9:11d_Mode_Symbol_Ops(符號池動態變更;掛 modes 每模式 symbol_ops)。
+    //   有任一模式含操作才建表;無 → 略過(舊檔降級:符號集固定)。──
+    {
+      const soModes = modes.filter(m => m && Array.isArray(m.symbol_ops) && m.symbol_ops.length);
+      if (soModes.length) {
+        const wsSO = wb.addWorksheet('11d_Mode_Symbol_Ops');
+        wsSO.addRow(['Mode_Scope', 'Op', 'Target', 'Count', 'Immune', 'Trigger', 'Notes']);
+        for (const m of soModes) {
+          for (const o of m.symbol_ops) {
+            if (!o || !String(o.op || '').trim()) continue;   // 無操作 → 略過
+            wsSO.addRow([m.mode, o.op || '', o.target || '', o.count || '',
+                         o.immune || '', o.trigger || '', o.notes || '']);
+          }
+        }
+        boldHdr(wsSO); setCols(wsSO, [14, 10, 20, 8, 18, 16, 28]);
+      }
+    }
+
+    // ── G-4:22_HoldWin(hold-and-win / cash-on-reels;掛 modes 每模式 hw_ 欄)。
+    //   有任一模式含 hold-win 新欄 或 kind=HOLD_AND_WIN 才建表;無 → 略過(舊檔降級)。
+    //   respin 收集回合本體在 11_Mode_Config(Respin_Base 等)已載,此處只補新欄。──
+    {
+      const hwModes = modes.filter(m => m && (
+        String(m.mode_kind || '').toUpperCase() === 'HOLD_AND_WIN' ||
+        String(m.hw_trigger_symbol || '').trim() || m.hw_persist_value === true ||
+        String(m.hw_collect_rule || '').trim() || String(m.hw_link_jackpot || '').trim()));
+      if (hwModes.length) {
+        const wsHW = wb.addWorksheet('22_HoldWin');
+        wsHW.addRow(['Mode_Scope', 'Trigger_Symbol', 'Persist_Value', 'Collect_Rule', 'Link_Jackpot', 'Notes']);
+        for (const m of hwModes) {
+          wsHW.addRow([m.mode, m.hw_trigger_symbol || '', m.hw_persist_value ? 'TRUE' : 'FALSE',
+                       m.hw_collect_rule || '', m.hw_link_jackpot || '', '']);
+        }
+        boldHdr(wsHW); setCols(wsHW, [14, 16, 12, 28, 14, 24]);
+      }
+    }
+
     // 12_Distribution_Bins
     const wsB = wb.addWorksheet('12_Distribution_Bins');
     wsB.addRow(['Mode_Scope', 'Bin_Edges', 'Notes']);
@@ -929,10 +995,32 @@
 
     // 架構檢閱 #21:21_Collection_Meters(收集條 / 進度條;additive 新表,舊下游不讀此表
     //   = 無收集條)。LS key:slotplanner.aconfig.meters.v1。by-name 讀。
+    //   G-1:欄尾追加 Tiers / Tier_Step / Tier_Repeat(分段門檻;缺欄舊檔安全降級)。
     {
       const wsMt = wb.addWorksheet('21_Collection_Meters');
       wsMt.addRow(['Meter_ID', 'Label', 'Mode_Scope', 'Fill_Source', 'Fill_Amount', 'Capacity',
-                   'Reset_Scope', 'On_Full_Action', 'Link_Jackpot', 'Carry_Over', 'Notes']);
+                   'Reset_Scope', 'On_Full_Action', 'Link_Jackpot', 'Carry_Over', 'Notes',
+                   'Tiers', 'Tier_Step', 'Tier_Repeat']);
+      // G-1:tiers 陣列 → cell 字串。預設輸出「門檻:動作:參數; …」分號串(人類可讀);
+      //   若任一段的 action 含 ':'/';' 或 params 含 ';'(會破壞分號串解析)→ 整欄改 JSON 形。
+      //   與 a_loader._parse_meter_tiers 及前端匯入端逐鍵一致。空 → ''。
+      const _serMeterTiers = (tiers) => {
+        const arr = Array.isArray(tiers) ? tiers : [];
+        const valid = [];
+        for (const t of arr) {
+          if (!t || typeof t !== 'object') continue;
+          const th = Number(t.threshold);
+          if (!Number.isFinite(th)) continue;   // 門檻非數字 → 略過(前端 lint 已警示)
+          valid.push({ threshold: th,
+                       action: (t.action != null ? String(t.action).trim() : ''),
+                       params: (t.params != null ? String(t.params).trim() : '') });
+        }
+        if (!valid.length) return '';
+        const needJson = valid.some(t =>
+          t.action.includes(';') || t.action.includes(':') || t.params.includes(';'));
+        if (needJson) return JSON.stringify(valid);
+        return valid.map(t => `${t.threshold}:${t.action}:${t.params}`).join('; ');
+      };
       const mts = readLS('slotplanner.aconfig.meters.v1', []);
       for (const m of (Array.isArray(mts) ? mts : [])) {
         const mid = (m && m.meter_id != null ? String(m.meter_id).trim() : '');
@@ -949,9 +1037,12 @@
           (m.link_jackpot != null ? String(m.link_jackpot).trim() : ''),
           !!m.carry_over,
           (m.notes != null ? String(m.notes) : ''),
+          _serMeterTiers(m.tiers),
+          (Number(m.tier_step) > 0 ? Number(m.tier_step) : ''),
+          !!m.tier_repeat,
         ]);
       }
-      boldHdr(wsMt); setCols(wsMt, [10, 18, 14, 24, 12, 10, 12, 20, 14, 11, 24]);
+      boldHdr(wsMt); setCols(wsMt, [10, 18, 14, 24, 12, 10, 12, 20, 14, 11, 24, 40, 10, 11]);
     }
 
     // 14_Bet_Config(v5.3:選用分頁;引擎讀取。無 Buy Feature → 仍寫 Ante Bet 區塊 + 空清單)
