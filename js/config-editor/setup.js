@@ -1799,6 +1799,7 @@
         pick_count: 0,
         collect_target: 0,
         items: [],
+        seededKind: '', // 已套用 default sections 的 kind；避免 step1→2 重複覆寫
         draftMode: null, // { mode:'__MODE_ADD__', trigger_condition:'', … } 供 modeCond
       });
       function modeAddDlgResetDraftMode() {
@@ -1844,6 +1845,7 @@
         modeAddDlg.pick_count = 0;
         modeAddDlg.collect_target = 0;
         modeAddDlg.items = [];
+        modeAddDlg.seededKind = '';
         modeAddDlgResetDraftMode();
         Vue.nextTick(() => {
           try { document.querySelector('.cfg-modedlg-name')?.focus(); } catch (e) { /* no-op */ }
@@ -1903,7 +1905,10 @@
       function modeAddDlgNext() {
         if (!modeAddCanNext.value) return;
         if (modeAddDlg.step === 1) {
-          modeAddDlgApplyKindDefaults();
+          if (modeAddDlg.seededKind !== modeAddDlg.kind) {
+            modeAddDlgApplyKindDefaults();
+            modeAddDlg.seededKind = modeAddDlg.kind;
+          }
           modeAddDlg.step = 2;
           return;
         }
