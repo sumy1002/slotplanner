@@ -1209,18 +1209,18 @@
               </div>
               <div class="cfg-cv-work">
                 <div class="cfg-cv-rail">
-                  <!-- Board v2:選取-設定工具（箭頭 / 框選 / ＋ / 取消）— 頂部主組 -->
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='select' }" @click="cvSetMode('select')" title="箭頭（選取）：單擊格選整輪、雙擊選格、拖曳框選">
+                  <!-- Board v2:選取-設定工具（箭頭 / 框選 / ＋ / 取消）— 頂部主組；與「移動」共用 cfg-cv-brush 樣式 -->
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='select' }" @click="cvSetMode('select')" title="箭頭（選取）：單擊格選整輪、雙擊選格、拖曳框選">
                     <span class="cfg-cv-tool-ic" aria-hidden="true">➤</span><span class="cfg-cv-tool-lb">箭頭</span>
                   </button>
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='marquee' }" @click="cvSetMode('marquee')">
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='marquee' }" @click="cvSetMode('marquee')">
                     <span class="cfg-cv-tool-ic" aria-hidden="true">▱</span><span class="cfg-cv-tool-lb">框選</span>
                     <span class="cfg-cv-tip">框選：拖曳虛線框住多個主輪 → 一起改列數 / 偏移 / 副輪</span>
                   </button>
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='add' }" @click="cvSetMode('add')" title="＋新增：點一格新增一格（主輪）">
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='add' }" @click="cvSetMode('add')" title="＋新增：點一格新增一格（主輪）">
                     <span class="cfg-cv-tool-ic" aria-hidden="true">＋</span><span class="cfg-cv-tool-lb">新增</span>
                   </button>
-                  <button class="cfg-cv-tool" :class="{ active: cvMode==='cancel' }" @click="cvSetMode('cancel')">
+                  <button class="cfg-cv-tool cfg-cv-brush" :class="{ active: cvMode==='cancel' }" @click="cvSetMode('cancel')">
                     <span class="cfg-cv-tool-ic" aria-hidden="true">⊘</span><span class="cfg-cv-tool-lb">取消</span>
                     <span class="cfg-cv-tip">取消：點主輪格設為無效格，套用後不出符號；再點還原。選中副盤時改設該盤遮罩。</span>
                   </button>
