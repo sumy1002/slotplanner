@@ -5777,9 +5777,9 @@
               <div class="cfg-modedlg" role="dialog" aria-label="新增模式">
                 <div class="cfg-modedlg-title">新增模式</div>
 
-                <!-- 模式名稱(必填 + 撞名防呆)+ 快選 -->
+                <!-- 模式名稱(必填紅星 + 撞名防呆)+ 快選 -->
                 <div class="cfg-modedlg-field">
-                  <label class="cfg-label">模式名稱 <span class="cfg-key">必填</span></label>
+                  <label class="cfg-label">模式名稱 <span class="cfg-req" aria-hidden="true">*</span></label>
                   <div class="cfg-modedlg-name-row">
                     <input class="input input-w-name cfg-modedlg-name"
                            :class="{ err: modeAddDlgNameTaken }"
@@ -5794,13 +5794,19 @@
                   <div v-if="modeAddDlgNameTaken" class="cfg-warn cfg-warn-inline">⚠ 已有同名模式(不分大小寫),請換一個名稱</div>
                 </div>
 
-                <!-- 玩法大方向 -->
+                <!-- 玩法大方向（五選一單排；OTHER 時顯示必填描述） -->
                 <div class="cfg-modedlg-field">
                   <label class="cfg-label">玩法大方向 <span class="cfg-key">mode_kind</span></label>
-                  <div class="cfg-chip-row">
+                  <div class="cfg-chip-row cfg-modedlg-kind-row">
                     <button v-for="opt in MODE_KIND_OPTIONS" :key="opt.v"
                             class="cfg-chip" :class="{ active: modeAddDlg.kind === opt.v }"
                             @click="modeAddDlg.kind = opt.v">{{ opt.label }}</button>
+                  </div>
+                  <div v-if="modeAddDlg.kind === 'OTHER'" class="cfg-modedlg-other" style="margin-top:10px;">
+                    <label class="cfg-label">玩法描述 <span class="cfg-req" aria-hidden="true">*</span></label>
+                    <input class="input" type="text" v-model.trim="modeAddDlg.otherText"
+                           placeholder="例：消除 / 過關" maxlength="80"
+                           @keyup.enter="confirmAddModeDlg">
                   </div>
                   <div class="cfg-hint">確認後主畫面的模式卡片會依此顯示對應內容;之後仍可在卡片內調整。</div>
                 </div>
@@ -5838,7 +5844,7 @@
                 <div class="cfg-modedlg-actions">
                   <button class="btn-pill" @click="modeAddDlg.open = false">取消</button>
                   <button class="btn-pill cfg-modedlg-confirm"
-                          :disabled="!modeAddDlg.name.trim() || modeAddDlgNameTaken"
+                          :disabled="!modeAddCanConfirm"
                           @click="confirmAddModeDlg">建立模式</button>
                 </div>
               </div>

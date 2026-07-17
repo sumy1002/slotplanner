@@ -11340,7 +11340,7 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   padding: 24px;
 }
 #app .cfg-modedlg {
-  width: min(560px, 100%);
+  width: min(600px, 100%);
   max-height: min(80vh, 640px);
   overflow-y: auto;
   background: var(--bg);
@@ -11377,6 +11377,26 @@ td.cfg-matrix-rowhead.cfg-matrix-head-sel:hover { background: rgb(var(--tint-acc
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+/* 必填紅星（新增模式彈窗等） */
+#app .cfg-req {
+  color: var(--danger-text);
+  font-weight: 700;
+  margin-left: 2px;
+}
+/* 玩法大方向五選一單排 */
+#app .cfg-modedlg-kind-row {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+#app .cfg-modedlg-kind-row .cfg-chip {
+  padding: 6px 10px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+#app .cfg-modedlg-other .input {
+  width: 100%;
+  max-width: 100%;
 }
 /* 建立鈕 = 選中態契約:實心 Accent + 白字 + 細陰影(--accent 為軟填底,實心用 --accent-hex) */
 #app .btn-pill.cfg-modedlg-confirm:not(:disabled) {
