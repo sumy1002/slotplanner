@@ -6248,7 +6248,7 @@
 
                 <!-- ── 步驟 3：唯讀預覽 ── -->
                 <div v-if="modeAddDlg.step === 3" class="cfg-modedlg-preview">
-                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\\n') }}</pre>
+                  <pre class="cfg-modedlg-preview-text">{{ modeAddDlgPreview.join('\n') }}</pre>
                 </div>
 
                 <div class="cfg-modedlg-actions">
