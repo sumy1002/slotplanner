@@ -119,6 +119,12 @@ class ActionType(Enum):
     #   非 REVIVE 的「重置/延長 respin 次數」語意。a_loader 經 condition_parser.parse_actions
     #   照收(enum 成員即合法);logic_parser 不註冊 handler(執行語意由下游模擬工具實作)。
     RETRIGGER          = "RETRIGGER"          # 重新觸發已消耗符號效果(Money Train 3 死靈法師)
+    # ── G-PotA / 跨盤操作:盤與盤之間依對應位置複製/搬移(描述型;本工具不執行) ──
+    #   語意:把內容在主盤 ⇌ 副盤 / 副盤 ⇌ 副盤之間依對應位置複製(COPY,來源留)或搬移(MOVE,來源移除)。
+    #   涵蓋 Stacked Wild(整輪跨盤複製)與 Dual Feature(單符落錯盤→轉移正確盤對應位置)。
+    #   a_loader 經 condition_parser.parse_actions 照收(enum 成員即合法,params 通用 key=val);
+    #   logic_parser 不註冊 handler(實際複製/搬移、命中率、RTP 由下游模擬工具實作)。docgen 照印白話。
+    CROSS_BOARD        = "CROSS_BOARD"        # 跨盤複製/搬移(Planet of the Apes 雙盤;Copy Cats / Lost Vegas 系)
 
 
 class ConditionOp(Enum):

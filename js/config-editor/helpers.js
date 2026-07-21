@@ -2707,6 +2707,26 @@
         { key: 'track', label: '軌道(可選)', type: 'text', placeholder: 'T001',
           desc: 'manner=PATH 時引用的 02c_Tracks 軌道 ID' },
       ] },
+    // ── G-PotA:跨盤操作(盤與盤之間依對應位置複製/搬移;純描述,執行交下游)──
+    { type: 'CROSS_BOARD', label: '跨盤操作', icon: '🔀',
+      desc: '把內容在盤與盤之間(主盤 ⇌ 副盤 / 副盤 ⇌ 副盤)依對應位置複製或搬移。' +
+            '涵蓋:整輪複製(Stacked Wild:Rise 輪 → Dawn 對應輪,來源留)、' +
+            '單符轉移(Dual Feature:符落錯盤 → 移到正確盤對應位置,來源移除)。' +
+            '純描述,實際複製/搬移、命中率、RTP 交下游模擬工具。',
+      params: [
+        { key: 'op', label: '操作', type: 'enum', options: ['COPY', 'MOVE'], default: 'COPY',
+          desc: 'COPY=來源保留(整輪複製);MOVE=來源移除(符號轉移)' },
+        { key: 'from_board', label: '來源盤(可選)', type: 'text', placeholder: 'MAIN / DAWN',
+          desc: '留空=規則觸發所在盤(情境);MAIN=主盤;<panel_id>=副盤' },
+        { key: 'to_board', label: '目標盤', type: 'text', placeholder: 'DAWN',
+          desc: 'MAIN=主盤;<panel_id>=副盤(如 DAWN)' },
+        { key: 'grain', label: '內容粒度', type: 'enum', options: ['SYMBOL', 'REEL', 'CELL'], default: 'SYMBOL',
+          desc: 'SYMBOL=符號選取;REEL=整輪;CELL=單格' },
+        { key: 'selector', label: '選取', type: 'text', placeholder: 'WILD_R / 1 / 2,3',
+          desc: 'grain=SYMBOL→符號 id;REEL→輪索引;CELL→座標 r,c' },
+        { key: 'mapping', label: '位置對映', type: 'enum', options: ['SAME_POS'], default: 'SAME_POS',
+          desc: 'SAME_POS=對映到目標盤的對應 (輪,列) 位置' },
+      ] },
     { type: 'SWAP', label: '交換符號', icon: '🔄',
       desc: '交換兩格的符號',
       params: [

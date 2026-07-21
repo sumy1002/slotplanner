@@ -12370,6 +12370,17 @@
                 }
               }
             }
+            // G-PotA / D5:CROSS_BOARD 跨盤目標 lint(from_board/to_board 非空且非 MAIN
+            //   → 須為 02b_Panels 已知 panel_id;非阻擋 warn,與 panel/mode lint 同級)。
+            if (act.atype === 'CROSS_BOARD' && act.params) {
+              for (const bk of ['from_board', 'to_board']) {
+                const bv = String(act.params[bk] || '').trim();
+                if (bv && bv.toUpperCase() !== 'MAIN' && !panels.some(pp => pp && pp.panel_id === bv)) {
+                  add('warn', 'rules',
+                    `${tag}:${bk === 'to_board' ? '目標盤' : '來源盤'}「${bv}」非 MAIN 且未在 02b_Panels 定義`);
+                }
+              }
+            }
           }
           // emits 宣告但 actions 中沒有對應的 EMIT_EVENT(只警告,不是錯)
           if (Array.isArray(r.emits) && r.emits.length > 0) {

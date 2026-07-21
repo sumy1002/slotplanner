@@ -119,7 +119,7 @@
     ADJUST_MULTIPLIER: '調整倍數', UPDATE_GLOBAL: '更新全域變數', UPDATE_LOCAL: '更新本局變數',
     EMIT_EVENT: '發出事件', SWITCH_MODE: '切換模式', AWARD_FREE_SPIN: '給免費局',
     HALT_RESOLUTION: '中止結算', BOARD_FILL: '盤面填充', BOARD_TRANSFORM: '符號轉換',
-    BOARD_DESTROY: '盤面消除', MOVE: '搬移', SWAP: '交換', STICKY: '黏著',
+    BOARD_DESTROY: '盤面消除', MOVE: '搬移', SWAP: '交換', STICKY: '黏著', CROSS_BOARD: '跨盤操作',
     LOCK_REEL: '鎖輪', REEL_RESTRICT: '輪位限制', GLOBAL_MAX: '全盤上限', SCROLL: '捲動',
     // v8.4 / R2 P2:描述型 action(執行語意由下游模擬工具實作)
     EXPAND_REEL: '擴展整輪', NUDGE: '推移', WALK: '走位', REVEAL_AS: '揭示',
@@ -249,6 +249,12 @@
   //    皆「命中才譯、否則原樣」)。★關鍵:只對本批「實際改動的四動作」套用,其餘動作
   //    (WALK/GROW_BOARD/NUDGE… 亦持有 dir/track/amount 鍵)輸出逐字不變 → 舊資料零 diff。 ──
   const _V848_ACTS = new Set(['MOVE', 'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY']);
+  // ── G-PotA:CROSS_BOARD 專屬白話(全新 atype;既有文件無此動作 → 零 diff)。
+  //   注意:op 鍵被其他動作(ADJUST_MULTIPLIER/METER_ADJUST…)使用,故 op/grain 翻譯僅 gate 到 CROSS_BOARD。──
+  const _CROSS_BOARD_ACTS = new Set(['CROSS_BOARD']);
+  const _CB_OP_ZH = { COPY: '複製（來源保留）', MOVE: '搬移（來源移除）' };
+  const _CB_GRAIN_ZH = { SYMBOL: '符號', REEL: '整輪', CELL: '單格' };
+  const _CB_PARAM_ZH = { op: '操作', from_board: '來源盤', to_board: '目標盤', grain: '粒度', selector: '選取', mapping: '對映' };
   const _ACT_PARAM_ZH = {
     subject: '物件', manner: '方式', dir: '方向', amount: '格數', track: '軌道',
     except_if: '排除', order: '順序',
@@ -275,6 +281,7 @@
     const label = _RULE_ACTION_LABEL[atype] || atype || '?';
     const p = (a.params && typeof a.params === 'object') ? a.params : {};
     const isV848 = _V848_ACTS.has(atype);   // v8.48:白話化僅作用於本批四動作,其餘零 diff
+    const isCB = _CROSS_BOARD_ACTS.has(atype);   // G-PotA:CROSS_BOARD 專屬白話(全新 atype)
     // v8.20 / G5:scope 抽離單獨後綴;value 若為 symbol_count.<SID> 動態值則譯白話。
     const scopeStr = _scopeDesc(p.scope);
     const kv = Object.entries(p)
@@ -282,7 +289,9 @@
       .map(([k, v]) => {
         // v8.48 / 項目一 Batch A:僅本批四動作走專屬白話;命中則用,否則落回泛用 _dynExpr。
         let vv;
-        if (isV848 && typeof v === 'string' && k === 'manner')      vv = _MANNER_ZH[v] || v;
+        if (isCB && typeof v === 'string' && k === 'op')          vv = _CB_OP_ZH[v] || v;
+        else if (isCB && typeof v === 'string' && k === 'grain')   vv = _CB_GRAIN_ZH[v] || v;
+        else if (isV848 && typeof v === 'string' && k === 'manner')      vv = _MANNER_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && k === 'dir')    vv = _DIR_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && k === 'order')  vv = _ORDER_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && (k === 'positions' || k === 'to') && /^SELF/.test(v.trim()))
@@ -291,7 +300,7 @@
         // v8.34 / GAP-S1:泛化 — 任何字串值皆過 _dynExpr(範圍/公式白話化;非動態字串原樣)。
         else vv = (typeof v === 'string') ? _dynExpr(v)
                 : (Array.isArray(v) ? JSON.stringify(v) : v);
-        const kZh = isV848 ? (_ACT_PARAM_ZH[k] || k) : k;   // v8.48:鍵中文僅本批四動作(其餘原樣)
+        const kZh = isCB ? (_CB_PARAM_ZH[k] || k) : (isV848 ? (_ACT_PARAM_ZH[k] || k) : k);   // 鍵中文:CB / v8.48 四動作
         return `${kZh}=${vv}`;
       });
     let out = kv.length ? `${label}（${kv.join(', ')}）` : label;
