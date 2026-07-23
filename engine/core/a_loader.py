@@ -316,6 +316,9 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
         try:
             width = int(r.get("Width", 3) or 3)
             height = int(r.get("Height", 3) or 3)
+            # v8.52 / E-extended:靜態副盤持久宣告(缺欄/空 → None = 現行為;非法值由外層 except 捕捉)
+            _prs_raw = _to_str(r.get("Reset_Scope")).strip().upper()
+            _panel_reset_scope = ResetScope(_prs_raw) if _prs_raw else None
             p = PanelDef(
                 panel_id=pid,
                 col=int(r.get("Col", 0) or 0),
@@ -336,6 +339,9 @@ def _parse_panels(df: pd.DataFrame | None) -> list[PanelDef]:
                 active_modes=_to_str(r.get("Active_Modes")).strip(),
                 eval_domain=_to_str(r.get("Eval_Domain")).strip().upper(),
                 payline_set=_to_str(r.get("Payline_Set")).strip(),
+                # v8.52 / E-extended:缺欄安全降級(守則 #81)→ None / ""
+                reset_scope=_panel_reset_scope,
+                reset_event=_to_str(r.get("Reset_Event")).strip(),
             )
         except (ValueError, KeyError) as e:
             raise ConfigValidationError(sheet, f"Panel {pid} 解析失敗: {e}", row=idx + 2)
@@ -1196,7 +1202,7 @@ def _parse_meters(df) -> list["MeterDef"]:
                 reset_scope = ResetScope(rs_raw)
             except ValueError:
                 raise ConfigValidationError(
-                    sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE 或留空)", row=idx + 2)
+                    sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE/UNTIL_EVENT 或留空)", row=idx + 2)
         # ── G-1:分段門檻(additive by-name;缺欄 → 空/0/False = 退回單一 capacity + on_full_action)──
         tiers = _parse_meter_tiers(r.get("Tiers"))
         try:
@@ -1215,6 +1221,7 @@ def _parse_meters(df) -> list["MeterDef"]:
             fill_amount=fill_amount,
             capacity=capacity,
             reset_scope=reset_scope,
+            reset_event=_to_str(r.get("Reset_Event")).strip(),   # v8.52 / E:缺欄 → ""
             on_full_action=_to_str(r.get("On_Full_Action")).strip(),
             link_jackpot=_to_str(r.get("Link_Jackpot")).strip(),
             carry_over=_to_bool(r.get("Carry_Over")),
@@ -1931,7 +1938,9 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                     reset_scope = ResetScope(rs_raw)
                 except ValueError:
                     raise ConfigValidationError(
-                        sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE 或留空)", row=idx + 2)
+                        sheet, f"Reset_Scope '{rs_raw}' 非合法值(CASCADE/SPIN/FEATURE/UNTIL_EVENT 或留空)", row=idx + 2)
+            # v8.52 / E:Reset_Event 配對欄(缺欄/空 → "";UNTIL_EVENT 時承載觸發歸零事件名)
+            reset_event = _to_str(r.get("Reset_Event")).strip()
             # v7.11 additive:Cap_Enabled / Cap_Value / Stack_Mode(尾端新欄;缺欄/空 → 預設)
             cap_enabled = _to_str(r.get("Cap_Enabled")).strip()
             cap_value = _to_str(r.get("Cap_Value")).strip()
@@ -1982,6 +1991,7 @@ def _parse_modes(df: pd.DataFrame) -> dict[str, ModeConfig]:
                 on_enter_reset_vars=reset_vars,
                 notes=_to_str(r.get("Notes")),
                 reset_scope=reset_scope,
+                reset_event=reset_event,   # v8.52 / E
                 cap_enabled=cap_enabled,
                 cap_value=cap_value,
                 stack_mode=stack_mode,

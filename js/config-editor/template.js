@@ -907,6 +907,19 @@
               </div>
             </div>
 
+            <!-- v8.52 E-extended:靜態副盤內容持久宣告 -->
+            <div class="cfg-field">
+              <label class="cfg-label">內容持久(可選) <span class="cfg-key">Reset_Scope / Reset_Event</span></label>
+              <select class="input input-w-name" v-model="activePanel.reset_scope">
+                <option value="">（現行為 — 不宣告持久）</option>
+                <option value="UNTIL_EVENT">UNTIL_EVENT — 直到事件觸發才清空</option>
+              </select>
+              <input v-if="activePanel.reset_scope === 'UNTIL_EVENT'"
+                     class="input input-w-name" type="text" v-model.trim="activePanel.reset_event"
+                     placeholder="事件名,例:bingo_hit" style="margin-top:6px;">
+              <div class="cfg-hint">靜態副盤內容(符號 / 格值)之持久語意;UNTIL_EVENT = 直到規則 EMIT_EVENT(name=…) 觸發才清空(如賓果卡累積至成線)。本工具不執行,清空時機交下游。</div>
+            </div>
+
             <!-- 觸發型:觸發符號 -->
             <div v-if="(activePanel.panel_type||'SCROLL') === 'TRIGGER'" class="cfg-field">
               <label class="cfg-label">觸發符號 <span class="cfg-key">Trigger_Symbol</span></label>
@@ -5595,7 +5608,10 @@
                     <select class="input input-w-name" v-model="m.reset_scope">
                       <option v-for="opt in RESET_SCOPE_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
                     </select>
-                    <div class="cfg-hint">此模式的進度/累積倍數重置時機;空白 = 繼承 15_Multipliers 的全域設定。</div>
+                    <input v-if="m.reset_scope === 'UNTIL_EVENT'"
+                           class="input input-w-name" type="text" v-model.trim="m.reset_event"
+                           placeholder="事件名,例:bingo_hit" style="margin-top:6px;">
+                    <div class="cfg-hint">此模式的進度/累積倍數重置時機;空白 = 繼承 15_Multipliers 的全域設定。UNTIL_EVENT 需填事件名(對應規則 EMIT_EVENT)。</div>
                   </div>
 
                   <div class="cfg-field" style="margin-top:8px;">
@@ -6213,6 +6229,9 @@
                         <select class="input input-w-name" v-model="modeAddDlg.reset_scope">
                           <option v-for="opt in RESET_SCOPE_OPTIONS" :key="opt.v" :value="opt.v">{{ opt.label }}</option>
                         </select>
+                        <input v-if="modeAddDlg.reset_scope === 'UNTIL_EVENT'"
+                               class="input input-w-name" type="text" v-model.trim="modeAddDlg.reset_event"
+                               placeholder="事件名,例:bingo_hit" style="margin-top:6px;">
                       </div>
                       <div class="cfg-field" style="margin-top:8px;">
                         <label class="cfg-label">倍數疊加方式 <span class="cfg-key">stack_mode</span></label>
@@ -7203,6 +7222,8 @@
               <select class="input input-sm" v-model="mt.reset_scope" style="width:110px;" title="歸零範圍">
                 <option v-for="rs in METER_RESET_SCOPES" :key="'mrs'+rs" :value="rs">{{ rs }}</option>
               </select>
+              <input v-if="mt.reset_scope === 'UNTIL_EVENT'" class="input input-sm" type="text" v-model.trim="mt.reset_event"
+                     placeholder="事件名" title="UNTIL_EVENT 觸發歸零的事件名(對應規則 EMIT_EVENT)" style="width:110px;">
               <input class="input input-sm" type="text" v-model.trim="mt.on_full_action"
                      :placeholder="Number(mt.tier_step) > 0 ? '每步動作(如 CONVERT:upgrade)' : '集滿動作(如 AWARD_FREE_SPIN)'"
                      :title="Number(mt.tier_step) > 0 ? '比率型:每 N 個觸發的動作' : '容量集滿時的終局動作'"

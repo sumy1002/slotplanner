@@ -119,12 +119,6 @@ class ActionType(Enum):
     #   非 REVIVE 的「重置/延長 respin 次數」語意。a_loader 經 condition_parser.parse_actions
     #   照收(enum 成員即合法);logic_parser 不註冊 handler(執行語意由下游模擬工具實作)。
     RETRIGGER          = "RETRIGGER"          # 重新觸發已消耗符號效果(Money Train 3 死靈法師)
-    # ── G-PotA / 跨盤操作:盤與盤之間依對應位置複製/搬移(描述型;本工具不執行) ──
-    #   語意:把內容在主盤 ⇌ 副盤 / 副盤 ⇌ 副盤之間依對應位置複製(COPY,來源留)或搬移(MOVE,來源移除)。
-    #   涵蓋 Stacked Wild(整輪跨盤複製)與 Dual Feature(單符落錯盤→轉移正確盤對應位置)。
-    #   a_loader 經 condition_parser.parse_actions 照收(enum 成員即合法,params 通用 key=val);
-    #   logic_parser 不註冊 handler(實際複製/搬移、命中率、RTP 由下游模擬工具實作)。docgen 照印白話。
-    CROSS_BOARD        = "CROSS_BOARD"        # 跨盤複製/搬移(Planet of the Apes 雙盤;Copy Cats / Lost Vegas 系)
 
 
 class ConditionOp(Enum):
@@ -160,10 +154,14 @@ class ResetScope(Enum):
     """v6.4 / 缺漏#2:進度/累積倍數的「重置範圍」,取代原本單一布林。
     CASCADE = 每次連線中斷即重置(per-cascade,如 MW2 的倍數梯)。
     SPIN    = 每一局重置(per-spin,如 Buffalo 的 FG 序列)。
-    FEATURE = 整個 feature/FG 全程不重置(per-feature,如 Gates 的總倍數計數器)。"""
-    CASCADE = "CASCADE"
-    SPIN    = "SPIN"
-    FEATURE = "FEATURE"
+    FEATURE = 整個 feature/FG 全程不重置(per-feature,如 Gates 的總倍數計數器)。
+    UNTIL_EVENT = v8.52:持久至具名事件觸發才重置(事件名由配對欄 reset_event 承載;
+                  如 Cashman Bingo 賓果卡跨局累積、直到成線 emit bingo_hit 才清卡)。
+                  純描述,重置時機由下游模擬工具實作(引擎五核不消費 ResetScope)。"""
+    CASCADE     = "CASCADE"
+    SPIN        = "SPIN"
+    FEATURE     = "FEATURE"
+    UNTIL_EVENT = "UNTIL_EVENT"
 
 
 # ============================================================
@@ -337,6 +335,11 @@ class PanelDef:
     active_modes: str = ""
     eval_domain: str = ""
     payline_set: str = ""
+    # v8.52 / E-extended:靜態副盤內容持久宣告(尾欄 additive;缺欄 → 預設 = 現行為)。
+    #   reset_scope=None → 沿用現行隱含語意;UNTIL_EVENT + reset_event → 內容(符號/格值)持久,
+    #   直到具名事件觸發才清空(如賓果卡 reset_event="bingo_hit")。純描述,清空時機歸下游模擬工具。
+    reset_scope: Optional[ResetScope] = None
+    reset_event: str = ""
 
     def active_local_cells(self) -> list[tuple[int, int]]:
         """要物化的局部座標 (c, r)。cells=None → 整塊 width×height 矩形。
@@ -555,6 +558,9 @@ class MeterDef:
     # 歸零範圍(復用 Multipliers.reset_scope 同一組 enum,語意一致:
     # CASCADE=每次連線中斷即歸零 / SPIN=每局歸零 / FEATURE=整個 feature 全程不歸零)。
     reset_scope: ResetScope = ResetScope.FEATURE
+    # v8.52 / E:reset_scope=UNTIL_EVENT 時,此欄承載觸發歸零的事件名(對應 EMIT_EVENT name)。
+    #   其餘 reset_scope 時此欄無意義。缺欄(舊 A.xlsx)→ ""(安全降級)。
+    reset_event: str = ""
     on_full_action: str = ""      # 集滿動作描述(寬鬆字串;可填 ActionType 字面值或自由文字)
     link_jackpot: str = ""        # 集滿連動的彩池(同構 BonusItem.link_jackpot;""=無)
     carry_over: bool = False      # 是否跨模式延續(False=切模式即視同離開此收集條情境)
@@ -612,6 +618,8 @@ class Multipliers:
     # v6.4 / 缺漏#2:進度倍數重置範圍(系統層預設)。supersedes progress_reset_on_mode 之語意;
     #   舊布林保留以維持向後相容(True≈CASCADE、False≈FEATURE 之粗略對應)。
     reset_scope:            ResetScope = ResetScope.CASCADE
+    # v8.52 / E:reset_scope=UNTIL_EVENT 時承載觸發歸零的事件名(對應 EMIT_EVENT name)。缺欄 → ""。
+    reset_event:            str = ""
     def __post_init__(self):
         if self.wild_mult_values is None: self.wild_mult_values = []
         if self.progress_ladders is None: self.progress_ladders = {}
@@ -947,6 +955,8 @@ class ModeConfig:
     notes: str = ""
     # v6.4 / 缺漏#2:此模式的進度倍數重置範圍;None = 繼承 Multipliers.reset_scope。
     reset_scope: Optional[ResetScope] = None
+    # v8.52 / E:reset_scope=UNTIL_EVENT 時承載觸發歸零的事件名(對應 EMIT_EVENT name)。缺欄 → ""。
+    reset_event: str = ""
     # v6.4 / 缺漏#4:scatter-pay 觸發給付(觸發即付,非連線賠付)。
     #   例:Buffalo 4/5/6 SCATTER → 5x/20x/100x;Gates 4/5/6 → 3x/5x/100x。
     trigger_pays: list["TriggerPay"] = field(default_factory=list)

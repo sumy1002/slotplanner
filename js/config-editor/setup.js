@@ -658,6 +658,9 @@
         // v8.21 / G1:值變數當動態值
         m = s.match(/^symbol_value\.([A-Za-z0-9_]+)$/);
         if (m) return `「${m[1]}」的攜帶值`;
+        // v8.52 / P:副盤格值(cell_value.<pid>.r,c);主盤分支維持不變(byte-safe)。
+        m = s.match(/^cell_value\.([A-Za-z_]\w*)\.([0-9]+,[0-9]+)$/);
+        if (m) return `副盤 ${m[1]} 格(${m[2]})的值`;
         m = s.match(/^cell_value\.([0-9]+,[0-9]+)$/);
         if (m) return `格(${m[1]})的值`;
         if (s === 'feature_value_total') return '本 feature 累計值';
@@ -1557,7 +1560,8 @@
       // v7.10:additive 欄位正規化(makeMode/loadModes 在 helpers,不在 scope;此處補預設,
       //   舊資料載入即為預設,向後相容)。reset_scope:'' = 繼承全域;trigger_pays:[] = 無。
       function _ensureModeGameplayFields(m) {
-        if (m.reset_scope == null) m.reset_scope = '';     // '' | 'CASCADE' | 'SPIN' | 'FEATURE' | 'NEVER'
+        if (m.reset_scope == null) m.reset_scope = '';     // '' | 'CASCADE' | 'SPIN' | 'FEATURE' | 'UNTIL_EVENT'
+        if (m.reset_event == null) m.reset_event = '';     // v8.52 E:UNTIL_EVENT 觸發歸零事件名
         if (!Array.isArray(m.trigger_pays)) m.trigger_pays = [];
         // v7.11:additive 封頂 + mode 層 stack_mode(makeMode/loadModes 在 helpers,不在 scope;
         //   此處補預設,舊資料載入即預設,向後相容)。
@@ -1670,6 +1674,7 @@
         { v: 'CASCADE',  label: 'CASCADE — 每次連線中斷即重置' },
         { v: 'SPIN',     label: 'SPIN — 每一局重置' },
         { v: 'FEATURE',  label: 'FEATURE — 整個 feature 全程不重置' },
+        { v: 'UNTIL_EVENT', label: 'UNTIL_EVENT — 直到具名事件觸發才重置(需填事件名)' },   // v8.52 E
       ];
       // v7.11:mode 層 stack_mode 下拉(空=繼承全域 Multipliers.stack_mode)
       const STACK_MODE_OPTIONS = [
@@ -1831,6 +1836,7 @@
         // 步驟 2 欄位暫存（建立時抄到 mode）
         pay_type_override: '',
         reset_scope: '',
+        reset_event: '',
         stack_mode: '',
         cap_enabled: '',
         cap_value: '',
@@ -1877,6 +1883,7 @@
         modeAddDlg.focusSection = modeAddDlg.enabled_sections[0] || '';
         modeAddDlg.pay_type_override = '';
         modeAddDlg.reset_scope = '';
+        modeAddDlg.reset_event = '';
         modeAddDlg.stack_mode = '';
         modeAddDlg.cap_enabled = '';
         modeAddDlg.cap_value = '';
@@ -2053,7 +2060,7 @@
 
         // 步驟 2 欄位：簡化全部抄到 m（未啟用區段值亦保留）
         const copyKeys = [
-          'pay_type_override', 'reset_scope', 'stack_mode', 'cap_enabled', 'cap_value',
+          'pay_type_override', 'reset_scope', 'reset_event', 'stack_mode', 'cap_enabled', 'cap_value',
           'choice_group', 'respin_base', 'respin_reset_on', 'respin_stop_cond',
           'collect_enabled', 'respin_reset_symbol', 'grid_expand_in_collect', 'allow_persistent',
           'cascade_enabled', 'cascade_max_depth', 'mult_compose_override', 'refill_track_override',
@@ -2343,6 +2350,9 @@
         if (p.active_modes == null) p.active_modes = '';
         if (p.eval_domain == null) p.eval_domain = '';
         if (p.payline_set == null) p.payline_set = '';
+        // v8.52 / E-extended:靜態副盤持久宣告('' = 現行為;UNTIL_EVENT 需填 reset_event)
+        if (p.reset_scope == null) p.reset_scope = '';
+        if (p.reset_event == null) p.reset_event = '';
       });
       const symbolSets = reactive(loadSymbolSets());
       const activePanelIdx = ref(-1);   // -1 = 未選 panel（在編主輪）
@@ -5854,7 +5864,7 @@
       //   湊「累積」與「歸零」語意。MeterDef 把它變成第一級描述:填充來源 + 容量 +
       //   歸零範圍 + 集滿動作,四個欄位講完。純描述,本工具引擎不消費。
       const METERS_LS_KEY = 'slotplanner.aconfig.meters.v1';
-      const METER_RESET_SCOPES = ['CASCADE', 'SPIN', 'FEATURE'];
+      const METER_RESET_SCOPES = ['CASCADE', 'SPIN', 'FEATURE', 'UNTIL_EVENT'];   // v8.52 E
       // ── G-1:收集條分段門檻(tier)正規化。一段 = {threshold, action, params}。
       //   純描述;action 沿用 on_full_action 同慣例(ActionType 字面值或自由文字)。
       function _normMeterTier(t) {
@@ -5876,6 +5886,7 @@
           fill_amount:    Number(m.fill_amount) || 1,
           capacity:       Number(m.capacity) || 0,
           reset_scope:    (METER_RESET_SCOPES.includes(String(m.reset_scope).toUpperCase()) ? String(m.reset_scope).toUpperCase() : 'FEATURE'),
+          reset_event:    (m.reset_event != null ? String(m.reset_event).trim() : ''),   // v8.52 E
           on_full_action: (m.on_full_action != null ? String(m.on_full_action).trim() : ''),
           link_jackpot:   (m.link_jackpot != null ? String(m.link_jackpot).trim() : ''),
           carry_over:     !!m.carry_over,
@@ -9242,6 +9253,8 @@
               p.active_modes      = asStr(C2b(row, 'Active_Modes')).trim();       // v8.44 C-2(缺欄→'')
               p.eval_domain       = asStr(C2b(row, 'Eval_Domain')).trim().toUpperCase();  // v8.44 C-2
               p.payline_set       = asStr(C2b(row, 'Payline_Set')).trim();        // v8.44 C-2
+              p.reset_scope       = asStr(C2b(row, 'Reset_Scope')).trim().toUpperCase();  // v8.52 E-extended(缺欄→'')
+              p.reset_event       = asStr(C2b(row, 'Reset_Event')).trim();        // v8.52 E-extended(缺欄→'')
               // Cells:";"/空白分隔 → 陣列;空 → null;再走 normalizeMask 正規化(向後相容)
               const cellsRaw = asStr(C2b(row, 'Cells')).trim();
               const cellsArr = cellsRaw ? cellsRaw.split(/[;\s]+/).filter(Boolean) : null;
@@ -9391,6 +9404,7 @@
                 fill_amount: asNum(C21(row, 'Fill_Amount'), 1),
                 capacity: asNum(C21(row, 'Capacity'), 0),
                 reset_scope: asStr(C21(row, 'Reset_Scope')).trim() || 'FEATURE',
+                reset_event: asStr(C21(row, 'Reset_Event')).trim(),   // v8.52 E
                 on_full_action: asStr(C21(row, 'On_Full_Action')).trim(),
                 link_jackpot: asStr(C21(row, 'Link_Jackpot')).trim(),
                 carry_over: asBool(C21(row, 'Carry_Over')),
@@ -9642,6 +9656,8 @@
                 notes: asStr(C11(row, 'Notes')),
                 // v7.10 additive:舊檔無此欄 → 空字串(繼承全域)
                 reset_scope: asStr(C11(row, 'Reset_Scope')).trim(),
+                // v8.52 E:UNTIL_EVENT 觸發歸零事件名(舊檔缺欄 → '')
+                reset_event: asStr(C11(row, 'Reset_Event')).trim(),
                 // v7.11 additive:舊檔無 → 空(不封頂/繼承)
                 cap_enabled: asStr(C11(row, 'Cap_Enabled')).trim(),
                 cap_value:   asStr(C11(row, 'Cap_Value')).trim(),
@@ -12367,17 +12383,6 @@
                   if (issue === '越界') add('error', 'rules', `${tag}:位置 ${JSON.stringify(c)} 超出盤面範圍`);
                   else if (issue === '落洞') add('error', 'rules', `${tag}:位置 ${JSON.stringify(c)} 落在洞格(填補/銷毀會被略過)`);
                   else if (issue === '格式') add('warn', 'rules', `${tag}:位置 ${JSON.stringify(c)} 座標格式非法`);
-                }
-              }
-            }
-            // G-PotA / D5:CROSS_BOARD 跨盤目標 lint(from_board/to_board 非空且非 MAIN
-            //   → 須為 02b_Panels 已知 panel_id;非阻擋 warn,與 panel/mode lint 同級)。
-            if (act.atype === 'CROSS_BOARD' && act.params) {
-              for (const bk of ['from_board', 'to_board']) {
-                const bv = String(act.params[bk] || '').trim();
-                if (bv && bv.toUpperCase() !== 'MAIN' && !panels.some(pp => pp && pp.panel_id === bv)) {
-                  add('warn', 'rules',
-                    `${tag}:${bk === 'to_board' ? '目標盤' : '來源盤'}「${bv}」非 MAIN 且未在 02b_Panels 定義`);
                 }
               }
             }

@@ -76,7 +76,9 @@ _TOKEN_PATTERNS = [
     #   「cell_value.」前綴 + 「數字,數字」座標,不影響 list 逗號([FG1, FG2] 的
     #   逗號在 LBRACKET 深度內另行 token 化)。必須排在通用 IDENT 之前,
     #   否則通用 IDENT 會先吃到 cell_value.3 而在逗號處斷開。
-    (r"\bcell_value\.\d+,\d+",  TokenType.IDENT),
+    # v8.52 / P:可選 panel-id 前綴段(cell_value.BINGO.3,2 = 副盤 BINGO 該格值)。
+    #   首段以字母/底線起頭 → panel_id;以數字起頭 → 主盤(cell_value.3,2,舊式不變)。
+    (r"\bcell_value\.(?:[A-Za-z_]\w*\.)?\d+,\d+",  TokenType.IDENT),
     (r"[A-Za-z_][A-Za-z0-9_\.]*", TokenType.IDENT),
 ]
 

@@ -326,7 +326,8 @@
                 'Scroll', 'Symbol_Set', 'Inherit_Weight', 'Join_Payline', 'Note',
                 'Panel_Type', 'Trigger_Symbol', 'Collect_Target_JP', 'Trigger_Reel', 'Cells',
                 'Scroll_Track', 'Scroll_Step',   // v8.39 軌道:尾端 additive('' / 1 = 現行隱含語意)
-                'Active_Modes', 'Eval_Domain', 'Payline_Set']);   // v8.44 C-2:尾端 additive('' = 現行為)
+                'Active_Modes', 'Eval_Domain', 'Payline_Set',   // v8.44 C-2:尾端 additive('' = 現行為)
+                'Reset_Scope', 'Reset_Event']);   // v8.52 E-extended:尾端 additive('' = 現行為;UNTIL_EVENT 靜態副盤持久)
     for (const p of (Array.isArray(panelRows) ? panelRows : [])) {
       if (!p || !p.panel_id) continue;
       // v6.2:Scroll 由 panel_type 推導(向後相容:無 panel_type 時用舊 scroll)
@@ -342,6 +343,8 @@
         (p.active_modes != null ? String(p.active_modes).trim() : ''),          // v8.44 C-2
         (p.eval_domain  != null ? String(p.eval_domain).trim()  : ''),          // v8.44 C-2
         (p.payline_set  != null ? String(p.payline_set).trim()  : ''),          // v8.44 C-2
+        (p.reset_scope  != null ? String(p.reset_scope).trim().toUpperCase() : ''),  // v8.52 E-extended
+        (p.reset_event  != null ? String(p.reset_event).trim()  : ''),          // v8.52 E-extended
       ]);
     }
     boldHdr(wsPnl); setCols(wsPnl, [14, 8, 8, 9, 9, 10, 16, 15, 14, 20, 12, 16, 16, 12, 22]);
@@ -858,7 +861,8 @@
                 'End_Condition',
                 'Unlock_Requires', 'Mult_Compose_Override',
                 'Refill_Track_Override',    // v8.39 GAP-F1:尾端 additive('' = 沿用全域)
-                'Cascade_Enabled', 'Cascade_Max_Depth']);  // 架構檢閱 #6:尾端 additive(前 27 欄不動)
+                'Cascade_Enabled', 'Cascade_Max_Depth',  // 架構檢閱 #6:尾端 additive(前 27 欄不動)
+                'Reset_Event']);  // v8.52 E:尾端 additive('' = 現行為;UNTIL_EVENT 觸發歸零事件名)
     for (const m of modes) {
       wsM.addRow([m.mode, _normArithDSL(m.trigger_condition), m.spin_count, m.inherit_globals,
                   m.on_enter_reset_vars, m.notes, m.reset_scope || '',
@@ -877,9 +881,10 @@
                   m.mult_compose_override || '',                     // v8.28 缺口C
                   m.refill_track_override || '',                     // v8.39 GAP-F1
                   m.cascade_enabled ? 'TRUE' : 'FALSE',               // 架構檢閱 #6
-                  Number(m.cascade_max_depth) || 0]);                 // 架構檢閱 #6
+                  Number(m.cascade_max_depth) || 0,                   // 架構檢閱 #6
+                  m.reset_event || '']);                              // v8.52 E
     }
-    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22, 16, 14, 18, 20, 14, 28, 22, 20, 20, 16, 18]);
+    boldHdr(wsM); setCols(wsM, [12, 32, 12, 16, 22, 28, 14, 12, 14, 12, 12, 16, 12, 14, 14, 12, 16, 22, 16, 14, 18, 20, 14, 28, 22, 20, 20, 16, 18, 16]);
 
     // v7.10:11b_Mode_TriggerPays(scatter-pay 觸發給付;additive 新子表,additive 契約)
     //   舊檔無此 sheet → loader 安全降級為空清單。一個 mode 多列。
@@ -1000,7 +1005,8 @@
       const wsMt = wb.addWorksheet('21_Collection_Meters');
       wsMt.addRow(['Meter_ID', 'Label', 'Mode_Scope', 'Fill_Source', 'Fill_Amount', 'Capacity',
                    'Reset_Scope', 'On_Full_Action', 'Link_Jackpot', 'Carry_Over', 'Notes',
-                   'Tiers', 'Tier_Step', 'Tier_Repeat']);
+                   'Tiers', 'Tier_Step', 'Tier_Repeat',
+                   'Reset_Event']);   // v8.52 E:尾端 additive('' = 現行為;UNTIL_EVENT 觸發歸零事件名)
       // G-1:tiers 陣列 → cell 字串。預設輸出「門檻:動作:參數; …」分號串(人類可讀);
       //   若任一段的 action 含 ':'/';' 或 params 含 ';'(會破壞分號串解析)→ 整欄改 JSON 形。
       //   與 a_loader._parse_meter_tiers 及前端匯入端逐鍵一致。空 → ''。
@@ -1040,9 +1046,10 @@
           _serMeterTiers(m.tiers),
           (Number(m.tier_step) > 0 ? Number(m.tier_step) : ''),
           !!m.tier_repeat,
+          (m.reset_event != null ? String(m.reset_event).trim() : ''),   // v8.52 E
         ]);
       }
-      boldHdr(wsMt); setCols(wsMt, [10, 18, 14, 24, 12, 10, 12, 20, 14, 11, 24, 40, 10, 11]);
+      boldHdr(wsMt); setCols(wsMt, [10, 18, 14, 24, 12, 10, 12, 20, 14, 11, 24, 40, 10, 11, 16]);
     }
 
     // 14_Bet_Config(v5.3:選用分頁;引擎讀取。無 Buy Feature → 仍寫 Ante Bet 區塊 + 空清單)

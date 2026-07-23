@@ -119,7 +119,7 @@
     ADJUST_MULTIPLIER: '調整倍數', UPDATE_GLOBAL: '更新全域變數', UPDATE_LOCAL: '更新本局變數',
     EMIT_EVENT: '發出事件', SWITCH_MODE: '切換模式', AWARD_FREE_SPIN: '給免費局',
     HALT_RESOLUTION: '中止結算', BOARD_FILL: '盤面填充', BOARD_TRANSFORM: '符號轉換',
-    BOARD_DESTROY: '盤面消除', MOVE: '搬移', SWAP: '交換', STICKY: '黏著', CROSS_BOARD: '跨盤操作',
+    BOARD_DESTROY: '盤面消除', MOVE: '搬移', SWAP: '交換', STICKY: '黏著',
     LOCK_REEL: '鎖輪', REEL_RESTRICT: '輪位限制', GLOBAL_MAX: '全盤上限', SCROLL: '捲動',
     // v8.4 / R2 P2:描述型 action(執行語意由下游模擬工具實作)
     EXPAND_REEL: '擴展整輪', NUDGE: '推移', WALK: '走位', REVEAL_AS: '揭示',
@@ -168,6 +168,9 @@
     if (m) return `「${m[1]}」的盤面數量`;
     m = s.match(/^symbol_value\.([A-Za-z0-9_]+)$/);
     if (m) return `「${m[1]}」的攜帶值`;
+    // v8.52 / P:副盤格值(cell_value.<pid>.r,c);先判、僅對新式字串觸發,主盤分支 byte 不變(零 diff)。
+    m = s.match(/^cell_value\.([A-Za-z_]\w*)\.([0-9]+,[0-9]+)$/);
+    if (m) return `副盤 ${m[1]} 格(${m[2]})的值`;
     m = s.match(/^cell_value\.([0-9]+,[0-9]+)$/);
     if (m) return `格(${m[1]})的值`;
     if (s === 'feature_value_total') return '本 feature 累計值';
@@ -249,12 +252,6 @@
   //    皆「命中才譯、否則原樣」)。★關鍵:只對本批「實際改動的四動作」套用,其餘動作
   //    (WALK/GROW_BOARD/NUDGE… 亦持有 dir/track/amount 鍵)輸出逐字不變 → 舊資料零 diff。 ──
   const _V848_ACTS = new Set(['MOVE', 'BOARD_FILL', 'BOARD_TRANSFORM', 'BOARD_DESTROY']);
-  // ── G-PotA:CROSS_BOARD 專屬白話(全新 atype;既有文件無此動作 → 零 diff)。
-  //   注意:op 鍵被其他動作(ADJUST_MULTIPLIER/METER_ADJUST…)使用,故 op/grain 翻譯僅 gate 到 CROSS_BOARD。──
-  const _CROSS_BOARD_ACTS = new Set(['CROSS_BOARD']);
-  const _CB_OP_ZH = { COPY: '複製（來源保留）', MOVE: '搬移（來源移除）' };
-  const _CB_GRAIN_ZH = { SYMBOL: '符號', REEL: '整輪', CELL: '單格' };
-  const _CB_PARAM_ZH = { op: '操作', from_board: '來源盤', to_board: '目標盤', grain: '粒度', selector: '選取', mapping: '對映' };
   const _ACT_PARAM_ZH = {
     subject: '物件', manner: '方式', dir: '方向', amount: '格數', track: '軌道',
     except_if: '排除', order: '順序',
@@ -281,7 +278,6 @@
     const label = _RULE_ACTION_LABEL[atype] || atype || '?';
     const p = (a.params && typeof a.params === 'object') ? a.params : {};
     const isV848 = _V848_ACTS.has(atype);   // v8.48:白話化僅作用於本批四動作,其餘零 diff
-    const isCB = _CROSS_BOARD_ACTS.has(atype);   // G-PotA:CROSS_BOARD 專屬白話(全新 atype)
     // v8.20 / G5:scope 抽離單獨後綴;value 若為 symbol_count.<SID> 動態值則譯白話。
     const scopeStr = _scopeDesc(p.scope);
     const kv = Object.entries(p)
@@ -289,9 +285,7 @@
       .map(([k, v]) => {
         // v8.48 / 項目一 Batch A:僅本批四動作走專屬白話;命中則用,否則落回泛用 _dynExpr。
         let vv;
-        if (isCB && typeof v === 'string' && k === 'op')          vv = _CB_OP_ZH[v] || v;
-        else if (isCB && typeof v === 'string' && k === 'grain')   vv = _CB_GRAIN_ZH[v] || v;
-        else if (isV848 && typeof v === 'string' && k === 'manner')      vv = _MANNER_ZH[v] || v;
+        if (isV848 && typeof v === 'string' && k === 'manner')      vv = _MANNER_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && k === 'dir')    vv = _DIR_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && k === 'order')  vv = _ORDER_ZH[v] || v;
         else if (isV848 && typeof v === 'string' && (k === 'positions' || k === 'to') && /^SELF/.test(v.trim()))
@@ -300,7 +294,7 @@
         // v8.34 / GAP-S1:泛化 — 任何字串值皆過 _dynExpr(範圍/公式白話化;非動態字串原樣)。
         else vv = (typeof v === 'string') ? _dynExpr(v)
                 : (Array.isArray(v) ? JSON.stringify(v) : v);
-        const kZh = isCB ? (_CB_PARAM_ZH[k] || k) : (isV848 ? (_ACT_PARAM_ZH[k] || k) : k);   // 鍵中文:CB / v8.48 四動作
+        const kZh = isV848 ? (_ACT_PARAM_ZH[k] || k) : k;   // v8.48:鍵中文僅本批四動作(其餘原樣)
         return `${kZh}=${vv}`;
       });
     let out = kv.length ? `${label}（${kv.join(', ')}）` : label;
@@ -460,14 +454,20 @@
 
   // ── v6.4 / 缺漏#1+#2:倍數疊加方式 / 重置範圍 → 中文標籤 ──
   const _STACK_LABEL = { MUL: '相乘', ADD: '相加' };
-  const _SCOPE_LABEL = { CASCADE: '每次連線中斷重置（per-cascade）', SPIN: '每局重置（per-spin）', FEATURE: '整個 feature 全程不重置（per-feature）' };
+  const _SCOPE_LABEL = { CASCADE: '每次連線中斷重置（per-cascade）', SPIN: '每局重置（per-spin）', FEATURE: '整個 feature 全程不重置（per-feature）', UNTIL_EVENT: '直到具名事件觸發才重置（until-event）' };
   function _stackModeLabel(v) { return _STACK_LABEL[String(v || '').toUpperCase()] || ''; }
   function _resetScopeLabel(v) { return _SCOPE_LABEL[String(v || '').toUpperCase()] || ''; }
   // v7.12:mode 玩法欄位(reset_scope / stack_mode / 封頂)→ 人話字串。
   //   規格書描述用;本工具不執行、不算 RTP(由數值模擬工具落盤)。空欄一律回 '' / '繼承全域'。
   function _modeResetDesc(md) {
     const s = String((md && md.reset_scope) || '').toUpperCase();
-    return s ? (_resetScopeLabel(s) || s) : '繼承全域';
+    if (!s) return '繼承全域';
+    // v8.52 / E:UNTIL_EVENT 附觸發歸零事件名(僅此新式觸發,既有 scope 輸出 byte 不變)。
+    if (s === 'UNTIL_EVENT') {
+      const ev = String((md && md.reset_event) || '').trim();
+      return ev ? `直到事件「${ev}」觸發才重置` : (_resetScopeLabel(s) || s);
+    }
+    return _resetScopeLabel(s) || s;
   }
   function _modeStackDesc(md) {
     const s = String((md && md.stack_mode) || '').toUpperCase();
@@ -3225,6 +3225,27 @@
         });
         L.push('');
         L.push('> SELF_* = 該盤自帶評價域,scatter 計數亦盤內計;非空評價域優先於「參與主盤連線」旗標。事件驅動啟停見特色規則 PANEL_SET;與作動模式(靜態域)疊加:兩者皆過才作動。本工具不執行、不計算 RTP。');
+        L.push('');
+      }
+    }
+
+    // v8.52 / E-extended:副盤持久宣告(有 reset_scope 才輸出;既有配置無此欄 → 不輸出,零 diff 天然)
+    {
+      const pp = (Array.isArray(cfg.panels) ? cfg.panels : [])
+        .filter(p => p && p.panel_id && String(p.reset_scope || '').trim());
+      if (pp.length) {
+        L.push('## 副盤持久');
+        L.push('');
+        L.push('| 面板 | 重置範圍 | 觸發事件 |');
+        L.push('| --- | --- | --- |');
+        pp.forEach(p => {
+          const rs = String(p.reset_scope || '').trim().toUpperCase();
+          const rsZh = _resetScopeLabel(rs) || rs;
+          const ev = (rs === 'UNTIL_EVENT') ? (_mdCell(String(p.reset_event || '').trim()) || '（未填事件名）') : '—';
+          L.push(`| ${_mdCell(p.panel_id)} | ${rsZh} | ${ev} |`);
+        });
+        L.push('');
+        L.push('> 靜態副盤內容(符號 / 格值)之持久語意;UNTIL_EVENT = 直到指定事件觸發才清空(如賓果卡 emit bingo_hit 清卡)。本工具不執行,清空時機由下游模擬工具實作。');
         L.push('');
       }
     }

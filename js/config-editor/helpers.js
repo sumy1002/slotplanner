@@ -1862,8 +1862,9 @@
       subkeyHint: '符號',          valueType: 'number', subkeySource: 'symbols',
       desc: '某符號當前攜帶的值(如金幣面額);「symbol_value.COIN >= 100」= 金幣值達門檻' },
     { id: 'cell_value',            label: 'cell_value',            needsSubkey: true,
-      subkeyHint: '座標(reel,row)', valueType: 'number', subkeySource: 'text',
-      desc: '某格當前值;subkey 格式「reel,row」(1-based);「cell_value.3,2 > 0」= 該格有值' },
+      subkeyHint: '座標([副盤.]reel,row)', valueType: 'number', subkeySource: 'text',
+      desc: '某格當前值;subkey 格式「reel,row」(1-based),主盤如「cell_value.3,2 > 0」;' +
+            '可選副盤前綴「<副盤ID>.reel,row」,如「cell_value.BINGO.3,2 > 0」= 副盤 BINGO 該格有值(v8.52 / P)' },
     { id: 'respins_left',          label: 'respins_left',          needsSubkey: false, valueType: 'number',
       desc: 'Hold&Win 剩餘回補次數;「respins_left == 0」= 收集結束(可連動 END_FEATURE)' },
     { id: 'feature_value_total',   label: 'feature_value_total',   needsSubkey: false, valueType: 'number',
@@ -2707,26 +2708,6 @@
         { key: 'track', label: '軌道(可選)', type: 'text', placeholder: 'T001',
           desc: 'manner=PATH 時引用的 02c_Tracks 軌道 ID' },
       ] },
-    // ── G-PotA:跨盤操作(盤與盤之間依對應位置複製/搬移;純描述,執行交下游)──
-    { type: 'CROSS_BOARD', label: '跨盤操作', icon: '🔀',
-      desc: '把內容在盤與盤之間(主盤 ⇌ 副盤 / 副盤 ⇌ 副盤)依對應位置複製或搬移。' +
-            '涵蓋:整輪複製(Stacked Wild:Rise 輪 → Dawn 對應輪,來源留)、' +
-            '單符轉移(Dual Feature:符落錯盤 → 移到正確盤對應位置,來源移除)。' +
-            '純描述,實際複製/搬移、命中率、RTP 交下游模擬工具。',
-      params: [
-        { key: 'op', label: '操作', type: 'enum', options: ['COPY', 'MOVE'], default: 'COPY',
-          desc: 'COPY=來源保留(整輪複製);MOVE=來源移除(符號轉移)' },
-        { key: 'from_board', label: '來源盤(可選)', type: 'text', placeholder: 'MAIN / DAWN',
-          desc: '留空=規則觸發所在盤(情境);MAIN=主盤;<panel_id>=副盤' },
-        { key: 'to_board', label: '目標盤', type: 'text', placeholder: 'DAWN',
-          desc: 'MAIN=主盤;<panel_id>=副盤(如 DAWN)' },
-        { key: 'grain', label: '內容粒度', type: 'enum', options: ['SYMBOL', 'REEL', 'CELL'], default: 'SYMBOL',
-          desc: 'SYMBOL=符號選取;REEL=整輪;CELL=單格' },
-        { key: 'selector', label: '選取', type: 'text', placeholder: 'WILD_R / 1 / 2,3',
-          desc: 'grain=SYMBOL→符號 id;REEL→輪索引;CELL→座標 r,c' },
-        { key: 'mapping', label: '位置對映', type: 'enum', options: ['SAME_POS'], default: 'SAME_POS',
-          desc: 'SAME_POS=對映到目標盤的對應 (輪,列) 位置' },
-      ] },
     { type: 'SWAP', label: '交換符號', icon: '🔄',
       desc: '交換兩格的符號',
       params: [
@@ -2808,8 +2789,8 @@
       params: [
         { key: 'target', label: '物件符號', type: 'symbol', required: true },
         // v8.50 / 缺口提案2:cell 加 RANDOM 哨兵(盤面隨機一格)
-        { key: 'cell',   label: '初始位置(r,c)', type: 'text', placeholder: '2,3 或 RANDOM', required: true, sentinels: ['RANDOM'],
-          desc: '幾何座標,列,欄(沿用 cell_value.<r,c> 記法);於新一局觸發放置;或 RANDOM=盤面隨機一格' },
+        { key: 'cell',   label: '初始位置(r,c)', type: 'text', placeholder: '2,3 / BINGO.2,3 / RANDOM', required: true, sentinels: ['RANDOM'],
+          desc: '幾何座標,列,欄(沿用 cell_value.<r,c> 記法);可加副盤前綴「<副盤ID>.r,c」放到副盤格(如 BINGO.3,2,v8.52 / P);於新一局觸發放置;或 RANDOM=盤面隨機一格' },
       ] },
     { type: 'REVEAL_AS', label: '揭示符號', icon: '🎭',
       desc: '佔位符號落定後統一揭示為其他符號(Mystery Stack / ER 罐 / xWays)',
@@ -2886,8 +2867,8 @@
       params: [
         { key: 'target', label: '收集標的', type: 'text', placeholder: 'METER / JACKPOT / coin_pool', required: true,
           desc: '收進哪裡:METER=進度計量、JACKPOT=彩池、或自訂 global 變數名' },
-        { key: 'source', label: '值來源(可選)', type: 'text', placeholder: 'symbol_value / cell_value',
-          desc: '收集哪種值;留空=盤面上帶值的符號' },
+        { key: 'source', label: '值來源(可選)', type: 'text', placeholder: 'symbol_value / cell_value[.<副盤>.r,c]',
+          desc: '收集哪種值;留空=盤面上帶值的符號;可指定副盤格 cell_value.<副盤ID>.r,c(如賓果卡累積,v8.52 / P)' },
         { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'all_visible / adjacent_4 …',
           desc: 'G5 範圍謂詞;留空=全盤' },
       ] },
@@ -2909,8 +2890,8 @@
             '自身倍數+1);set=直接設定' },
         { key: 'factor', label: '數值', type: 'text', dyn: true, placeholder: '2 或 symbol_count.WILD', required: true,
           desc: '依 op 語意套用的量;固定值或動態值/公式(symbol_count.<SID> * 2)' },   // v8.34 GAP-S1:泛化為公式
-        { key: 'target', label: '標的(可選)', type: 'text', placeholder: 'symbol_value.COIN / cell_value',
-          desc: '要運算哪個值;留空=範圍內所有帶值格' },
+        { key: 'target', label: '標的(可選)', type: 'text', placeholder: 'symbol_value.COIN / cell_value[.<副盤>.r,c]',
+          desc: '要運算哪個值;留空=範圍內所有帶值格;可指定副盤格 cell_value.<副盤ID>.r,c(如 Cashman Antics 增值,v8.52 / P)' },
         { key: 'scope',  label: '作用範圍(可選)', type: 'text', placeholder: 'same_column / adjacent_8 …',
           desc: 'G5 範圍謂詞;留空=全盤' },
       ] },
